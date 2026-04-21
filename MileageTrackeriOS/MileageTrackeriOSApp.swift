@@ -1,36 +1,32 @@
 //
 //  MileageTrackeriOSApp.swift
-//  Entry point — routes to onboarding or main tab view
+//  MileageTrackeriOS
+//
+//  Created by Harry Just on 21/04/2026.
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct MileageTrackeriOSApp: App {
-    @State private var appState = AppState.shared
+    var sharedModelContainer: ModelContainer = {
+        let schema = Schema([
+            Item.self,
+        ])
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+
+        do {
+            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+        } catch {
+            fatalError("Could not create ModelContainer: \(error)")
+        }
+    }()
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(appState)
+            ContentView()
         }
+        .modelContainer(sharedModelContainer)
     }
 }
-
-// MARK: - Root Router
-
-struct RootView: View {
-    @Environment(AppState.self) private var appState
-
-    var body: some View {
-        // Access profileRepo directly so @Observable tracking picks up
-        // hasCompletedOnboarding changes from within the onboarding flow.
-        @Bindable var repo = appState.profileRepo
-        if repo.hasCompletedOnboarding {
-            MainTabView()
-        } else {
-            OnboardingView()
-        }
-    }
-}
- 

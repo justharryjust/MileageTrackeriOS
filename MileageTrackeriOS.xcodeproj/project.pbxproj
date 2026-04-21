@@ -6,28 +6,7 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		DE6308942FAB61230051D2A5 /* DevelopmentPlan.md in Resources */ = {isa = PBXBuildFile; fileRef = DE6308912FAB61230051D2A5 /* DevelopmentPlan.md */; };
-		DE6308952FAB61230051D2A5 /* ProjectBrief.md in Resources */ = {isa = PBXBuildFile; fileRef = DE6308922FAB61230051D2A5 /* ProjectBrief.md */; };
-		DE6308992FAB614A0051D2A5 /* missing+bugs.md in Resources */ = {isa = PBXBuildFile; fileRef = DE6308972FAB614A0051D2A5 /* missing+bugs.md */; };
-		DE63089A2FAB614A0051D2A5 /* futurework.md in Resources */ = {isa = PBXBuildFile; fileRef = DE6308962FAB614A0051D2A5 /* futurework.md */; };
-		DE63089B2FAB614A0051D2A5 /* pre-release.md in Resources */ = {isa = PBXBuildFile; fileRef = DE6308982FAB614A0051D2A5 /* pre-release.md */; };
-		DE6308B52FAB750A0051D2A5 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DE6308B42FAB750A0051D2A5 /* WidgetKit.framework */; };
-		DE6308B72FAB750A0051D2A5 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DE6308B62FAB750A0051D2A5 /* SwiftUI.framework */; };
-		DE6308C62FAB750B0051D2A5 /* MileageTrackerWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DE6308B22FAB750A0051D2A5 /* MileageTrackerWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		DEA884C72F9788BF008FC71A /* RealmSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DEA884C62F9788BF008FC71A /* RealmSwift */; };
-		DEA884D02F9788BF008FC71A /* RealmSwift in Embed Frameworks */ = {isa = PBXBuildFile; productRef = DEA884C62F9788BF008FC71A /* RealmSwift */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		DEAB9B602F97B78F00B4A412 /* RealmSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DEA884C62F9788BF008FC71A /* RealmSwift */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXContainerItemProxy section */
-		DE6308C42FAB750B0051D2A5 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = DEA883322F9758D3008FC71A /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = DE6308B12FAB750A0051D2A5;
-			remoteInfo = MileageTrackerWidgetExtension;
-		};
 		DEA8834A2F9758D6008FC71A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = DEA883322F9758D3008FC71A /* Project object */;
@@ -44,80 +23,15 @@
 		};
 /* End PBXContainerItemProxy section */
 
-/* Begin PBXCopyFilesBuildPhase section */
-		DE6308CB2FAB750B0051D2A5 /* Embed Foundation Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				DE6308C62FAB750B0051D2A5 /* MileageTrackerWidgetExtension.appex in Embed Foundation Extensions */,
-			);
-			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		DEA884E02F9788BF008FC71A /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				DEA884D02F9788BF008FC71A /* RealmSwift in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
-
 /* Begin PBXFileReference section */
-		DE6308912FAB61230051D2A5 /* DevelopmentPlan.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = DevelopmentPlan.md; sourceTree = "<group>"; };
-		DE6308922FAB61230051D2A5 /* ProjectBrief.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ProjectBrief.md; sourceTree = "<group>"; };
-		DE6308962FAB614A0051D2A5 /* futurework.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = futurework.md; sourceTree = "<group>"; };
-		DE6308972FAB614A0051D2A5 /* missing+bugs.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "missing+bugs.md"; sourceTree = "<group>"; };
-		DE6308982FAB614A0051D2A5 /* pre-release.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "pre-release.md"; sourceTree = "<group>"; };
-		DE6308B22FAB750A0051D2A5 /* MileageTrackerWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MileageTrackerWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		DE6308B42FAB750A0051D2A5 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
-		DE6308B62FAB750A0051D2A5 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		DEA8833A2F9758D3008FC71A /* MileageTrackeriOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MileageTrackeriOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DEA883492F9758D6008FC71A /* MileageTrackeriOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MileageTrackeriOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DEA883532F9758D6008FC71A /* MileageTrackeriOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MileageTrackeriOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		BB0000000000000000000001 /* Exceptions for "MileageTrackeriOS" folder in "MileageTrackeriOS" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				App/CLAUDE.md,
-				CLAUDE.md,
-				Info.plist,
-				Localisaion/CLAUDE.md,
-				Logging/CLAUDE.md,
-				Main/CLAUDE.md,
-				Main/Home/CLAUDE.md,
-				Main/Settings/CLAUDE.md,
-				Main/Trips/CLAUDE.md,
-				Managers/CLAUDE.md,
-				Models/CLAUDE.md,
-				Onboarding/CLAUDE.md,
-				Onboarding/Steps/CLAUDE.md,
-				Repositories/CLAUDE.md,
-				Shared/CLAUDE.md,
-			);
-			target = DEA883392F9758D3008FC71A /* MileageTrackeriOS */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		DE6308B82FAB750A0051D2A5 /* MileageTrackerWidget */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = MileageTrackerWidget;
-			sourceTree = "<group>";
-		};
 		DEA8833C2F9758D3008FC71A /* MileageTrackeriOS */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				BB0000000000000000000001 /* Exceptions for "MileageTrackeriOS" folder in "MileageTrackeriOS" target */,
-			);
 			path = MileageTrackeriOS;
 			sourceTree = "<group>";
 		};
@@ -134,20 +48,10 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		DE6308AF2FAB750A0051D2A5 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				DE6308B72FAB750A0051D2A5 /* SwiftUI.framework in Frameworks */,
-				DE6308B52FAB750A0051D2A5 /* WidgetKit.framework in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		DEA883372F9758D3008FC71A /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				DEA884C72F9788BF008FC71A /* RealmSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -155,7 +59,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				DEAB9B602F97B78F00B4A412 /* RealmSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -169,36 +72,12 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		DE6308932FAB61230051D2A5 /* Docs */ = {
-			isa = PBXGroup;
-			children = (
-				DE6308962FAB614A0051D2A5 /* futurework.md */,
-				DE6308972FAB614A0051D2A5 /* missing+bugs.md */,
-				DE6308982FAB614A0051D2A5 /* pre-release.md */,
-				DE6308912FAB61230051D2A5 /* DevelopmentPlan.md */,
-				DE6308922FAB61230051D2A5 /* ProjectBrief.md */,
-			);
-			path = Docs;
-			sourceTree = "<group>";
-		};
-		DE6308B32FAB750A0051D2A5 /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-				DE6308B42FAB750A0051D2A5 /* WidgetKit.framework */,
-				DE6308B62FAB750A0051D2A5 /* SwiftUI.framework */,
-			);
-			name = Frameworks;
-			sourceTree = "<group>";
-		};
 		DEA883312F9758D3008FC71A = {
 			isa = PBXGroup;
 			children = (
-				DE6308932FAB61230051D2A5 /* Docs */,
 				DEA8833C2F9758D3008FC71A /* MileageTrackeriOS */,
 				DEA8834C2F9758D6008FC71A /* MileageTrackeriOSTests */,
 				DEA883562F9758D6008FC71A /* MileageTrackeriOSUITests */,
-				DE6308B82FAB750A0051D2A5 /* MileageTrackerWidget */,
-				DE6308B32FAB750A0051D2A5 /* Frameworks */,
 				DEA8833B2F9758D3008FC71A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -209,7 +88,6 @@
 				DEA8833A2F9758D3008FC71A /* MileageTrackeriOS.app */,
 				DEA883492F9758D6008FC71A /* MileageTrackeriOSTests.xctest */,
 				DEA883532F9758D6008FC71A /* MileageTrackeriOSUITests.xctest */,
-				DE6308B22FAB750A0051D2A5 /* MileageTrackerWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -217,26 +95,6 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		DE6308B12FAB750A0051D2A5 /* MileageTrackerWidgetExtension */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = DE6308C72FAB750B0051D2A5 /* Build configuration list for PBXNativeTarget "MileageTrackerWidgetExtension" */;
-			buildPhases = (
-				DE6308AE2FAB750A0051D2A5 /* Sources */,
-				DE6308AF2FAB750A0051D2A5 /* Frameworks */,
-				DE6308B02FAB750A0051D2A5 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				DE6308B82FAB750A0051D2A5 /* MileageTrackerWidget */,
-			);
-			name = MileageTrackerWidgetExtension;
-			productName = MileageTrackerWidgetExtension;
-			productReference = DE6308B22FAB750A0051D2A5 /* MileageTrackerWidgetExtension.appex */;
-			productType = "com.apple.product-type.app-extension";
-		};
 		DEA883392F9758D3008FC71A /* MileageTrackeriOS */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = DEA8835D2F9758D6008FC71A /* Build configuration list for PBXNativeTarget "MileageTrackeriOS" */;
@@ -244,20 +102,16 @@
 				DEA883362F9758D3008FC71A /* Sources */,
 				DEA883372F9758D3008FC71A /* Frameworks */,
 				DEA883382F9758D3008FC71A /* Resources */,
-				DEA884E02F9788BF008FC71A /* Embed Frameworks */,
-				DE6308CB2FAB750B0051D2A5 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				DE6308C52FAB750B0051D2A5 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				DEA8833C2F9758D3008FC71A /* MileageTrackeriOS */,
 			);
 			name = MileageTrackeriOS;
 			packageProductDependencies = (
-				DEA884C62F9788BF008FC71A /* RealmSwift */,
 			);
 			productName = MileageTrackeriOS;
 			productReference = DEA8833A2F9758D3008FC71A /* MileageTrackeriOS.app */;
@@ -281,7 +135,6 @@
 			);
 			name = MileageTrackeriOSTests;
 			packageProductDependencies = (
-				DEA884C62F9788BF008FC71A /* RealmSwift */,
 			);
 			productName = MileageTrackeriOSTests;
 			productReference = DEA883492F9758D6008FC71A /* MileageTrackeriOSTests.xctest */;
@@ -304,6 +157,8 @@
 				DEA883562F9758D6008FC71A /* MileageTrackeriOSUITests */,
 			);
 			name = MileageTrackeriOSUITests;
+			packageProductDependencies = (
+			);
 			productName = MileageTrackeriOSUITests;
 			productReference = DEA883532F9758D6008FC71A /* MileageTrackeriOSUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -318,9 +173,6 @@
 				LastSwiftUpdateCheck = 2630;
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
-					DE6308B12FAB750A0051D2A5 = {
-						CreatedOnToolsVersion = 26.3;
-					};
 					DEA883392F9758D3008FC71A = {
 						CreatedOnToolsVersion = 26.3;
 					};
@@ -343,9 +195,6 @@
 			);
 			mainGroup = DEA883312F9758D3008FC71A;
 			minimizedProjectReferenceProxies = 1;
-			packageReferences = (
-				DEA884C32F9788BF008FC71A /* XCRemoteSwiftPackageReference "realm-swift" */,
-			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = DEA8833B2F9758D3008FC71A /* Products */;
 			projectDirPath = "";
@@ -354,28 +203,15 @@
 				DEA883392F9758D3008FC71A /* MileageTrackeriOS */,
 				DEA883482F9758D6008FC71A /* MileageTrackeriOSTests */,
 				DEA883522F9758D6008FC71A /* MileageTrackeriOSUITests */,
-				DE6308B12FAB750A0051D2A5 /* MileageTrackerWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		DE6308B02FAB750A0051D2A5 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		DEA883382F9758D3008FC71A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				DE6308992FAB614A0051D2A5 /* missing+bugs.md in Resources */,
-				DE63089A2FAB614A0051D2A5 /* futurework.md in Resources */,
-				DE63089B2FAB614A0051D2A5 /* pre-release.md in Resources */,
-				DE6308942FAB61230051D2A5 /* DevelopmentPlan.md in Resources */,
-				DE6308952FAB61230051D2A5 /* ProjectBrief.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -396,13 +232,6 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		DE6308AE2FAB750A0051D2A5 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		DEA883362F9758D3008FC71A /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -427,11 +256,6 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		DE6308C52FAB750B0051D2A5 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = DE6308B12FAB750A0051D2A5 /* MileageTrackerWidgetExtension */;
-			targetProxy = DE6308C42FAB750B0051D2A5 /* PBXContainerItemProxy */;
-		};
 		DEA8834B2F9758D6008FC71A /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = DEA883392F9758D3008FC71A /* MileageTrackeriOS */;
@@ -445,74 +269,6 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		DE6308C82FAB750B0051D2A5 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 8LNRSPGGPJ;
-				EXCLUDED_SOURCE_FILE_NAMES = (
-					"$(EXCLUDED_SOURCE_FILE_NAMES)",
-					Info.plist,
-				);
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = MileageTrackerWidget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = MileageTrackerWidget;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.harryjust.MileageTrackeriOS.MileageTrackerWidget;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		DE6308C92FAB750B0051D2A5 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 8LNRSPGGPJ;
-				EXCLUDED_SOURCE_FILE_NAMES = (
-					"$(EXCLUDED_SOURCE_FILE_NAMES)",
-					Info.plist,
-				);
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = MileageTrackerWidget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = MileageTrackerWidget;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.harryjust.MileageTrackeriOS.MileageTrackerWidget;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Release;
-		};
 		DEA8835B2F9758D6008FC71A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -643,7 +399,12 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8LNRSPGGPJ;
 				ENABLE_PREVIEWS = YES;
-				INFOPLIST_FILE = MileageTrackeriOS/Info.plist;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -670,7 +431,12 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8LNRSPGGPJ;
 				ENABLE_PREVIEWS = YES;
-				INFOPLIST_FILE = MileageTrackeriOS/Info.plist;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -775,15 +541,6 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		DE6308C72FAB750B0051D2A5 /* Build configuration list for PBXNativeTarget "MileageTrackerWidgetExtension" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				DE6308C82FAB750B0051D2A5 /* Debug */,
-				DE6308C92FAB750B0051D2A5 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		DEA883352F9758D3008FC71A /* Build configuration list for PBXProject "MileageTrackeriOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -821,25 +578,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		DEA884C32F9788BF008FC71A /* XCRemoteSwiftPackageReference "realm-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/realm/realm-swift";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 20.0.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		DEA884C62F9788BF008FC71A /* RealmSwift */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = DEA884C32F9788BF008FC71A /* XCRemoteSwiftPackageReference "realm-swift" */;
-			productName = RealmSwift;
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = DEA883322F9758D3008FC71A /* Project object */;
 }
