@@ -24,28 +24,6 @@ struct ClaimMethodStep: View {
                     CustomRateEditor(vm: vm)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
-
-                // Logbook — capture initial odometer reading
-                if vm.claimMethod == .logbook {
-                    VStack(alignment: .leading, spacing: MTSpacing.sm) {
-                        Label("Initial Odometer Reading", systemImage: "speedometer")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(Color.mtTextSub)
-                        TextField("e.g. 45200", text: $vm.initialOdometerKm)
-                            .keyboardType(.decimalPad)
-                            .padding(MTSpacing.sm + 4)
-                            .background(Color.mtSurface)
-                            .clipShape(RoundedRectangle(cornerRadius: MTRadius.sm))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: MTRadius.sm)
-                                    .strokeBorder(Color.mtBorder, lineWidth: 1)
-                            )
-                        Text("Record your vehicle's current odometer reading. You'll update this periodically — the difference between readings gives your total kilometres for the logbook period.")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color.mtTextSub)
-                    }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                }
             }
             .animation(.easeInOut(duration: 0.2), value: vm.claimMethod)
 
@@ -64,122 +42,34 @@ private struct CustomRateEditor: View {
 
     private var unit: String { vm.distanceUnit.shortName }
 
-    let formatter: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        return f
-    }()
-
     var body: some View {
         VStack(alignment: .leading, spacing: MTSpacing.md) {
             Text("Custom Rate Details")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Color.mtTextSub)
 
-            Picker("Unit", selection: $vm.distanceUnit) {
-                ForEach(DistanceUnit.allCases, id: \.self) { unit in
-                    Text(unit.displayName).tag(unit)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            ForEach(Array(vm.customRateTiers.enumerated()), id: \.element.id) { idx, _ in
-                TierRow(
-                    tier: $vm.customRateTiers[idx],
-                    index: idx,
-                    unit: unit,
-                    formatter: formatter,
-                    canDelete: vm.customRateTiers.count > 1,
-                    onDelete: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            vm.customRateTiers.remove(at: idx)
-                            for i in idx..<vm.customRateTiers.count {
-                                vm.customRateTiers[i].lowerBound = i == 0 ? 0 : vm.customRateTiers[i - 1].upperBound
-                            }
-                        }
-                    }
-                )
-            }
-
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    let last = vm.customRateTiers[vm.customRateTiers.count - 1]
-                    vm.customRateTiers.append(CustomRateTier(
-                        lowerBound: last.upperBound,
-                        upperBound: last.upperBound + 5000,
-                        centsPerUnit: last.centsPerUnit
-                    ))
-                }
-            } label: {
-                Label("Add another tier", systemImage: "plus.circle.fill")
-            }
-            .buttonStyle(MTSecondaryButtonStyle())
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Tier Rate Summary")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.mtTextSub)
-                ForEach(vm.customRateTiers) { tier in
-                    Text("• \(tier.lowerBound)–\(tier.upperBound) \(unit) @ \(String(format: "%.0f", tier.centsPerUnit))¢/\(unit)")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.mtTextSub)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(MTSpacing.md)
-        .background(Color.mtSurface)
-        .clipShape(RoundedRectangle(cornerRadius: MTRadius.md))
-        .overlay(RoundedRectangle(cornerRadius: MTRadius.md).strokeBorder(Color.mtGreen.opacity(0.3), lineWidth: 1))
-    }
-}
-
-// MARK: - Tier Row
-
-private struct TierRow: View {
-    @Binding var tier: CustomRateTier
-    let index: Int
-    let unit: String
-    let formatter: NumberFormatter
-    let canDelete: Bool
-    let onDelete: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: MTSpacing.sm) {
-            HStack {
-                Text("Tier \(index + 1)")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.mtTextSub)
-                Spacer()
-                if canDelete {
-                    Button(action: onDelete) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.red.opacity(0.8))
-                    }
-                }
-            }
-
+            // Distance range row
             HStack(spacing: MTSpacing.sm) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("From (\(unit))").font(.system(size: 12)).foregroundStyle(Color.mtTextSub)
-                    InputHStack {
-                        HStack {
-                            if index == 0 {
-                                Text("\(tier.lowerBound)")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .frame(minWidth: 44)
-                                    .multilineTextAlignment(.center)
-                                    .foregroundStyle(Color.mtTextSub)
-                            } else {
-                                TextField("", value: $tier.lowerBound, formatter: formatter)
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .frame(minWidth: 44)
-                                    .multilineTextAlignment(.center)
-                                    .keyboardType(.numberPad)
-                            }
+                    HStack {
+                        Button { if vm.customRateLowerBound > 0 { vm.customRateLowerBound -= 100 } } label: {
+                            Image(systemName: "minus").frame(width: 28, height: 28)
+                        }
+                        Text("\(vm.customRateLowerBound)")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(minWidth: 44)
+                            .multilineTextAlignment(.center)
+                        Button { if vm.customRateLowerBound < vm.customRateUpperBound - 100 { vm.customRateLowerBound += 100 } } label: {
+                            Image(systemName: "plus").frame(width: 28, height: 28)
                         }
                     }
+                    .foregroundStyle(Color.mtTextPrimary)
+                    .padding(.horizontal, MTSpacing.sm)
+                    .padding(.vertical, 6)
+                    .background(Color.mtSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: MTRadius.sm))
+                    .overlay(RoundedRectangle(cornerRadius: MTRadius.sm).strokeBorder(Color.mtBorder, lineWidth: 1))
                 }
 
                 Image(systemName: "arrow.right")
@@ -187,29 +77,41 @@ private struct TierRow: View {
                     .padding(.top, 20)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("To (\(unit.capitalized))").font(.system(size: 12)).foregroundStyle(Color.mtTextSub)
-                    InputHStack {
-                        TextField("", value: $tier.upperBound, formatter: formatter)
+                    Text("To (\(unit))").font(.system(size: 12)).foregroundStyle(Color.mtTextSub)
+                    HStack {
+                        Button { if vm.customRateUpperBound > vm.customRateLowerBound + 100 { vm.customRateUpperBound -= 100 } } label: {
+                            Image(systemName: "minus").frame(width: 28, height: 28)
+                        }
+                        Text("\(vm.customRateUpperBound)")
                             .font(.system(size: 16, weight: .semibold))
                             .frame(minWidth: 44)
                             .multilineTextAlignment(.center)
-                            .keyboardType(.numberPad)
+                        Button { vm.customRateUpperBound += 100 } label: {
+                            Image(systemName: "plus").frame(width: 28, height: 28)
+                        }
                     }
+                    .foregroundStyle(Color.mtTextPrimary)
+                    .padding(.horizontal, MTSpacing.sm)
+                    .padding(.vertical, 6)
+                    .background(Color.mtSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: MTRadius.sm))
+                    .overlay(RoundedRectangle(cornerRadius: MTRadius.sm).strokeBorder(Color.mtBorder, lineWidth: 1))
                 }
             }
 
+            // Cents per unit row
             VStack(alignment: .leading, spacing: 4) {
                 Text("Rate (cents per \(unit))").font(.system(size: 12)).foregroundStyle(Color.mtTextSub)
                 HStack {
-                    Button { if tier.centsPerUnit > 1 { tier.centsPerUnit -= 1 } } label: {
+                    Button { if vm.customRateCents > 1 { vm.customRateCents -= 1 } } label: {
                         Image(systemName: "minus").frame(width: 36, height: 36)
                     }
                     Spacer()
-                    Text(String(format: "%.0f¢ / \(unit)", tier.centsPerUnit))
+                    Text(String(format: "%.0f¢ / \(unit)", vm.customRateCents))
                         .font(.system(size: 22, weight: .bold))
                         .foregroundStyle(Color.mtGreen)
                     Spacer()
-                    Button { tier.centsPerUnit += 1 } label: {
+                    Button { vm.customRateCents += 1 } label: {
                         Image(systemName: "plus").frame(width: 36, height: 36)
                     }
                 }
@@ -220,13 +122,19 @@ private struct TierRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: MTRadius.sm))
                 .overlay(RoundedRectangle(cornerRadius: MTRadius.sm).strokeBorder(Color.mtGreen.opacity(0.4), lineWidth: 1))
 
-                Slider(value: $tier.centsPerUnit, in: 1...200, step: 1)
+                Slider(value: $vm.customRateCents, in: 1...200, step: 1)
                     .tint(Color.mtGreen)
             }
+
+            Text("\(vm.customRateLowerBound)–\(vm.customRateUpperBound) \(unit) at \(String(format: "%.0f", vm.customRateCents))¢ per \(unit)")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.mtTextSub)
+                .frame(maxWidth: .infinity, alignment: .center)
         }
-        .padding(MTSpacing.sm)
-        .background(Color.mtBackground)
-        .clipShape(RoundedRectangle(cornerRadius: MTRadius.sm))
+        .padding(MTSpacing.md)
+        .background(Color.mtSurface)
+        .clipShape(RoundedRectangle(cornerRadius: MTRadius.md))
+        .overlay(RoundedRectangle(cornerRadius: MTRadius.md).strokeBorder(Color.mtGreen.opacity(0.3), lineWidth: 1))
     }
 }
 
@@ -256,7 +164,6 @@ private struct ClaimMethodCard: View {
                     Text(method.claimDescription)
                         .font(.system(size: 13))
                         .foregroundStyle(Color.mtTextSub)
-                        .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -278,24 +185,4 @@ private struct ClaimMethodCard: View {
         }
         .animation(.easeInOut(duration: 0.15), value: isSelected)
     }
-}
-
-struct InputHStack<Content: View>: View {
-    var content: () -> Content
-    
-    var body: some View {
-        HStack {
-            content()
-        }
-        .foregroundStyle(Color.mtTextPrimary)
-        .padding(.horizontal, MTSpacing.sm)
-        .padding(.vertical, 6)
-        .background(Color.mtSurface)
-        .clipShape(RoundedRectangle(cornerRadius: MTRadius.sm))
-        .overlay(RoundedRectangle(cornerRadius: MTRadius.sm).strokeBorder(Color.mtBorder, lineWidth: 1))
-    }
-}
-
-#Preview {
-    CustomRateEditor(vm: OnboardingViewModel())
 }

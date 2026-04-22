@@ -1,14 +1,14 @@
 import SwiftUI
 
-struct VehicleAndUnitStep: View {
+struct AddVehicleStep: View {
     @Bindable var vm: OnboardingViewModel
 
     var body: some View {
         OnboardingStepShell(
             icon: "car.fill",
             iconColor: .mtGreen,
-            title: "Your vehicle",
-            subtitle: "Add your first vehicle and set your preferred distance unit."
+            title: "Add your vehicle",
+            subtitle: "Your first vehicle. You can add more in Settings at any time."
         ) {
             VStack(spacing: MTSpacing.md) {
                 // Number plate (required)
@@ -62,20 +62,6 @@ struct VehicleAndUnitStep: View {
                         }
                     }
                 }
-
-                // Distance Unit
-                VStack(alignment: .leading, spacing: MTSpacing.xs) {
-                    Label("Distance Unit", systemImage: "ruler.fill")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Color.mtTextSub)
-                    ForEach(DistanceUnit.allCases, id: \.self) { unit in
-                        DistanceUnitRow(
-                            unit: unit,
-                            isSelected: vm.distanceUnit == unit,
-                            onTap: { vm.distanceUnit = unit }
-                        )
-                    }
-                }
             }
 
             Spacer(minLength: MTSpacing.xl)
@@ -113,50 +99,6 @@ private struct TypeChip: View {
             .overlay(
                 RoundedRectangle(cornerRadius: MTRadius.sm)
                     .strokeBorder(isSelected ? Color.clear : Color.mtBorder, lineWidth: 1)
-            )
-        }
-        .animation(.easeInOut(duration: 0.15), value: isSelected)
-    }
-}
-
-// MARK: - Distance Unit Row
-
-private struct DistanceUnitRow: View {
-    let unit: DistanceUnit
-    let isSelected: Bool
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: MTSpacing.md) {
-                ZStack {
-                    Circle()
-                        .fill(isSelected ? Color.mtGreen : Color.mtBorder.opacity(0.3))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: unit.icon)
-                        .font(.system(size: 20))
-                        .foregroundStyle(isSelected ? .white : Color.mtTextSub)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(unit.displayName)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Color.mtTextPrimary)
-                    Text(unit.shortName)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.mtTextSub)
-                }
-                Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 20))
-                        .foregroundStyle(Color.mtGreen)
-                }
-            }
-            .padding(MTSpacing.sm + 4)
-            .background(
-                RoundedRectangle(cornerRadius: MTRadius.md)
-                    .strokeBorder(isSelected ? Color.mtGreen : Color.mtBorder, lineWidth: isSelected ? 2 : 1)
-                    .background(Color.mtSurface.clipShape(RoundedRectangle(cornerRadius: MTRadius.md)))
             )
         }
         .animation(.easeInOut(duration: 0.15), value: isSelected)

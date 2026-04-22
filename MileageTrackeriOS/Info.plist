@@ -2,11 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-		<string>com.harryjust.MileageTrackeriOS.trip-processing</string>
-		<string>com.harryjust.MileageTrackeriOS.sync</string>
-	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>
@@ -23,25 +18,36 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+
+	<!-- Location & Motion Permissions -->
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>MileageTracker needs your location in the background to automatically detect and record business trips while you drive. Your data stays on your device and in your personal iCloud.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>MileageTracker uses your location to record trip routes.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>MileageTracker uses motion data to detect when you start driving, so trips are recorded automatically without manual input or excessive battery drain.</string>
-	<key>UIApplicationSceneManifest</key>
-	<dict>
-		<key>UIApplicationSupportsMultipleScenes</key>
-		<false/>
-	</dict>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
+
+	<!-- Background Modes -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
 		<string>processing</string>
 		<string>fetch</string>
 	</array>
+
+	<!-- BGTask identifiers -->
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.harryjust.MileageTrackeriOS.trip-processing</string>
+		<string>com.harryjust.MileageTrackeriOS.sync</string>
+	</array>
+
+	<!-- UI -->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+	</dict>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
@@ -51,6 +57,9 @@
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportsDocumentBrowser</key>
 	<false/>

@@ -12,10 +12,6 @@ struct HomeView: View {
                     TripStatusCard()
                         .padding(.top, MTSpacing.sm)
 
-                    // MARK: Manual Trip Controls
-                    ManualTripControls()
-                        .padding(.top, MTSpacing.xs)
-
                     // MARK: Quick Stats
                     QuickStatsRow()
 
@@ -29,7 +25,7 @@ struct HomeView: View {
                 .padding(.bottom, MTSpacing.xl)
             }
             .background(Color.mtBackground)
-            .navigationTitle("Mileage Tracker")
+            .navigationTitle("MileageTracker")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -104,12 +100,6 @@ private struct StatCard: View {
 private struct PermissionWarnings: View {
     @Environment(AppState.self) private var appState
 
-    /// Only show the schedule hint when tracking is idle — never distract from an active trip.
-    private var isIdle: Bool {
-        if case .idle = appState.tripRecorder.state { return true }
-        return false
-    }
-
     var body: some View {
         VStack(spacing: MTSpacing.sm) {
             if !appState.locationManager.hasAlwaysAuthorization {
@@ -132,38 +122,7 @@ private struct PermissionWarnings: View {
                     onAction: nil
                 )
             }
-            if isIdle && !appState.scheduleManager.isCurrentlyAllowed {
-                InfoBanner(
-                    icon: "clock.badge.xmark",
-                    message: "Outside tracking hours. Auto-detection is paused — tap Start Trip to record manually."
-                )
-            }
         }
-    }
-}
-
-/// Info-style banner — calmer than WarningBanner. Used for expected paused-state hints.
-private struct InfoBanner: View {
-    let icon: String
-    let message: String
-
-    var body: some View {
-        HStack(spacing: MTSpacing.sm) {
-            Image(systemName: icon)
-                .foregroundStyle(Color.mtTextSub)
-            Text(message)
-                .font(.system(size: 13))
-                .foregroundStyle(Color.mtTextSub)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer()
-        }
-        .padding(MTSpacing.md)
-        .background(Color.mtSurface)
-        .clipShape(RoundedRectangle(cornerRadius: MTRadius.sm))
-        .overlay(
-            RoundedRectangle(cornerRadius: MTRadius.sm)
-                .strokeBorder(Color.mtBorder, lineWidth: 1)
-        )
     }
 }
 
@@ -286,63 +245,6 @@ private struct RecentTripsSection: View {
         case .business:      return .mtGreen
         case .personal:      return .blue
         case .uncategorised: return .mtWarning
-        }
-    }
-}
-
-// MARK: - Manual Trip Controls
-
-private struct ManualTripControls: View {
-    @Environment(AppState.self) private var appState
-
-    private var state: TripRecorderState { appState.tripRecorder.state }
-
-    var body: some View {
-        HStack(spacing: MTSpacing.sm) {
-            if state.isRecording {
-                // ── Stop Trip ──
-                Button {
-                    appState.tripRecorder.forceFinaliseFromDebug()
-                } label: {
-                    Label("Stop Trip", systemImage: "stop.fill")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, MTSpacing.sm + 2)
-                        .background(Color.mtRecording)
-                        .clipShape(RoundedRectangle(cornerRadius: MTRadius.md))
-                }
-            } else if case .idle = state {
-                // ── Start Trip ──
-                Button {
-                    appState.tripRecorder.forceStartManualTrip()
-                } label: {
-                    Label("Start Trip", systemImage: "play.fill")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, MTSpacing.sm + 2)
-                        .background(Color.mtGreen)
-                        .clipShape(RoundedRectangle(cornerRadius: MTRadius.md))
-                }
-            } else {
-                // Suspected or ending — show ghost button
-                Button {
-                    appState.tripRecorder.forceFinaliseFromDebug()
-                } label: {
-                    Label("Cancel", systemImage: "xmark")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Color.mtTextSub)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, MTSpacing.sm + 2)
-                        .background(Color.mtSurface)
-                        .clipShape(RoundedRectangle(cornerRadius: MTRadius.md))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: MTRadius.md)
-                                .strokeBorder(Color.mtBorder, lineWidth: 1)
-                        )
-                }
-            }
         }
     }
 }

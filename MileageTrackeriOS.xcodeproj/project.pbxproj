@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		DEA884C72F9788BF008FC71A /* RealmSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DEA884C62F9788BF008FC71A /* RealmSwift */; };
+		DEA884D02F9788BF008FC71A /* RealmSwift in Embed Frameworks */ = {isa = PBXBuildFile; productRef = DEA884C62F9788BF008FC71A /* RealmSwift */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		DEAB9B602F97B78F00B4A412 /* RealmSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DEA884C62F9788BF008FC71A /* RealmSwift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		DEA8834A2F9758D6008FC71A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -23,15 +29,42 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		DEA884E02F9788BF008FC71A /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				DEA884D02F9788BF008FC71A /* RealmSwift in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		DEA8833A2F9758D3008FC71A /* MileageTrackeriOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MileageTrackeriOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DEA883492F9758D6008FC71A /* MileageTrackeriOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MileageTrackeriOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DEA883532F9758D6008FC71A /* MileageTrackeriOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MileageTrackeriOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		BB0000000000000000000001 /* Exceptions for "MileageTrackeriOS" folder in "MileageTrackeriOS" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = DEA883392F9758D3008FC71A /* MileageTrackeriOS */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		DEA8833C2F9758D3008FC71A /* MileageTrackeriOS */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BB0000000000000000000001 /* Exceptions for "MileageTrackeriOS" folder in "MileageTrackeriOS" target */,
+			);
 			path = MileageTrackeriOS;
 			sourceTree = "<group>";
 		};
@@ -52,6 +85,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DEA884C72F9788BF008FC71A /* RealmSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -59,6 +93,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DEAB9B602F97B78F00B4A412 /* RealmSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -102,6 +137,7 @@
 				DEA883362F9758D3008FC71A /* Sources */,
 				DEA883372F9758D3008FC71A /* Frameworks */,
 				DEA883382F9758D3008FC71A /* Resources */,
+				DEA884E02F9788BF008FC71A /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -112,6 +148,7 @@
 			);
 			name = MileageTrackeriOS;
 			packageProductDependencies = (
+				DEA884C62F9788BF008FC71A /* RealmSwift */,
 			);
 			productName = MileageTrackeriOS;
 			productReference = DEA8833A2F9758D3008FC71A /* MileageTrackeriOS.app */;
@@ -135,6 +172,7 @@
 			);
 			name = MileageTrackeriOSTests;
 			packageProductDependencies = (
+				DEA884C62F9788BF008FC71A /* RealmSwift */,
 			);
 			productName = MileageTrackeriOSTests;
 			productReference = DEA883492F9758D6008FC71A /* MileageTrackeriOSTests.xctest */;
@@ -195,6 +233,9 @@
 			);
 			mainGroup = DEA883312F9758D3008FC71A;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				DEA884C32F9788BF008FC71A /* XCRemoteSwiftPackageReference "realm-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = DEA8833B2F9758D3008FC71A /* Products */;
 			projectDirPath = "";
@@ -399,12 +440,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8LNRSPGGPJ;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_FILE = MileageTrackeriOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -431,12 +467,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8LNRSPGGPJ;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_FILE = MileageTrackeriOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -578,6 +609,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		DEA884C32F9788BF008FC71A /* XCRemoteSwiftPackageReference "realm-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/realm/realm-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 20.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		DEA884C62F9788BF008FC71A /* RealmSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DEA884C32F9788BF008FC71A /* XCRemoteSwiftPackageReference "realm-swift" */;
+			productName = RealmSwift;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = DEA883322F9758D3008FC71A /* Project object */;
 }

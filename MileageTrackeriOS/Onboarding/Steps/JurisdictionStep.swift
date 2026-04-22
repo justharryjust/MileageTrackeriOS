@@ -3,27 +3,19 @@ import SwiftUI
 struct JurisdictionStep: View {
     @Bindable var vm: OnboardingViewModel
 
-    private let options: [(code: String, name: String, flag: String)] = [
-        ("NZ", "New Zealand", "🇳🇿"),
-        ("AU", "Australia",   "🇦🇺"),
-        ("--", "Other",       "🌍"),
-    ]
-
     var body: some View {
         OnboardingStepShell(
             icon: "globe.asia.australia.fill",
             iconColor: .mtGreen,
             title: "Where are you based?",
-            subtitle: "Sets the mileage rates used for your expense claims."
+            subtitle: "We've pre-selected based on your device region. This sets the applicable mileage rates for your expense claims."
         ) {
-            VStack(spacing: MTSpacing.sm) {
-                ForEach(options, id: \.code) { option in
-                    RegionCard(
-                        flag: option.flag,
-                        name: option.name,
-                        isSelected: !vm.regionCode.isEmpty && (vm.regionCode == option.code
-                            || (option.code == "--" && !["NZ", "AU"].contains(vm.regionCode))),
-                        onTap: { vm.regionCode = option.code }
+            VStack(spacing: MTSpacing.md) {
+                ForEach(Jurisdiction.allCases, id: \.self) { j in
+                    JurisdictionCard(
+                        jurisdiction: j,
+                        isSelected: vm.jurisdiction == j,
+                        onTap: { vm.jurisdiction = j }
                     )
                 }
             }
@@ -32,25 +24,22 @@ struct JurisdictionStep: View {
 
             Button("Continue") { vm.advance() }
                 .buttonStyle(MTPrimaryButtonStyle())
-                .disabled(!vm.isRegionValid)
-                .opacity(vm.isRegionValid ? 1 : 0.5)
         }
     }
 }
 
-private struct RegionCard: View {
-    let flag: String
-    let name: String
+private struct JurisdictionCard: View {
+    let jurisdiction: Jurisdiction
     let isSelected: Bool
     let onTap: () -> Void
 
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: MTSpacing.md) {
-                Text(flag)
-                    .font(.system(size: 32))
+                Text(jurisdiction.flag)
+                    .font(.system(size: 36))
 
-                Text(name)
+                Text(jurisdiction.displayName)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(Color.mtTextPrimary)
 
@@ -63,11 +52,10 @@ private struct RegionCard: View {
                 }
             }
             .padding(MTSpacing.md)
-            .background(Color.mtSurface)
-            .clipShape(RoundedRectangle(cornerRadius: MTRadius.md))
-            .overlay(
+            .background(
                 RoundedRectangle(cornerRadius: MTRadius.md)
                     .strokeBorder(isSelected ? Color.mtGreen : Color.mtBorder, lineWidth: isSelected ? 2 : 1)
+                    .background(Color.mtSurface.clipShape(RoundedRectangle(cornerRadius: MTRadius.md)))
             )
         }
         .animation(.easeInOut(duration: 0.15), value: isSelected)

@@ -10,57 +10,21 @@ final class RealmProvider {
     private(set) var realm: Realm
 
     /// Current schema version — bump this whenever the model changes and add a migration block.
-    static let schemaVersion: UInt64 = 8
+    static let schemaVersion: UInt64 = 1
 
     private init() {
         let config = Realm.Configuration(
             schemaVersion: Self.schemaVersion,
             migrationBlock: { migration, oldVersion in
-                // v0 -> v1: initial schema
-                // v1 -> v2: added Trip.carKitName (optional String -- no action needed)
-                // v2 -> v3: added UserProfile.trackingSchedule (List<DaySchedule>)
-                //           Populated lazily in UserProfileRepository.init
-                // v3 -> v4: added UserProfile.customRateThresholds (List<RateThreshold>)
-                //           Empty list default requires no migration action
-                // v4 -> v5: added Trip.businessUsePercent (optional Double),
-                //           OdometerReading.source (OdometerSource, default .manual)
-                //           Both are new optional/enum fields — no migration action needed
-                // v5 -> v6: added Trip.processingStatus (TripProcessingStatus, default .complete),
-                //           Trip.processingRetries (Int, default 0)
-                // v6 -> v7: §4.3 — Vehicle.defaultCategory (TripCategory, default .uncategorised)
-                //           §5.1 — Trip.purpose (optional String)
-                //           §5.2 — Trip.commitHash (optional String), Trip.committedAt (optional Date)
-                //           §3.4 — Trip.gpsDistanceMetres (Double, default = current distanceMetres),
-                //                  Trip.odometerDistanceMetres (optional Double)
-                if oldVersion < 6 {
-                    migration.enumerateObjects(ofType: "Trip") { _, newObject in
-                        newObject?["processingStatus"] = TripProcessingStatus.complete.rawValue
-                        newObject?["processingRetries"] = 0
-                    }
-                }
-                if oldVersion < 7 {
-                    migration.enumerateObjects(ofType: "Vehicle") { _, newObject in
-                        newObject?["defaultCategory"] = TripCategory.uncategorised.rawValue
-                    }
-                    migration.enumerateObjects(ofType: "Trip") { oldObject, newObject in
-                        // Seed gpsDistanceMetres from existing distanceMetres so historic trips
-                        // preserve their as-recorded GPS figure (vs future odometer-corrected one).
-                        let existing = (oldObject?["distanceMetres"] as? Double) ?? 0
-                        newObject?["gpsDistanceMetres"] = existing
-                    }
-                }
-                // v7 -> v8: new SavedAddress collection — no enumerate needed (empty default).
-                // Drives the commute (home↔work) auto-categorisation rule.
+                // v0 → v1: initial schema, no migration needed
+                // Future: add `if oldVersion < 2 { ... }` blocks here
             },
             objectTypes: [
                 UserProfile.self,
-                DaySchedule.self,
-                RateThreshold.self,
                 Vehicle.self,
                 Trip.self,
                 TripPoint.self,
                 OdometerReading.self,
-                SavedAddress.self,
             ]
         )
         Realm.Configuration.defaultConfiguration = config
@@ -69,7 +33,7 @@ final class RealmProvider {
             realm = try Realm()
             TripLogger.shared.log("Realm opened at: \(realm.configuration.fileURL?.path ?? "unknown")", category: .system)
         } catch {
-            TripLogger.shared.log("FATAL: Could not open Realm -- \(error)", category: .error)
+            TripLogger.shared.log("FATAL: Could not open Realm — \(error)", category: .error)
             fatalError("Could not open Realm: \(error)")
         }
     }
