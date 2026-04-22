@@ -210,6 +210,7 @@ final class Trip: Object, ObjectKeyIdentifiable {
     @Persisted var isCapExceeded: Bool            = false
     @Persisted var isSyncedToCloud: Bool          = false
     @Persisted var visitDepartureAt: Date?        // set when a CLVisit departure pre-armed this trip
+    @Persisted var carKitName: String?            // name of car-kit connected when trip started, if any
     @Persisted var createdAt: Date                = Date()
     @Persisted var updatedAt: Date                = Date()
 

@@ -38,6 +38,7 @@ final class TripRecorder {
  // MARK: Injected dependencies
  private weak var locationManager: LocationManager?
  private weak var motionManager: MotionManager?
+ private weak var bluetoothManager: BluetoothManager?
  private var tripRepo: TripRepository?
  private var profileRepo: UserProfileRepository?
 
@@ -48,13 +49,22 @@ final class TripRecorder {
  var stationaryTimer: Timer?
  private var detectionTimer: Timer?
  var tripStartedAt: Date?
+ /// Highest valid speed seen during the current detection window — used as the
+ /// confirmation gate instead of instantaneous speed to survive traffic lights and cold starts.
+ var peakSpeedKmhDuringDetection: Double = 0
+ /// When true, the detection window is halved because a strong pre-arm signal is present
+ private var fastTrackDetection: Bool = false
 
- /// Set when a CLVisit departure fires — used as a secondary confirmation signal (item 2)
+ /// Set when a CLVisit departure fires — used as a secondary confirmation signal
  var visitDepartureAt: Date?
- /// Cleared after a trip is saved or detection aborts
  var visitDepartureExpiry: Date?
- /// Window in which a visit departure is considered relevant (10 minutes)
  private let visitDepartureWindowSeconds: TimeInterval = 600
+
+ /// Name of the car kit that pre-armed or is active during this trip, stored on save
+ var activeCarKitName: String?
+ /// Pre-arm expiry for car-kit connect signal (same window as visit departure)
+ var carKitConnectExpiry: Date?
+ private let carKitPreArmWindowSeconds: TimeInterval = 600
 
  /// Heuristic overrides — set to lower values in tests to bypass timing constraints
  var heuristicDetectionWindow: TimeInterval  = Heuristic.detectionWindowSeconds
@@ -71,11 +81,13 @@ final class TripRecorder {
  // MARK: - Setup
 
  func configure(location: LocationManager, motion: MotionManager,
+                bluetooth: BluetoothManager,
                 tripRepo: TripRepository, profileRepo: UserProfileRepository) {
-     self.locationManager = location
-     self.motionManager   = motion
-     self.tripRepo        = tripRepo
-     self.profileRepo     = profileRepo
+     self.locationManager  = location
+     self.motionManager    = motion
+     self.bluetoothManager = bluetooth
+     self.tripRepo         = tripRepo
+     self.profileRepo      = profileRepo
 
         location.onLocationUpdate = { [weak self] loc in
             self?.handleLocationUpdate(loc)
@@ -86,11 +98,62 @@ final class TripRecorder {
         location.onVisitDeparture = { [weak self] departureDate in
             self?.handleVisitDeparture(departureDate)
         }
-        // When woken from background, catch up on any motion activities missed while suspended
         location.onBackgroundWake = { [weak self] since in
             self?.motionManager?.queryRecentActivity(since: since)
         }
+        bluetooth.onCarKitConnected = { [weak self] event in
+            self?.handleCarKitConnected(event)
+        }
+        bluetooth.onCarKitDisconnected = { [weak self] event in
+            self?.handleCarKitDisconnected(event)
+        }
         logger.log("TripRecorder configured with repositories", category: .trip)
+ }
+
+ // MARK: - Car Kit Handlers
+
+ private func handleCarKitConnected(_ event: CarKitEvent) {
+     // Store the name regardless of state so it's available at trip save time
+     activeCarKitName = event.deviceName
+
+     switch state {
+     case .idle:
+         // Pre-arm: set a 10-minute window. If automotive motion arrives within
+         // that window the trip start is anchored to the connect time.
+         carKitConnectExpiry = Date().addingTimeInterval(carKitPreArmWindowSeconds)
+         logger.log("Car kit connected (\"\(event.deviceName)\") — pre-armed for \(Int(carKitPreArmWindowSeconds))s", category: .trip)
+
+     case .detecting, .recording, .ending:
+         logger.log("Car kit connected (\"\(event.deviceName)\") mid-trip — name recorded", category: .trip)
+     }
+ }
+
+ private func handleCarKitDisconnected(_ event: CarKitEvent) {
+     logger.log("Car kit disconnected (\"\(event.deviceName)\")", category: .trip)
+     carKitConnectExpiry = nil
+
+     switch state {
+     case .recording(let startedAt, let distance):
+         // Engine off / left the car — immediately start the end window rather
+         // than waiting for the motion heuristic to catch up.
+         logger.log("Car kit disconnect during recording — starting end timer immediately", category: .trip)
+         cancelStationaryTimer()
+         startStationaryTimer(recordingStartedAt: startedAt, distance: distance)
+
+     case .detecting:
+         // User connected then immediately disconnected without a confirmed trip —
+         // abort detection.
+         logger.log("Car kit disconnect during detecting — aborting detection", category: .trip)
+         cancelDetectionTimer()
+         detectionBuffer.removeAll()
+         peakSpeedKmhDuringDetection = 0
+         fastTrackDetection          = false
+         locationManager?.stopHighAccuracyUpdates()
+         transitionTo(.idle)
+
+     default:
+         break
+     }
  }
 
  // MARK: - Visit Departure Handler (item 2)
@@ -132,9 +195,12 @@ final class TripRecorder {
               }
               return
           }
-          // Item 2: log whether a visit departure is backing this signal
-          let visitBacked = visitDepartureExpiry.map { Date() < $0 } ?? false
-          logger.log("Automotive activity detected (conf:\(activity.confidence == .high ? "high" : "medium"), visitBacked:\(visitBacked)) — entering detecting state", category: .trip)
+          // Log whether a visit departure or car-kit is backing this signal
+          let visitBacked  = visitDepartureExpiry.map { Date() < $0 } ?? false
+          let carKitBacked = carKitConnectExpiry.map { Date() < $0 } ?? false
+          // Fast-track: halve the detection window when a strong pre-arm signal is present
+          fastTrackDetection = visitBacked || carKitBacked
+          logger.log("Automotive detected (conf:\(activity.confidence == .high ? "high" : "medium"), visitBacked:\(visitBacked), carKitBacked:\(carKitBacked), fastTrack:\(fastTrackDetection)) — entering detecting", category: .trip)
           transitionTo(.detecting(since: Date()))
           startDetectionTimer()
           locationManager?.startHighAccuracyUpdates()
@@ -146,6 +212,8 @@ final class TripRecorder {
                   logger.log("Automotive lost during detection (\(Int(elapsed))s) — back to idle", category: .trip)
                   cancelDetectionTimer()
                   detectionBuffer.removeAll()
+                  peakSpeedKmhDuringDetection = 0
+                  fastTrackDetection          = false
                   locationManager?.stopHighAccuracyUpdates()
                   transitionTo(.idle)
               }
@@ -179,21 +247,36 @@ final class TripRecorder {
  private func handleLocationUpdate(_ location: CLLocation) {
      switch state {
      case .detecting(let since):
+         // Option C: guard against invalid/cold-start speed values.
+         // CLLocation returns speed = -1 when unavailable (GPS warming up).
+         // These fixes are not useful for speed tracking or route buffering.
+         guard location.speed >= 0 else {
+             logger.log("Detecting — skipping fix with unknown speed (GPS cold start)", category: .trip)
+             return
+         }
+
          let speedKmh = location.speed * 3.6
          let elapsed  = Date().timeIntervalSince(since)
-         logger.log("Detecting — speed: \(String(format:"%.1f",speedKmh)) km/h, elapsed: \(Int(elapsed))s, buffered: \(detectionBuffer.count) pts", category: .trip)
 
-         if speedKmh >= heuristicMinSpeedKmh && elapsed >= heuristicDetectionWindow {
-             // Confirmation: DO NOT add to buffer first — that would duplicate this fix.
-             // Prepend the already-buffered pre-confirmation fixes, then append this fix.
-             logger.log("Trip start confirmed ✅ — prepending \(detectionBuffer.count) detection pts", category: .trip)
+         // Option A: track peak speed across all fixes, not just the current one.
+         // This survives traffic lights, slow-start, and the 30s boundary falling mid-stop.
+         if speedKmh > peakSpeedKmhDuringDetection {
+             peakSpeedKmhDuringDetection = speedKmh
+         }
+
+         // Option B: fast-track halves the required window when a strong pre-arm is present
+         let requiredWindow = fastTrackDetection ? heuristicDetectionWindow / 2 : heuristicDetectionWindow
+
+         logger.log("Detecting — speed: \(String(format:"%.1f",speedKmh)) km/h, peak: \(String(format:"%.1f",peakSpeedKmhDuringDetection)) km/h, elapsed: \(Int(elapsed))s/\(Int(requiredWindow))s, buffered: \(detectionBuffer.count) pts", category: .trip)
+
+         if peakSpeedKmhDuringDetection >= heuristicMinSpeedKmh && elapsed >= requiredWindow {
+             logger.log("Trip start confirmed ✅ — peak speed \(String(format:"%.1f",peakSpeedKmhDuringDetection)) km/h over \(Int(elapsed))s, prepending \(detectionBuffer.count) detection pts", category: .trip)
              cancelDetectionTimer()
              collectedLocations = detectionBuffer + [location]
              detectionBuffer.removeAll()
              tripStartedAt = collectedLocations.first?.timestamp ?? Date()
              transitionTo(.recording(startedAt: tripStartedAt!, distanceMetres: calculateTotalDistance()))
          } else {
-             // Not yet confirmed — buffer this fix for later prepending
              detectionBuffer.append(location)
          }
 
@@ -229,6 +312,8 @@ final class TripRecorder {
              guard let self, case .detecting = self.state else { return }
              self.logger.log("Detection timed out — back to idle", category: .trip)
              self.detectionBuffer.removeAll()
+             self.peakSpeedKmhDuringDetection = 0
+             self.fastTrackDetection          = false
              self.locationManager?.stopHighAccuracyUpdates()
              self.transitionTo(.idle)
          }
@@ -282,20 +367,20 @@ final class TripRecorder {
             return
         }
 
-        // Item 7: consume the visit departure timestamp if it's still valid
-        let departure = consumeVisitDeparture()
-        if let dep = departure {
-            logger.log("Trip anchored to visit departure at \(dep)", category: .trip)
-        }
+        let departure    = consumeVisitDeparture()
+        let kitName      = activeCarKitName   // snapshot — reset() clears it
+        if let dep = departure { logger.log("Trip anchored to visit departure at \(dep)", category: .trip) }
+        if let kit = kitName   { logger.log("Trip associated with car kit: \"\(kit)\"", category: .trip) }
 
         let vehicleId = profileRepo?.defaultVehicle?.id ?? ""
         tripRepo?.saveTrip(
-            vehicleId      : vehicleId,
-            startedAt      : startedAt,
-            endedAt        : endedAt,
-            distanceMetres : distance,
-            locations      : collectedLocations,
-            visitDepartureAt: departure
+            vehicleId        : vehicleId,
+            startedAt        : startedAt,
+            endedAt          : endedAt,
+            distanceMetres   : distance,
+            locations        : collectedLocations,
+            visitDepartureAt : departure,
+            carKitName       : kitName
         )
 
         reset()
@@ -304,9 +389,13 @@ final class TripRecorder {
     private func reset() {
         collectedLocations.removeAll()
         detectionBuffer.removeAll()
+        peakSpeedKmhDuringDetection = 0
+        fastTrackDetection          = false
         tripStartedAt        = nil
         visitDepartureAt     = nil
         visitDepartureExpiry = nil
+        activeCarKitName     = nil
+        carKitConnectExpiry  = nil
         locationManager?.stopHighAccuracyUpdates()
         transitionTo(.idle)
     }

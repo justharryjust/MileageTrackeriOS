@@ -17,8 +17,9 @@ struct TripRecorderDebugView: View {
     @State private var eventLog: [DebugEvent] = []
 
     private var recorder: TripRecorder { appState.tripRecorder }
-    private var motion: MotionManager  { appState.motionManager }
     private var location: LocationManager { appState.locationManager }
+    private var motion: MotionManager  { appState.motionManager }
+    private var bluetooth: BluetoothManager { appState.bluetoothManager }
 
     var body: some View {
         List {
@@ -26,6 +27,7 @@ struct TripRecorderDebugView: View {
             statusSection
             motionSection
             locationSection
+            carKitSection
             visitSection
             logSection
         }
@@ -189,7 +191,41 @@ struct TripRecorderDebugView: View {
         }
     }
 
-    // MARK: - Visit & Wake Events
+    // MARK: - Car Kit Injection
+
+    private var carKitSection: some View {
+        Section {
+            if let name = bluetooth.connectedCarKitName {
+                DebugRow(label: "Connected Kit", value: name)
+            } else {
+                DebugRow(label: "Connected Kit", value: "none")
+            }
+
+            DebugButton(
+                label: "Simulate Car Kit Connected",
+                icon: "car.side.and.exclamationmark", color: .mtGreen
+            ) {
+                let event = CarKitEvent(type: .connected, deviceName: "Debug Car Kit", timestamp: Date())
+                log("Car kit connected: \"\(event.deviceName)\"")
+                bluetooth.onCarKitConnected?(event)
+            }
+
+            DebugButton(
+                label: "Simulate Car Kit Disconnected",
+                icon: "car.side.and.exclamationmark", color: .red
+            ) {
+                let name = bluetooth.connectedCarKitName ?? "Debug Car Kit"
+                let event = CarKitEvent(type: .disconnected, deviceName: name, timestamp: Date())
+                log("Car kit disconnected: \"\(event.deviceName)\"")
+                bluetooth.onCarKitDisconnected?(event)
+            }
+        } header: {
+            Label("Car Kit Events", systemImage: "car.side")
+        } footer: {
+            Text("Connect fires the pre-arm window and anchors the trip start. Disconnect during recording starts the end timer immediately — simulating engine off.")
+                .font(.caption)
+        }
+    }
 
     private var visitSection: some View {
         Section {

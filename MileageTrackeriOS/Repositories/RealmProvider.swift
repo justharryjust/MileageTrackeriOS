@@ -10,14 +10,14 @@ final class RealmProvider {
     private(set) var realm: Realm
 
     /// Current schema version — bump this whenever the model changes and add a migration block.
-    static let schemaVersion: UInt64 = 1
+    static let schemaVersion: UInt64 = 2
 
     private init() {
         let config = Realm.Configuration(
             schemaVersion: Self.schemaVersion,
             migrationBlock: { migration, oldVersion in
                 // v0 → v1: initial schema, no migration needed
-                // Future: add `if oldVersion < 2 { ... }` blocks here
+                // v1 → v2: added Trip.carKitName (optional String — defaults to nil, no action needed)
             },
             objectTypes: [
                 UserProfile.self,
