@@ -8,7 +8,7 @@ The debug injection pattern works for any OS event that the app bridges through 
 |---|---|
 | Automotive / Stationary / Walking / Cycling activity (low & high confidence) | `MotionManager.onActivityUpdate` |
 | Location fix (configurable speed & accuracy) | `LocationManager.onLocationUpdate` |
-| CLVisit departure | `LocationManager.onVisitDeparture` |
+| Car kit connect / disconnect (AVAudioSession route change) | `BluetoothManager.onCarKitConnected` / `onCarKitDisconnected` |
 | Significant-location / background wake | `LocationManager.onBackgroundWake` |
 | Force trip finalisation | `TripRecorder.finaliseTripAndReset` |
 
@@ -16,8 +16,8 @@ The debug injection pattern works for any OS event that the app bridges through 
 
 ## Potential Future Extensions
 
-### Bluetooth / Car Kit
-Add a `BluetoothManager` that wraps `CoreBluetooth` or `ExternalAccessory`. Expose an `onCarKitConnected` / `onCarKitDisconnected` callback. Tapping the debug button fires those callbacks — useful for a future "start trip when car Bluetooth connects" heuristic.
+### ~~Bluetooth / Car Kit~~ ✅ Implemented
+~~Add a `BluetoothManager`...~~ Done via `AVAudioSession` route-change notifications. Connect pre-arms detection; disconnect during recording starts the end timer. `carKitName` stored on `Trip`.
 
 ### Low Power / Thermal State
 `ProcessInfo` publishes `NSProcessInfoPowerStateDidChange` and `ProcessInfo.ThermalState`. Injecting a fake low-power or critical thermal state lets you test whether the app correctly backs off GPS accuracy and defers background work.

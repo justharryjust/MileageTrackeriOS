@@ -31,7 +31,6 @@ struct CarKitEvent {
     enum EventType { case connected, disconnected }
     let type      : EventType
     let deviceName: String
-    let portUID   : String?   // AVAudioSessionPortDescription.uid — stable-enough BT fingerprint
     let timestamp : Date
 }
 
@@ -93,12 +92,11 @@ final class BluetoothManager {
             let carPorts = carKitPorts(in: session.currentRoute.outputs)
             if let port = carPorts.first {
                 let name = port.portName
-                let uid  = port.uid
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
                     self.connectedCarKitName = name
-                    let event = CarKitEvent(type: .connected, deviceName: name, portUID: uid, timestamp: Date())
-                    self.logger.log("Car kit connected: \"\(name)\" uid:\(uid)", category: .system)
+                    let event = CarKitEvent(type: .connected, deviceName: name, timestamp: Date())
+                    self.logger.log("Car kit connected: \"\(name)\"", category: .system)
                     self.onCarKitConnected?(event)
                 }
             }
@@ -109,12 +107,11 @@ final class BluetoothManager {
             let removedCarPorts = carKitPorts(in: previous.outputs)
             if let port = removedCarPorts.first {
                 let name = port.portName
-                let uid  = port.uid
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
                     self.connectedCarKitName = nil
-                    let event = CarKitEvent(type: .disconnected, deviceName: name, portUID: uid, timestamp: Date())
-                    self.logger.log("Car kit disconnected: \"\(name)\" uid:\(uid)", category: .system)
+                    let event = CarKitEvent(type: .disconnected, deviceName: name, timestamp: Date())
+                    self.logger.log("Car kit disconnected: \"\(name)\"", category: .system)
                     self.onCarKitDisconnected?(event)
                 }
             }
@@ -138,13 +135,12 @@ final class BluetoothManager {
     }
 
     /// Returns any output ports that represent a car-kit / hands-free audio route.
-    /// Only includes profiles that are near-universal in cars and absent from
-    /// consumer headphones. A2DP and BLE are excluded — AirPods, Beats, and other
-    /// headphones use them and would false-trigger car-kit detection.
     private func carKitPorts(in outputs: [AVAudioSessionPortDescription]) -> [AVAudioSessionPortDescription] {
         let carKitTypes: Set<AVAudioSession.Port> = [
-            .bluetoothHFP,   // Hands-Free Profile — phone calls in car
+            .bluetoothHFP,   // Hands-Free Profile — classic phone calls in car
+            .bluetoothA2DP,  // Advanced Audio Distribution — music streaming to car
             .carAudio,       // CarPlay
+            .bluetoothLE,    // BLE audio (newer headsets/kits)
         ]
         return outputs.filter { carKitTypes.contains($0.portType) }
     }

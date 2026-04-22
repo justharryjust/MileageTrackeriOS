@@ -70,7 +70,8 @@ final class TripRepository {
         distanceMetres: Double,
         locations: [CLLocation],
         source: TripSource = .automatic,
-        visitDepartureAt: Date? = nil
+        visitDepartureAt: Date? = nil,
+        carKitName: String? = nil
     ) {
         let trip = Trip()
         trip.vehicleId        = vehicleId
@@ -79,6 +80,7 @@ final class TripRepository {
         trip.distanceMetres   = distanceMetres
         trip.source           = source
         trip.visitDepartureAt = visitDepartureAt
+        trip.carKitName       = carKitName
 
         // Capture start/end coordinates from first/last reliable fix
         if let first = locations.first {
@@ -116,6 +118,46 @@ final class TripRepository {
         } catch {
             TripLogger.shared.log("Failed to save trip: \(error)", category: .error)
         }
+    }
+
+    // MARK: - Save Manual Trip
+
+    /// Persists a trip created by the user without GPS tracking.
+    /// No TripPoints are created — start/end coordinates come from MKLocalSearch.
+    func saveManualTrip(
+        vehicleId     : String,
+        startedAt     : Date,
+        endedAt       : Date,
+        distanceMetres: Double,
+        startAddress  : String,
+        endAddress    : String,
+        startLat      : Double,
+        startLng      : Double,
+        endLat        : Double,
+        endLng        : Double,
+        category      : TripCategory = .business,
+        notes         : String? = nil
+    ) {
+        let trip = Trip()
+        trip.vehicleId      = vehicleId
+        trip.startedAt      = startedAt
+        trip.endedAt        = endedAt
+        trip.distanceMetres = distanceMetres
+        trip.startAddress   = startAddress
+        trip.endAddress     = endAddress
+        trip.startLat       = startLat
+        trip.startLng       = startLng
+        trip.endLat         = endLat
+        trip.endLng         = endLng
+        trip.category       = category
+        trip.source         = .manual
+        trip.notes          = notes
+
+        write { realm.add(trip) }
+        TripLogger.shared.log(
+            "Manual trip saved ✅ id:\(trip.id.prefix(8)) \(startAddress) → \(endAddress) \(String(format:"%.0f",distanceMetres))m",
+            category: .trip
+        )
     }
 
     // MARK: - Categorise

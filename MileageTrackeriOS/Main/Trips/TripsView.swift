@@ -5,6 +5,7 @@ import SwiftUI
 struct TripsView: View {
     @Environment(AppState.self) private var appState
     @State private var selectedFilter: TripFilter = .all
+    @State private var showManualTrip: Bool = false
 
     enum TripFilter: String, CaseIterable {
         case all           = "All"
@@ -81,13 +82,25 @@ struct TripsView: View {
             .background(Color.mtBackground)
             .navigationTitle("Trips")
             .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showManualTrip = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .fontWeight(.semibold)
+                    }
+                }
                 if !appState.tripRepo.uncategorisedTrips.isEmpty {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .topBarLeading) {
                         Text("\(appState.tripRepo.uncategorisedTrips.count) to review")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(Color.mtWarning)
                     }
                 }
+            }
+            .sheet(isPresented: $showManualTrip) {
+                ManualTripSheet()
+                    .environment(appState)
             }
         }
     }

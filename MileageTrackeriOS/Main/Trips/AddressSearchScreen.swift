@@ -59,7 +59,7 @@ struct AddressSearchScreen: View {
                         Image(systemName: "mappin.slash")
                             .font(.system(size: 40))
                             .foregroundStyle(Color.mtBorder)
-                        Text("No results for \(searcher.query)")
+                        Text("No results for "\(searcher.query)"")
                             .font(.system(size: 15))
                             .foregroundStyle(Color.mtTextSub)
                     }

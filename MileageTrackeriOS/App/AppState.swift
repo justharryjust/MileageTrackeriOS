@@ -17,6 +17,7 @@ final class AppState {
     // MARK: - Hardware Managers
     let locationManager     : LocationManager
     let motionManager       : MotionManager
+    let bluetoothManager    : BluetoothManager
     let tripRecorder        : TripRecorder
 
     private init() {
@@ -29,16 +30,18 @@ final class AppState {
         tripRepo    = TripRepository(realm: realm)
 
         // 3. Hardware managers
-        locationManager = LocationManager()
-        motionManager   = MotionManager()
-        tripRecorder    = TripRecorder.shared
+        locationManager  = LocationManager()
+        motionManager    = MotionManager()
+        bluetoothManager = BluetoothManager()
+        tripRecorder     = TripRecorder.shared
 
         // 4. Wire TripRecorder
         tripRecorder.configure(
-            location : locationManager,
-            motion   : motionManager,
-            tripRepo : tripRepo,
-            profileRepo: profileRepo
+            location    : locationManager,
+            motion      : motionManager,
+            bluetooth   : bluetoothManager,
+            tripRepo    : tripRepo,
+            profileRepo : profileRepo
         )
 
         TripLogger.shared.log("AppState initialised — Realm ready", category: .system)
@@ -52,8 +55,9 @@ final class AppState {
     /// Call once onboarding is complete (or on app launch when already onboarded).
     func startTracking() {
         motionManager.startActivityUpdates()
+        bluetoothManager.startMonitoring()
         locationManager.startSignificantLocationMonitoring()
         locationManager.startVisitMonitoring()
-        TripLogger.shared.log("Tracking started — motion, significant-location, and visit monitoring active", category: .system)
+        TripLogger.shared.log("Tracking started — motion, bluetooth, significant-location, and visit monitoring active", category: .system)
     }
 }
