@@ -6,6 +6,15 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section("Tracking") {
+                    NavigationLink {
+                        TrackingHoursView()
+                            .environment(appState)
+                    } label: {
+                        Label("Tracking Hours", systemImage: "clock")
+                    }
+                }
+
                 Section("Profile") {
                     LabeledContent("Jurisdiction", value: appState.profileRepo.jurisdiction.displayName)
                     LabeledContent("Claim Method", value: appState.profileRepo.claimMethod.displayName)

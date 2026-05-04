@@ -51,26 +51,28 @@ struct TripsView: View {
                 } else {
                     List {
                         ForEach(displayedTrips) { trip in
-                            TripRow(trip: trip)
-                                .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                    Button {
-                                        appState.tripRepo.categorise(trip, as: .business)
-                                    } label: {
-                                        Label("Business", systemImage: "briefcase.fill")
+                            NavigationLink(destination: TripDetailView(trip: trip)) {
+                                TripRow(trip: trip)
+                                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                        Button {
+                                            appState.tripRepo.categorise(trip, as: .business)
+                                        } label: {
+                                            Label("Business", systemImage: "briefcase.fill")
+                                        }
+                                        .tint(Color.mtGreen)
                                     }
-                                    .tint(Color.mtGreen)
-                                }
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button {
-                                        appState.tripRepo.categorise(trip, as: .personal)
-                                    } label: {
-                                        Label("Personal", systemImage: "person.fill")
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        Button {
+                                            appState.tripRepo.categorise(trip, as: .personal)
+                                        } label: {
+                                            Label("Personal", systemImage: "person.fill")
+                                        }
+                                        .tint(.blue)
                                     }
-                                    .tint(.blue)
-                                }
-                                .listRowBackground(Color.mtBackground)
-                                .listRowSeparator(.hidden)
-                                .listRowInsets(EdgeInsets(top: 4, leading: MTSpacing.md, bottom: 4, trailing: MTSpacing.md))
+                                    .listRowBackground(Color.mtBackground)
+                                    .listRowSeparator(.hidden)
+                                    .listRowInsets(EdgeInsets(top: 4, leading: MTSpacing.md, bottom: 4, trailing: MTSpacing.md))
+                            }
                         }
                         .onDelete { indexSet in
                             indexSet.forEach { appState.tripRepo.deleteTrip(displayedTrips[$0]) }
@@ -88,13 +90,6 @@ struct TripsView: View {
                     } label: {
                         Image(systemName: "plus")
                             .fontWeight(.semibold)
-                    }
-                }
-                if !appState.tripRepo.uncategorisedTrips.isEmpty {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Text("\(appState.tripRepo.uncategorisedTrips.count) to review")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(Color.mtWarning)
                     }
                 }
             }

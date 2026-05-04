@@ -13,15 +13,16 @@
 import Foundation
 import CoreLocation
 import CoreMotion
+import MapKit
 
 // MARK: - Heuristic Constants
 
 private enum Heuristic {
  static let minSpeedKmh               : Double       = 8
  static let detectionWindowSeconds    : TimeInterval = 30
- static let stationaryEndWindowSeconds: TimeInterval = 120
+ static let stationaryEndWindowSeconds: TimeInterval = 60
  static let resumeWindowSeconds       : TimeInterval = 90
- static let minimumTripDistanceMetres : Double       = 200
+ static let minimumTripDistanceMetres : Double       = 1000
  static let minimumTripDurationSeconds: TimeInterval = 60
 }
 
@@ -43,6 +44,7 @@ final class TripRecorder {
  private var profileRepo: UserProfileRepository?
 
  // MARK: Private tracking
+    // TODO: Collected locations & detection buffer should be persisted to disk incase something bad happens to the app during a trip
  var collectedLocations: [CLLocation] = []
  /// Locations buffered during .detecting — prepended to collectedLocations on trip confirmation
  var detectionBuffer: [CLLocation] = []
@@ -137,7 +139,6 @@ final class TripRecorder {
          // Engine off / left the car — immediately start the end window rather
          // than waiting for the motion heuristic to catch up.
          logger.log("Car kit disconnect during recording — starting end timer immediately", category: .trip)
-         cancelStationaryTimer()
          startStationaryTimer(recordingStartedAt: startedAt, distance: distance)
 
      case .detecting:
@@ -224,7 +225,6 @@ final class TripRecorder {
           if activity.confidence != .low &&
              (activity.isStationary || (!activity.isAutomotive)) {
               logger.log("Non-automotive in recording (conf:\(activity.confidence == .high ? "high" : "medium")) — starting end timer", category: .trip)
-              cancelStationaryTimer()
               startStationaryTimer(recordingStartedAt: startedAt, distance: distance)
           } else if activity.isAutomotive {
               cancelStationaryTimer()
@@ -321,10 +321,14 @@ final class TripRecorder {
  }
 
  private func cancelDetectionTimer() {
-     detectionTimer?.invalidate(); detectionTimer = nil
+     detectionTimer?.invalidate()
+     detectionTimer = nil
  }
 
    private func startStationaryTimer(recordingStartedAt: Date, distance: Double) {
+       if stationaryTimer != nil {
+           return
+       }
        cancelStationaryTimer()
        stationaryTimer = Timer.scheduledTimer(withTimeInterval: Heuristic.stationaryEndWindowSeconds, repeats: false) { [weak self] _ in
            Task { @MainActor [weak self] in
@@ -367,23 +371,41 @@ final class TripRecorder {
             return
         }
 
-        let departure    = consumeVisitDeparture()
-        let kitName      = activeCarKitName   // snapshot — reset() clears it
+        let departure = consumeVisitDeparture()
+        let kitName   = activeCarKitName
         if let dep = departure { logger.log("Trip anchored to visit departure at \(dep)", category: .trip) }
         if let kit = kitName   { logger.log("Trip associated with car kit: \"\(kit)\"", category: .trip) }
 
-        let vehicleId = profileRepo?.defaultVehicle?.id ?? ""
-        tripRepo?.saveTrip(
-            vehicleId        : vehicleId,
-            startedAt        : startedAt,
-            endedAt          : endedAt,
-            distanceMetres   : distance,
-            locations        : collectedLocations,
-            visitDepartureAt : departure,
-            carKitName       : kitName
-        )
+        let startCoordinate = collectedLocations.first
+        let endCoordinate   = collectedLocations.last
+        let vehicleId       = profileRepo?.defaultVehicle?.id ?? ""
 
-        reset()
+        Task { [weak self] in
+            guard let self else { return }
+
+            let startAddress = await resolveAddress(for: startCoordinate) ?? ""
+            let endAddress   = await resolveAddress(for: endCoordinate) ?? ""
+
+            tripRepo?.saveTrip(
+                vehicleId        : vehicleId,
+                startedAt        : startedAt,
+                endedAt          : endedAt,
+                distanceMetres   : distance,
+                locations        : collectedLocations,
+                startAddress     : startAddress,
+                endAddress       : endAddress,
+                visitDepartureAt : departure,
+                carKitName       : kitName
+            )
+            reset()
+        }
+    }
+
+    private func resolveAddress(for coordinate: CLLocation?) async -> String? {
+        guard let coordinate,
+              let request = MKReverseGeocodingRequest(location: coordinate) else { return nil }
+        let mapItem = try? await request.mapItems.first
+        return mapItem?.address?.fullAddress
     }
 
     private func reset() {

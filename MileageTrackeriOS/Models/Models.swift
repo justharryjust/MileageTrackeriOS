@@ -213,6 +213,7 @@ final class Trip: Object, ObjectKeyIdentifiable {
     @Persisted var carKitName: String?            // name of car-kit connected when trip started, if any
     @Persisted var createdAt: Date                = Date()
     @Persisted var updatedAt: Date                = Date()
+    // TODO: 
 
     // Non-persisted computed helpers
     var distanceKm: Double { distanceMetres / 1000 }
@@ -242,6 +243,32 @@ final class OdometerReading: Object, ObjectKeyIdentifiable {
     @Persisted var notes: String?
 }
 
+// MARK: - Collection safe subscript
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
+}
+
+// MARK: - DaySchedule (embedded — one per weekday stored in UserProfile.trackingSchedule)
+
+final class DaySchedule: EmbeddedObject {
+    /// Calendar.Component weekday: 1 = Sunday, 2 = Monday … 7 = Saturday
+    @Persisted var weekday   : Int  = 0
+    @Persisted var isEnabled : Bool = true
+    @Persisted var startHour : Int  = 8   // 08:00
+    @Persisted var endHour   : Int  = 17  // 17:00
+
+    var weekdayName: String {
+        Calendar.current.weekdaySymbols[safe: weekday - 1] ?? "Day \(weekday)"
+    }
+
+    var shortName: String {
+        Calendar.current.shortWeekdaySymbols[safe: weekday - 1] ?? "—"
+    }
+}
+
 // MARK: - UserProfile (singleton row — id always "singleton")
 
 final class UserProfile: Object {
@@ -255,6 +282,27 @@ final class UserProfile: Object {
     @Persisted var hasCompletedOnboarding: Bool   = false
     @Persisted var trialStartedAt: Date?
     @Persisted var subscriptionStatus: String     = "trial"
+    /// 7 DaySchedule entries (one per weekday). Populated lazily on first read if empty.
+    @Persisted var trackingSchedule: List<DaySchedule>
+}
+
+// MARK: - DayScheduleSnapshot (value type for OnboardingViewModel -- not persisted)
+
+struct DayScheduleSnapshot: Identifiable {
+    var id       : Int { weekday }
+    var weekday  : Int
+    var isEnabled: Bool
+    var startHour: Int
+    var endHour  : Int
+
+    var weekdayName: String { Calendar.current.weekdaySymbols[safe: weekday - 1] ?? "" }
+    var shortName  : String { Calendar.current.shortWeekdaySymbols[safe: weekday - 1] ?? "" }
+
+    static var defaults: [DayScheduleSnapshot] {
+        [(1,false),(2,true),(3,true),(4,true),(5,true),(6,true),(7,false)].map {
+            DayScheduleSnapshot(weekday: $0.0, isEnabled: $0.1, startHour: 8, endHour: 17)
+        }
+    }
 }
 
 // MARK: - TripRecorderState (in-memory value type, never persisted)

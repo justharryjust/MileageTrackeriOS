@@ -27,6 +27,9 @@ final class UserProfileRepository {
 
         profile = realm.object(ofType: UserProfile.self, forPrimaryKey: "singleton")!
 
+        // Populate default tracking schedule if this is a new or migrated profile
+        if profile.trackingSchedule.isEmpty { populateDefaultSchedule() }
+
         // Observe profile changes
         profileToken = profile.observe { [weak self] _ in
             self?.profile = self?.realm.object(ofType: UserProfile.self, forPrimaryKey: "singleton") ?? UserProfile()
@@ -111,6 +114,64 @@ final class UserProfileRepository {
         write { vehicle.isArchived = true }
     }
 
+
+    // MARK: - Tracking Schedule
+
+    /// Live array of the 7 DaySchedule entries (Sun=1 … Sat=7), always sorted by weekday.
+    var trackingSchedule: [DaySchedule] {
+        Array(profile.trackingSchedule).sorted { $0.weekday < $1.weekday }
+    }
+
+    /// Returns the schedule entry for the given Calendar weekday (1=Sun … 7=Sat).
+    func schedule(for weekday: Int) -> DaySchedule? {
+        profile.trackingSchedule.first { $0.weekday == weekday }
+    }
+
+    func setScheduleEnabled(_ enabled: Bool, weekday: Int) {
+        guard let day = schedule(for: weekday) else { return }
+        write { day.isEnabled = enabled }
+    }
+
+    func setScheduleHours(start: Int, end: Int, weekday: Int) {
+        guard let day = schedule(for: weekday) else { return }
+        write { day.startHour = start; day.endHour = end }
+    }
+
+    /// Saves an array of DaySchedule snapshots (used from onboarding vm).
+    func applySchedule(_ snapshots: [DayScheduleSnapshot]) {
+        for snap in snapshots {
+            guard let day = schedule(for: snap.weekday) else { continue }
+            write { day.isEnabled = snap.isEnabled; day.startHour = snap.startHour; day.endHour = snap.endHour }
+        }
+    }
+
+    // MARK: - Private: default schedule population
+
+    private func populateDefaultSchedule() {
+        // Weekdays (Mon-Fri = 2-6): 08:00-17:00 enabled
+        // Weekend (Sat=7, Sun=1): disabled
+        let defaults: [(weekday: Int, enabled: Bool, start: Int, end: Int)] = [
+            (1, false, 8, 17), // Sun
+            (2, true,  8, 17), // Mon
+            (3, true,  8, 17), // Tue
+            (4, true,  8, 17), // Wed
+            (5, true,  8, 17), // Thu
+            (6, true,  8, 17), // Fri
+            (7, false, 8, 17), // Sat
+        ]
+        write {
+            self.profile.trackingSchedule.removeAll()
+            for d in defaults {
+                let day = DaySchedule()
+                day.weekday   = d.weekday
+                day.isEnabled = d.enabled
+                day.startHour = d.start
+                day.endHour   = d.end
+                self.profile.trackingSchedule.append(day)
+            }
+        }
+        TripLogger.shared.log("Tracking schedule populated with defaults", category: .system)
+    }
     // MARK: - Private
 
     private func write(_ block: () -> Void) {
