@@ -69,11 +69,15 @@ final class TripRepository {
         endedAt: Date,
         distanceMetres: Double,
         locations: [CLLocation],
+        startAddress: String,
+        endAddress: String,
         source: TripSource = .automatic,
         visitDepartureAt: Date? = nil,
         carKitName: String? = nil
     ) {
         let trip = Trip()
+        trip.startAddress     = startAddress
+        trip.endAddress       = endAddress
         trip.vehicleId        = vehicleId
         trip.startedAt        = startedAt
         trip.endedAt          = endedAt

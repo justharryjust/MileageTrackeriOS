@@ -9,9 +9,10 @@ enum OnboardingStep: Int, CaseIterable {
     case jurisdiction     = 1
     case claimMethod      = 2
     case distanceUnit     = 3
-    case addVehicle       = 4
-    case locationPermission = 5
-    case motionPermission = 6
+    case addVehicle        = 4
+    case trackingHours     = 5
+    case locationPermission = 6
+    case motionPermission  = 7
 }
 
 // MARK: - Shared ViewModel
@@ -34,6 +35,7 @@ final class OnboardingViewModel {
     var vehicleName: String         = ""
     var vehicleRegistration: String = ""
     var fuelType: FuelType          = .petrol
+    var trackingSchedule: [DayScheduleSnapshot] = DayScheduleSnapshot.defaults
 
     var currentStep: OnboardingStep = .welcome
     private(set) var goingForward: Bool = true
@@ -71,6 +73,7 @@ final class OnboardingViewModel {
             name         : vehicleName.trimmingCharacters(in: .whitespaces),
             registration : vehicleRegistration.trimmingCharacters(in: .whitespaces)
         )
+        repo.applySchedule(trackingSchedule)
         repo.hasCompletedOnboarding = true
         appState.startTracking()
         TripLogger.shared.log("Onboarding complete — \(jurisdiction.displayName), \(claimMethod.displayName)", category: .system)
@@ -124,6 +127,7 @@ struct OnboardingView: View {
                 case .claimMethod:        ClaimMethodStep(vm: vm)
                 case .distanceUnit:       DistanceUnitStep(vm: vm)
                 case .addVehicle:         AddVehicleStep(vm: vm)
+                case .trackingHours:      TrackingHoursStep(vm: vm)
                 case .locationPermission: LocationPermissionStep(vm: vm)
                 case .motionPermission:   MotionPermissionStep(vm: vm)
                 }

@@ -1,52 +1,7 @@
 import SwiftUI
 import MapKit
-import RealmSwift
 
 // MARK: - TripDetailView
-
-/// Frozen snapshot of trip data — survives Realm object invalidation
-/// when the underlying trip is merged or deleted.
-fileprivate struct TripSnapshot {
-    let id: String
-    let startLat: Double; let startLng: Double
-    let endLat: Double;   let endLng: Double
-    let startedAt: Date;  let endedAt: Date?
-    let distanceMetres: Double
-    let startAddress: String; let endAddress: String
-    let category: TripCategory
-    let dollarValue: Double?
-    let processingStatus: TripProcessingStatus
-    let source: TripSource
-
-    init(from trip: Trip) {
-        id = trip.id
-        startLat = trip.startLat; startLng = trip.startLng
-        endLat   = trip.endLat;   endLng   = trip.endLng
-        startedAt = trip.startedAt; endedAt = trip.endedAt
-        distanceMetres = trip.distanceMetres
-        startAddress = trip.startAddress; endAddress = trip.endAddress
-        category = trip.category
-        dollarValue = trip.dollarValue
-        processingStatus = trip.processingStatus
-        source = trip.source
-    }
-
-    var startCoord: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: startLat, longitude: startLng) }
-    var endCoord:   CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: endLat,   longitude: endLng) }
-    var isSamePoint: Bool { startLat == endLat && startLng == endLng }
-
-    var distanceString: String {
-        if distanceMetres < 1000 { return String(format: "%.0f m", distanceMetres) }
-        return String(format: "%.1f km", distanceMetres / 1000)
-    }
-    var durationString: String? {
-        guard let end = endedAt else { return nil }
-        let s = Int(end.timeIntervalSince(startedAt))
-        let h = s / 3600; let m = (s % 3600) / 60
-        if h > 0 { return String(format: "%dh %02dm", h, m) }
-        return String(format: "%dm", m)
-    }
-}
 
 struct TripDetailView: View {
     let trip: Trip
@@ -54,139 +9,130 @@ struct TripDetailView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
-    @State private var snapshot: TripSnapshot
     @State private var position: MapCameraPosition = .automatic
-    @State private var routes: [MKRoute] = []
+    @State private var route: MKRoute?
     @State private var isFetchingRoute = false
     @State private var showActualPath = true   // toggle between modes
 
-    init(trip: Trip) {
-        self.trip = trip
-        _snapshot = State(initialValue: TripSnapshot(from: trip))
+    // Start / end coordinates
+    private var startCoord: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: trip.startLat, longitude: trip.startLng)
+    }
+    private var endCoord: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: trip.endLat, longitude: trip.endLng)
+    }
+    private var isSamePoint: Bool {
+        trip.startLat == trip.endLat && trip.startLng == trip.endLng
     }
 
     // Actual driven coordinates from saved locations
     private var actualCoordinates: [CLLocationCoordinate2D] {
-        guard !trip.isInvalidated else { return [] }
         let locations = appState.tripRepo.tripPoints(for: trip)
         return locations.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
     }
 
     var body: some View {
-        Group {
-            if trip.isInvalidated {
-                Color.clear.onAppear { dismiss() }
-            } else {
-                mainContent
-            }
-        }
-    }
-
-    private var mainContent: some View {
-        Map(position: $position) {
-            if showActualPath {
-                if actualCoordinates.count > 1 {
-                    MapPolyline(coordinates: actualCoordinates)
-                        .stroke(Color.teal, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
-                }
-            } else {
-                ForEach(routes.indices, id: \.self) { idx in
-                    MapPolyline(routes[idx].polyline)
-                        .stroke(Color.mtGreen, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
-                }
-            }
-
-            Annotation("Start", coordinate: snapshot.startCoord, anchor: .bottom) {
-                TripPinView(color: .mtGreen, systemImage: "location.fill")
-            }
-
-            if !snapshot.isSamePoint {
-                Annotation("End", coordinate: snapshot.endCoord, anchor: .bottom) {
-                    TripPinView(color: .red, systemImage: "flag.checkered")
-                }
-            }
-        }
-        .mapStyle(.standard(elevation: .realistic))
-        .safeAreaInset(edge: .bottom) {
-            TripInfoCard(snapshot: snapshot)
-                .padding(.horizontal, MTSpacing.md)
-                .padding(.bottom, MTSpacing.sm)
-        }
-        .navigationTitle("Trip Detail")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        guard !trip.isInvalidated else { return }
-                        appState.tripRepo.categorise(trip, as: .business)
-                    } label: {
-                        Label("Mark as Business", systemImage: "briefcase.fill")
-                    }
-                    Button {
-                        guard !trip.isInvalidated else { return }
-                        appState.tripRepo.categorise(trip, as: .personal)
-                    } label: {
-                        Label("Mark as Personal", systemImage: "person.fill")
+        NavigationStack {
+            ZStack(alignment: .bottom) {
+                // MARK: Map
+                Map(position: $position) {
+                    if showActualPath {
+                        // Actual driven path
+                        if actualCoordinates.count > 1 {
+                            MapPolyline(coordinates: actualCoordinates)
+                                .stroke(Color.teal, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                        }
+                    } else {
+                        // Planned route polyline
+                        if let route {
+                            MapPolyline(route.polyline)
+                                .stroke(Color.mtGreen, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                        }
                     }
 
-                    Divider()
+                    // Start annotation
+                    Annotation("Start", coordinate: startCoord, anchor: .bottom) {
+                        TripPinView(color: .mtGreen, systemImage: "location.fill")
+                    }
 
-                    Button {
-                        showActualPath.toggle()
-                        if !showActualPath {
-                            Task { await fetchRouteIfNeeded() }
+                    // End annotation (only when different from start)
+                    if !isSamePoint {
+                        Annotation("End", coordinate: endCoord, anchor: .bottom) {
+                            TripPinView(color: .red, systemImage: "flag.checkered")
+                        }
+                    }
+                }
+                .mapStyle(.standard(elevation: .realistic))
+                .ignoresSafeArea(edges: .top)
+
+                // MARK: Info Card
+                TripInfoCard(trip: trip)
+                    .padding(MTSpacing.md)
+                    .padding(.bottom, MTSpacing.lg)
+            }
+            .navigationTitle("Trip Detail")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            appState.tripRepo.categorise(trip, as: .business)
+                        } label: {
+                            Label("Mark as Business", systemImage: "briefcase.fill")
+                        }
+                        Button {
+                            appState.tripRepo.categorise(trip, as: .personal)
+                        } label: {
+                            Label("Mark as Personal", systemImage: "person.fill")
+                        }
+
+                        Divider()
+
+                        Button {
+                            showActualPath.toggle()
+                            if !showActualPath {
+                                Task { await fetchRouteIfNeeded() }
+                            }
+                        } label: {
+                            Label(
+                                showActualPath ? "Show Road Route" : "Show Actual Path",
+                                systemImage: showActualPath ? "road.lanes" : "point.topleft.down.to.point.bottomright.curvepath.fill"
+                            )
+                        }
+
+                        Button {
+                            // TODO:
+//                            appState.tripRepo.fixStartEnd
+                        } label: {
+                            Label("Fix start/end", systemImage: "person.fill")
                         }
                     } label: {
-                        Label(
-                            showActualPath ? "Show Road Route" : "Show Actual Path",
-                            systemImage: showActualPath ? "road.lanes" : "point.topleft.down.to.point.bottomright.curvepath.fill"
-                        )
+                        Image(systemName: "ellipsis.circle")
+                            .fontWeight(.semibold)
                     }
-
-                    Divider()
-
-                    Button(role: .destructive) {
-                        guard !trip.isInvalidated else { return }
-                        appState.tripRepo.deleteTrip(trip)
-                        dismiss()
-                    } label: {
-                        Label("Delete Trip", systemImage: "trash")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .fontWeight(.semibold)
                 }
             }
+            .task { await fetchRouteIfNeeded() }
         }
-        .onAppear {
-            position = .automatic
-            // Manual trips default to showing the road route (MKDirections)
-            if snapshot.source == .manual {
-                showActualPath = false
-            }
-        }
-        .task { await fetchRouteIfNeeded() }
     }
 
     // MARK: - Route Fetching
 
     private func fetchRouteIfNeeded() async {
-        guard !snapshot.isSamePoint else {
+        guard !isSamePoint else {
             position = .region(MKCoordinateRegion(
-                center: snapshot.startCoord,
+                center: startCoord,
                 span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
             ))
             return
         }
 
-        guard routes.isEmpty else { return }   // already fetched
+        guard route == nil else { return }   // already fetched, no need to re-fetch on toggle back
 
-        let midLat = (snapshot.startCoord.latitude + snapshot.endCoord.latitude) / 2
-        let midLng = (snapshot.startCoord.longitude + snapshot.endCoord.longitude) / 2
-        let latDelta = abs(snapshot.startCoord.latitude - snapshot.endCoord.latitude) * 1.5 + 0.01
-        let lngDelta = abs(snapshot.startCoord.longitude - snapshot.endCoord.longitude) * 1.5 + 0.01
+        let midLat = (startCoord.latitude + endCoord.latitude) / 2
+        let midLng = (startCoord.longitude + endCoord.longitude) / 2
+        let latDelta = abs(startCoord.latitude - endCoord.latitude) * 1.5 + 0.01
+        let lngDelta = abs(startCoord.longitude - endCoord.longitude) * 1.5 + 0.01
         position = .region(MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: midLat, longitude: midLng),
             span: MKCoordinateSpan(latitudeDelta: latDelta, longitudeDelta: lngDelta)
@@ -195,33 +141,16 @@ struct TripDetailView: View {
         isFetchingRoute = true
         defer { isFetchingRoute = false }
 
-        // For multi-stop trips, chain MKDirections through intermediate waypoints
-        let waypoints: [CLLocationCoordinate2D] = {
-            let coords = actualCoordinates
-            // Use stored TripPoints as waypoints — for manual trips these include
-            // intermediate stops. For dense auto-trips use start/end only.
-            if coords.count > 2 && snapshot.source == .manual {
-                return coords
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: startCoord))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: endCoord))
+        request.transportType = .automobile
+
+        if let result = try? await MKDirections(request: request).calculate() {
+            route = result.routes.first
+            if route != nil {
+                position = .automatic
             }
-            return [snapshot.startCoord, snapshot.endCoord]
-        }()
-
-        var fetchedRoutes: [MKRoute] = []
-        for i in 0..<(waypoints.count - 1) {
-            let request = MKDirections.Request()
-            request.source = MKMapItem(placemark: MKPlacemark(coordinate: waypoints[i]))
-            request.destination = MKMapItem(placemark: MKPlacemark(coordinate: waypoints[i + 1]))
-            request.transportType = .automobile
-
-            if let result = try? await MKDirections(request: request).calculate(),
-               let legRoute = result.routes.first {
-                fetchedRoutes.append(legRoute)
-            }
-        }
-
-        routes = fetchedRoutes
-        if !routes.isEmpty {
-            position = .automatic
         }
     }
 }
@@ -229,7 +158,7 @@ struct TripDetailView: View {
 // MARK: - Trip Info Card
 
 private struct TripInfoCard: View {
-    let snapshot: TripSnapshot
+    let trip: Trip
 
     var body: some View {
         VStack(spacing: 0) {
@@ -244,12 +173,12 @@ private struct TripInfoCard: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(snapshot.startAddress.isEmpty ? "Unknown start" : snapshot.startAddress)
+                    Text(trip.startAddress.isEmpty ? "Unknown start" : trip.startAddress)
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Color.mtTextPrimary)
                         .lineLimit(2)
 
-                    Text(snapshot.endAddress.isEmpty ? "Unknown end" : snapshot.endAddress)
+                    Text(trip.endAddress.isEmpty ? "Unknown end" : trip.endAddress)
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Color.mtTextPrimary)
                         .lineLimit(2)
@@ -257,33 +186,27 @@ private struct TripInfoCard: View {
 
                 Spacer()
 
-                // Value + category badge
-                VStack(alignment: .trailing, spacing: 4) {
-                    if let val = snapshot.dollarValue {
-                        Text("$\(String(format: "%.2f", val))")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(Color.mtGreen)
-                    }
-                    HStack(spacing: 4) {
-                        if snapshot.processingStatus == .pending {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(.orange)
-                        }
-                        categoryBadge
-                    }
+                if let val = trip.dollarValue {
+                    Text("$\(String(format: "%.2f", val))")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(Color.mtGreen)
                 }
             }
             .padding(MTSpacing.md)
 
             Divider().padding(.horizontal, MTSpacing.md)
 
-            VStack(spacing: 0) {
-                HStack(spacing: 0) {
-                    StatCell(label: "Distance", value: snapshot.distanceString)
+            // Stats row
+            HStack(spacing: 0) {
+                StatCell(label: "Distance", value: trip.distanceString)
+                if let dur = trip.durationString {
                     Divider().frame(height: 32)
-                    StatCell(label: "Duration", value: snapshot.durationString ?? "—")
+                    StatCell(label: "Duration", value: dur)
                 }
+                Divider().frame(height: 32)
+                StatCell(label: "Date", value: trip.startedAt.formatted(.dateTime.day().month(.abbreviated)))
+                Divider().frame(height: 32)
+                StatCell(label: "Category", value: trip.category.rawValue.capitalized, valueColor: categoryColor)
             }
             .padding(.vertical, MTSpacing.sm)
         }
@@ -294,18 +217,8 @@ private struct TripInfoCard: View {
         )
     }
 
-    private var categoryBadge: some View {
-        Text(snapshot.category == .uncategorised ? "Review" : snapshot.category.rawValue.capitalized)
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(categoryColor)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(categoryColor.opacity(0.12))
-            .clipShape(Capsule())
-    }
-
     private var categoryColor: Color {
-        switch snapshot.category {
+        switch trip.category {
         case .business:      return .mtGreen
         case .personal:      return .blue
         case .uncategorised: return .mtWarning
@@ -323,8 +236,6 @@ private struct StatCell: View {
             Text(value)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(valueColor)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
             Text(label)
                 .font(.system(size: 11))
                 .foregroundStyle(Color.mtTextSub)

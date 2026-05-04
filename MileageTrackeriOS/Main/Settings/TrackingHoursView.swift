@@ -1,21 +1,19 @@
 // TrackingHoursView — Settings screen for editing the per-day tracking schedule.
+// Reuses DayScheduleRow and HourPicker from TrackingHoursStep.
 
 import SwiftUI
 
 struct TrackingHoursView: View {
     @Environment(AppState.self) private var appState
 
-    /// Mon…Sun weekday order
-    private let dayOrder: [Int] = [2, 3, 4, 5, 6, 7, 1]
-
     var body: some View {
         List {
             Section {
-                ForEach(sortedDays, id: \.weekday) { day in
-                    CompactDayRowLive(day: day, repo: appState.profileRepo)
+                ForEach(appState.profileRepo.trackingSchedule, id: \.weekday) { day in
+                    DayScheduleRowLive(day: day, repo: appState.profileRepo)
                 }
             } footer: {
-                Text("GPS and motion detection are paused outside your tracking hours to save battery.")
+                Text("GPS and motion detection are paused outside your tracking hours to save battery. Changes take effect immediately.")
             }
 
             Section {
@@ -28,25 +26,18 @@ struct TrackingHoursView: View {
         .navigationTitle("Tracking Hours")
         .navigationBarTitleDisplayMode(.inline)
     }
-
-    private var sortedDays: [DaySchedule] {
-        dayOrder.compactMap { wd in
-            appState.profileRepo.trackingSchedule.first { $0.weekday == wd }
-        }
-    }
 }
 
-// MARK: - Compact Day Row (Live Realm)
+// MARK: - DayScheduleRowLive
+// Reads/writes directly to Realm via the repo rather than using a local binding.
 
-private struct CompactDayRowLive: View {
-    let day: DaySchedule
+private struct DayScheduleRowLive: View {
+    let day : DaySchedule
     let repo: UserProfileRepository
 
-    @State private var isEnabled: Bool
-    @State private var startHour: Int
-    @State private var endHour: Int
-
-    private let hours = Array(0..<24)
+    @State private var isEnabled : Bool
+    @State private var startHour : Int
+    @State private var endHour   : Int
 
     init(day: DaySchedule, repo: UserProfileRepository) {
         self.day  = day
@@ -57,51 +48,41 @@ private struct CompactDayRowLive: View {
     }
 
     var body: some View {
-        HStack(spacing: MTSpacing.sm + MTSpacing.xs) {
-            Toggle(isOn: $isEnabled) {
+        VStack(spacing: 0) {
+            // Toggle row
+            HStack {
                 Text(day.weekdayName)
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(isEnabled ? Color.mtTextPrimary : Color.mtTextSub)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-            .toggleStyle(.switch)
-            .tint(Color.mtGreen)
-            .onChange(of: isEnabled) { _, new in
-                repo.setScheduleEnabled(new, weekday: day.weekday)
-            }
-
-            if isEnabled {
-                Picker("From", selection: $startHour) {
-                    ForEach(hours, id: \.self) { h in Text(hourLabel(h)).tag(h) }
-                }
-                .pickerStyle(.menu)
-                .onChange(of: startHour) { _, new in
-                    if endHour <= new { endHour = min(new + 1, 23) }
-                    repo.setScheduleHours(start: new, end: endHour, weekday: day.weekday)
-                }
-
-                Text("to")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color.mtTextSub)
-
-                Picker("To", selection: $endHour) {
-                    ForEach(hours, id: \.self) { h in Text(hourLabel(h)).tag(h) }
-                }
-                .pickerStyle(.menu)
-                .onChange(of: endHour) { _, new in
-                    if startHour >= new { startHour = max(new - 1, 0) }
-                    repo.setScheduleHours(start: startHour, end: new, weekday: day.weekday)
-                }
-            } else {
                 Spacer()
+                Toggle("", isOn: $isEnabled)
+                    .labelsHidden()
+                    .tint(Color.mtGreen)
+                    .onChange(of: isEnabled) { _, new in
+                        repo.setScheduleEnabled(new, weekday: day.weekday)
+                    }
+            }
+
+            // Hour pickers
+            if isEnabled {
+                Divider()
+                HStack {
+                    HourPicker(label: "From", hour: $startHour)
+                        .onChange(of: startHour) { _, new in
+                            if endHour <= new { endHour = min(new + 1, 23) }
+                            repo.setScheduleHours(start: new, end: endHour, weekday: day.weekday)
+                        }
+                    Divider().frame(height: 36)
+                    HourPicker(label: "Until", hour: $endHour)
+                        .onChange(of: endHour) { _, new in
+                            if startHour >= new { startHour = max(new - 1, 0) }
+                            repo.setScheduleHours(start: startHour, end: new, weekday: day.weekday)
+                        }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .listRowInsets(EdgeInsets(top: MTSpacing.sm + MTSpacing.xs, leading: MTSpacing.md, bottom: MTSpacing.sm + MTSpacing.xs, trailing: MTSpacing.md))
-    }
-
-    private func hourLabel(_ h: Int) -> String {
-        let hour12 = h % 12 == 0 ? 12 : h % 12
-        let ampm   = h < 12 ? "AM" : "PM"
-        return "\(hour12):00 \(ampm)"
+        .animation(.spring(response: 0.3), value: isEnabled)
+        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
     }
 }
