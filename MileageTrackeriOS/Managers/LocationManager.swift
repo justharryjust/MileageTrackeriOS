@@ -40,6 +40,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
 
     override init() {
         super.init()
+        authorizationStatus = manager.authorizationStatus
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.distanceFilter  = 10   // metres between updates during recording
