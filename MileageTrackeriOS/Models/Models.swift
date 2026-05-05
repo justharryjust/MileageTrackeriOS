@@ -10,11 +10,13 @@ import RealmSwift
 enum Jurisdiction: String, CaseIterable, PersistableEnum {
     case newZealand = "NZ"
     case australia  = "AU"
+    case other      = "other"
 
     var displayName: String {
         switch self {
         case .newZealand: return "New Zealand"
         case .australia:  return "Australia"
+        case .other:      return "Other"
         }
     }
 
@@ -22,6 +24,7 @@ enum Jurisdiction: String, CaseIterable, PersistableEnum {
         switch self {
         case .newZealand: return "🇳🇿"
         case .australia:  return "🇦🇺"
+        case .other:      return "🌍"
         }
     }
 }

@@ -8,12 +8,17 @@ Two files: `OnboardingView.swift` (coordinator + shell) and the step views in `S
 
 ```swift
 enum OnboardingStep: Int, CaseIterable {
-    case welcome = 0, jurisdiction, claimMethod, distanceUnit,
-         addVehicle, trackingHours, locationPermission, motionPermission
+    case jurisdiction      = 0
+    case vehicleAndUnit    = 1
+    case claimMethod       = 2
+    case locationPermission = 3
+    case motionPermission  = 4
+    case trackingHours     = 5
+    case welcome           = 6
 }
 ```
 
-8 steps, integer raw value drives progress bar calculation.
+7 steps, integer raw value drives progress bar calculation.
 
 ---
 
@@ -23,14 +28,15 @@ enum OnboardingStep: Int, CaseIterable {
 
 ### Collected state
 
-| Property | Step that sets it |
-|----------|------------------|
-| `jurisdiction` | `JurisdictionStep` (pre-filled from `Locale`) |
-| `claimMethod` | `ClaimMethodStep` |
-| `customRateTiers: [CustomRateTier]` | `ClaimMethodStep` (if `.customRate`) |
-| `distanceUnit` | `DistanceUnitStep` |
-| `vehicleName`, `vehicleRegistration`, `fuelType` | `AddVehicleStep` |
-| `trackingSchedule: [DayScheduleSnapshot]` | `TrackingHoursStep` |
+| Property | Type | Step that sets it |
+|----------|------|------------------|
+| `regionCode` | `String` | `JurisdictionStep` (pre-filled from `Locale.current.region`) |
+| `jurisdiction` | `Jurisdiction` (computed) | Derived from `regionCode`: NZ→`.newZealand`, AU→`.australia`, else→`.other` |
+| `claimMethod` | `ClaimMethod` | `ClaimMethodStep` |
+| `customRateTiers: [CustomRateTier]` | — | `ClaimMethodStep` (if `.customRate`) |
+| `distanceUnit` | `DistanceUnit` | `VehicleAndUnitStep` |
+| `vehicleName`, `vehicleRegistration`, `fuelType` | — | `VehicleAndUnitStep` |
+| `trackingSchedule: [DayScheduleSnapshot]` | — | `TrackingHoursStep` |
 
 ### Navigation
 
@@ -40,14 +46,14 @@ enum OnboardingStep: Int, CaseIterable {
 
 ### Completion
 
-`complete(using appState:)` — commits all collected data to `profileRepo`, calls `profileRepo.applySchedule`, sets `hasCompletedOnboarding = true`, then calls `appState.startTracking()`. Sets `isCompleted = true` to dismiss the onboarding flow.
+`complete(using appState:)` — commits all collected data to `profileRepo`, calls `profileRepo.applySchedule`, sets `hasCompletedOnboarding = true`, then calls `appState.startTracking()`. Sets `isCompleted = true` to dismiss the onboarding flow. Called from `WelcomeStep` (final step).
 
 ---
 
 ## OnboardingView
 
 `ZStack` layout:
-- **Top bar**: back chevron (hidden on `.welcome`) + `ProgressBar`.
+- **Top bar**: back chevron (hidden on `.jurisdiction`) + `ProgressBar`.
 - **Step content**: switches on `vm.currentStep` with `asymmetric` slide transition — inserts from trailing/leading and removes to leading/trailing based on `vm.goingForward`.
 - Each step view is `.id(vm.currentStep)` to force SwiftUI to replace rather than update.
 
@@ -68,4 +74,4 @@ Renders icon circle, heading, subtitle, and the provided content in a `ScrollVie
 ## Permission steps
 
 - **LocationPermissionStep** — triggers two-step WhenInUse → Always flow via `locationManager.requestLocationPermission()`. Auto-advances 0.8 s after `authorizationStatus == .authorizedAlways`. Shows guidance for WhenInUse-only and denied states.
-- **MotionPermissionStep** — calls `motionManager.startActivityUpdates()` to trigger the system permission prompt. Auto-advances 0.8 s after `motionManager.isAuthorized`. This is the **final step** — both "granted" and "Skip" call `vm.complete(using: appState)`.
+- **MotionPermissionStep** — calls `motionManager.startActivityUpdates()` to trigger the system permission prompt. Auto-advances 0.8 s after `motionManager.isAuthorized`. Calls `vm.advance()` on both grant and Skip — **not** `vm.complete()`.
