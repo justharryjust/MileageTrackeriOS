@@ -10,7 +10,7 @@ final class RealmProvider {
     private(set) var realm: Realm
 
     /// Current schema version — bump this whenever the model changes and add a migration block.
-    static let schemaVersion: UInt64 = 3
+    static let schemaVersion: UInt64 = 4
 
     private init() {
         let config = Realm.Configuration(
@@ -20,11 +20,13 @@ final class RealmProvider {
                 // v1 -> v2: added Trip.carKitName (optional String -- no action needed)
                 // v2 -> v3: added UserProfile.trackingSchedule (List<DaySchedule>)
                 //           Populated lazily in UserProfileRepository.init
-//                migration
+                // v3 -> v4: added UserProfile.customRateThresholds (List<RateThreshold>)
+                //           Empty list default requires no migration action
             },
             objectTypes: [
                 UserProfile.self,
                 DaySchedule.self,
+                RateThreshold.self,
                 Vehicle.self,
                 Trip.self,
                 TripPoint.self,

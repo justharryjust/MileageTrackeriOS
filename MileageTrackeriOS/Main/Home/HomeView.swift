@@ -25,7 +25,7 @@ struct HomeView: View {
                 .padding(.bottom, MTSpacing.xl)
             }
             .background(Color.mtBackground)
-            .navigationTitle("MileageTracker")
+            .navigationTitle("Mileage Tracker")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
