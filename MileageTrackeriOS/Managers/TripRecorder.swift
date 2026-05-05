@@ -62,6 +62,11 @@ final class TripRecorder {
  var visitDepartureExpiry: Date?
  private let visitDepartureWindowSeconds: TimeInterval = 600
 
+ /// Set when a region exit fires — the region center is the authoritative trip start point.
+ /// Prepended to collectedLocations when the trip is confirmed.
+ var departureAnchorLocation: CLLocation?
+ private var departureAnchorExpiry: Date?
+
  /// Name of the car kit that pre-armed or is active during this trip, stored on save
  var activeCarKitName: String?
  /// Pre-arm expiry for car-kit connect signal (same window as visit departure)
@@ -99,6 +104,9 @@ final class TripRecorder {
         }
         location.onVisitDeparture = { [weak self] departureDate in
             self?.handleVisitDeparture(departureDate)
+        }
+        location.onRegionDeparture = { [weak self] anchor in
+            self?.handleRegionDeparture(anchor)
         }
         location.onBackgroundWake = { [weak self] since in
             self?.motionManager?.queryRecentActivity(since: since)
@@ -180,6 +188,30 @@ final class TripRecorder {
      visitDepartureAt     = nil
      visitDepartureExpiry = nil
      return departure
+ }
+
+ // MARK: - Region Departure Anchor
+
+ private func handleRegionDeparture(_ anchor: CLLocation) {
+     guard case .idle = state else {
+         logger.log("Region departure anchor ignored — not idle (state: \(label(state)))", category: .trip)
+         return
+     }
+     departureAnchorLocation = anchor
+     departureAnchorExpiry   = Date().addingTimeInterval(visitDepartureWindowSeconds)
+     logger.log("Region departure anchor stored at (\(String(format:"%.5f", anchor.coordinate.latitude)), \(String(format:"%.5f", anchor.coordinate.longitude)))", category: .trip)
+ }
+
+ private func consumeDepartureAnchor() -> CLLocation? {
+     guard let expiry = departureAnchorExpiry, Date() < expiry else {
+         departureAnchorLocation = nil
+         departureAnchorExpiry   = nil
+         return nil
+     }
+     let loc = departureAnchorLocation
+     departureAnchorLocation = nil
+     departureAnchorExpiry   = nil
+     return loc
  }
 
  // MARK: - Activity Handler
@@ -270,9 +302,11 @@ final class TripRecorder {
          logger.log("Detecting — speed: \(String(format:"%.1f",speedKmh)) km/h, peak: \(String(format:"%.1f",peakSpeedKmhDuringDetection)) km/h, elapsed: \(Int(elapsed))s/\(Int(requiredWindow))s, buffered: \(detectionBuffer.count) pts", category: .trip)
 
          if peakSpeedKmhDuringDetection >= heuristicMinSpeedKmh && elapsed >= requiredWindow {
-             logger.log("Trip start confirmed ✅ — peak speed \(String(format:"%.1f",peakSpeedKmhDuringDetection)) km/h over \(Int(elapsed))s, prepending \(detectionBuffer.count) detection pts", category: .trip)
+             let anchor = consumeDepartureAnchor()
+             let anchorDesc = anchor != nil ? "region anchor + " : ""
+             logger.log("Trip start confirmed ✅ — peak speed \(String(format:"%.1f",peakSpeedKmhDuringDetection)) km/h over \(Int(elapsed))s, prepending \(anchorDesc)\(detectionBuffer.count) detection pts", category: .trip)
              cancelDetectionTimer()
-             collectedLocations = detectionBuffer + [location]
+             collectedLocations = (anchor.map { [$0] } ?? []) + detectionBuffer + [location]
              detectionBuffer.removeAll()
              tripStartedAt = collectedLocations.first?.timestamp ?? Date()
              transitionTo(.recording(startedAt: tripStartedAt!, distanceMetres: calculateTotalDistance()))
@@ -414,9 +448,11 @@ final class TripRecorder {
         peakSpeedKmhDuringDetection = 0
         fastTrackDetection          = false
         tripStartedAt        = nil
-        visitDepartureAt     = nil
-        visitDepartureExpiry = nil
-        activeCarKitName     = nil
+        visitDepartureAt        = nil
+        visitDepartureExpiry    = nil
+        departureAnchorLocation = nil
+        departureAnchorExpiry   = nil
+        activeCarKitName        = nil
         carKitConnectExpiry  = nil
         locationManager?.stopHighAccuracyUpdates()
         transitionTo(.idle)

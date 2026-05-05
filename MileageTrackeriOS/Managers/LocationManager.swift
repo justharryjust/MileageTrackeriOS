@@ -1,4 +1,4 @@
-// ingLocationManager — CLLocationManager wrapper
+// LocationManager — CLLocationManager wrapper
 // Handles permission requests, background location, and streaming location updates.
 // Uses the significant-location-change API as a low-power wake trigger,
 // then upgrades to full GPS accuracy once automotive motion is confirmed.
@@ -30,6 +30,10 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     /// Delivers the departure time — TripRecorder uses this to pre-arm detection.
     var onVisitDeparture: ((Date) -> Void)?
 
+    /// Fires on a region exit with a CLLocation anchored to the region center.
+    /// TripRecorder uses this as the authoritative geographic trip start point.
+    var onRegionDeparture: ((CLLocation) -> Void)?
+
     /// Fires on any background wake (significant-location or visit departure).
     /// Caller should use this to query missed motion activities since the given date.
     var onBackgroundWake: ((Date) -> Void)?
@@ -47,6 +51,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         manager.pausesLocationUpdatesAutomatically = false
         manager.allowsBackgroundLocationUpdates = true
         manager.showsBackgroundLocationIndicator = true
+        manager.activityType = .automotiveNavigation
     }
 
     // MARK: - Permission
@@ -120,11 +125,43 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         logger.log("Stopped CLVisit monitoring", category: .location)
     }
 
+    // MARK: - Region Monitoring (geofence departure trigger)
+
+    private let regionIdentifier = "com.mileagetracker.departureRegion"
+
+    func startRegionMonitoring(around coordinate: CLLocationCoordinate2D, radius: CLLocationDistance = 150) {
+        guard hasAlwaysAuthorization else {
+            logger.log("Cannot start region monitoring — Always authorization required", category: .location)
+            return
+        }
+        stopRegionMonitoring()
+        let region = CLCircularRegion(center: coordinate, radius: radius, identifier: regionIdentifier)
+        region.notifyOnExit  = true
+        region.notifyOnEntry = false
+        manager.startMonitoring(for: region)
+        logger.log("Started region monitoring at (\(String(format: "%.5f", coordinate.latitude)), \(String(format: "%.5f", coordinate.longitude))) radius: \(Int(radius))m", category: .location)
+    }
+
+    func stopRegionMonitoring() {
+        for region in manager.monitoredRegions where region.identifier == regionIdentifier {
+            manager.stopMonitoring(for: region)
+            logger.log("Stopped region monitoring", category: .location)
+        }
+    }
+
+    /// Re-centers the departure region when not actively recording, so the next
+    /// departure is always caught. Called from didUpdateLocations on background wakes.
+    func updateRegionIfIdle(to coordinate: CLLocationCoordinate2D) {
+        guard !isHighAccuracyActive else { return }
+        startRegionMonitoring(around: coordinate)
+    }
+
     // MARK: - High-Accuracy Updates (during active recording)
 
     func startHighAccuracyUpdates() {
         guard !isHighAccuracyActive else { return }
         isHighAccuracyActive = true
+        stopRegionMonitoring()
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         manager.distanceFilter  = 5
         manager.startUpdatingLocation()
@@ -138,6 +175,9 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.distanceFilter  = 10
         logger.log("Stopped high-accuracy GPS updates", category: .location)
+        if let coord = currentLocation?.coordinate {
+            startRegionMonitoring(around: coord)
+        }
     }
 
     // MARK: - CLLocationManagerDelegate
@@ -158,6 +198,9 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
             pendingAlwaysRequest = false
             startSignificantLocationMonitoring()
             startVisitMonitoring()
+            if let coord = currentLocation?.coordinate {
+                startRegionMonitoring(around: coord)
+            }
         }
     }
 
@@ -177,15 +220,49 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         onVisitDeparture?(visit.departureDate)
     }
 
+    func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) {
+        guard region.identifier == regionIdentifier else { return }
+        let departureDate = Date().addingTimeInterval(-60)
+        logger.log("Region exit detected — signalling departure at \(departureDate)", category: .location)
+        lastBackgroundWakeAt = Date()
+        onBackgroundWake?(departureDate)
+        onVisitDeparture?(departureDate)
+        // Build an anchor location from the region center — this is where the car was parked,
+        // making it the authoritative geographic start of the trip.
+        if let circular = region as? CLCircularRegion {
+            let anchor = CLLocation(
+                coordinate        : circular.center,
+                altitude          : 0,
+                horizontalAccuracy: circular.radius,
+                verticalAccuracy  : -1,
+                timestamp         : departureDate
+            )
+            onRegionDeparture?(anchor)
+        }
+        // Re-center on current location so the next trip departure is also caught.
+        let recentre = currentLocation?.coordinate ?? (region as? CLCircularRegion)?.center
+        if let coord = recentre {
+            startRegionMonitoring(around: coord)
+        } else {
+            logger.log("Region exit — no current location to re-centre on", category: .location)
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithMonitoringRegion region: CLRegion, error: Error) {
+        logger.log("Region monitoring failed for \(region.identifier): \(error.localizedDescription)", category: .error)
+    }
+
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last else { return }
 
-        // If we're not in high-accuracy mode, this is a significant-location wake — trigger catch-up
+        // If we're not in high-accuracy mode, this is a significant-location or warm-idle wake — trigger catch-up
         if !isHighAccuracyActive {
             let since = lastBackgroundWakeAt ?? Date().addingTimeInterval(-300)
             lastBackgroundWakeAt = Date()
             logger.log("Significant-location wake — triggering motion catch-up since \(since)", category: .location)
             onBackgroundWake?(since)
+            // Keep departure region centered on current position during idle
+            updateRegionIfIdle(to: loc.coordinate)
         }
 
         // Filter out stale or low-accuracy fixes
