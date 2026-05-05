@@ -44,7 +44,7 @@ struct MotionPermissionStep: View {
                     Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.mtGreen)
                     Text("Motion access granted").foregroundStyle(Color.mtGreen).font(.system(size: 16, weight: .medium))
                 }
-                Button("Finish Setup") { vm.complete(using: appState) }
+                Button("Continue") { vm.advance() }
                     .buttonStyle(MTPrimaryButtonStyle())
             } else {
                 Button("Allow Motion Access") {
@@ -54,13 +54,13 @@ struct MotionPermissionStep: View {
                 .buttonStyle(MTPrimaryButtonStyle())
                 .disabled(hasRequested && !appState.motionManager.isAuthorized)
 
-                Button("Skip") { vm.complete(using: appState) }
+                Button("Skip") { vm.advance() }
                     .buttonStyle(MTSecondaryButtonStyle())
             }
         }
         .onChange(of: appState.motionManager.isAuthorized) { _, granted in
             if granted {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { vm.complete(using: appState) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { vm.advance() }
             }
         }
     }

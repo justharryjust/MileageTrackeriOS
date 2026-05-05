@@ -5,26 +5,31 @@ import SwiftUI
 // MARK: - Steps Enum
 
 enum OnboardingStep: Int, CaseIterable {
-    case welcome          = 0
-    case jurisdiction     = 1
-    case claimMethod      = 2
-    case distanceUnit     = 3
-    case addVehicle        = 4
+    case jurisdiction      = 0
+    case vehicleAndUnit    = 1
+    case claimMethod       = 2
+    case locationPermission = 3
+    case motionPermission  = 4
     case trackingHours     = 5
-    case locationPermission = 6
-    case motionPermission  = 7
+    case welcome           = 6
 }
 
 // MARK: - Shared ViewModel
 
 @Observable
 final class OnboardingViewModel {
-    // Collected during onboarding
-    var jurisdiction: Jurisdiction = {
-        // Preselect based on device locale
-        let region = Locale.current.region?.identifier ?? ""
-        return region == "AU" ? .australia : .newZealand
+    // ISO-3166-1 alpha-2 code chosen in JurisdictionStep; maps to Jurisdiction on complete()
+    var regionCode: String = {
+        Locale.current.region?.identifier ?? "NZ"
     }()
+
+    var jurisdiction: Jurisdiction {
+        switch regionCode {
+        case "NZ": return .newZealand
+        case "AU": return .australia
+        default:   return .other
+        }
+    }
     var claimMethod: ClaimMethod       = .standardRate
     var customRateTiers: [CustomRateTier] = [.initial]
     var distanceUnit: DistanceUnit     = .kilometres
@@ -35,7 +40,7 @@ final class OnboardingViewModel {
     var fuelType: FuelType          = .petrol
     var trackingSchedule: [DayScheduleSnapshot] = DayScheduleSnapshot.defaults
 
-    var currentStep: OnboardingStep = .welcome
+    var currentStep: OnboardingStep = .jurisdiction
     private(set) var goingForward: Bool = true
 
     /// Set to true when setup is done — OnboardingView observes this
@@ -90,7 +95,7 @@ struct OnboardingView: View {
             VStack(spacing: 0) {
                 // Top bar: back button + progress
                 HStack(spacing: MTSpacing.md) {
-                    if vm.currentStep != .welcome {
+                    if vm.currentStep != .jurisdiction {
                         Button {
                             vm.goBack()
                         } label: {
@@ -118,14 +123,13 @@ struct OnboardingView: View {
 
             VStack {
                 switch vm.currentStep {
-                case .welcome:            WelcomeStep(vm: vm)
                 case .jurisdiction:       JurisdictionStep(vm: vm)
+                case .vehicleAndUnit:     VehicleAndUnitStep(vm: vm)
                 case .claimMethod:        ClaimMethodStep(vm: vm)
-                case .distanceUnit:       DistanceUnitStep(vm: vm)
-                case .addVehicle:         AddVehicleStep(vm: vm)
-                case .trackingHours:      TrackingHoursStep(vm: vm)
                 case .locationPermission: LocationPermissionStep(vm: vm)
                 case .motionPermission:   MotionPermissionStep(vm: vm)
+                case .trackingHours:      TrackingHoursStep(vm: vm)
+                case .welcome:            WelcomeStep(vm: vm)
                 }
             }
             .id(vm.currentStep)

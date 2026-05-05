@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct WelcomeStep: View {
+    @Environment(AppState.self) private var appState
     let vm: OnboardingViewModel
 
     var body: some View {
@@ -8,44 +9,32 @@ struct WelcomeStep: View {
             Spacer()
 
             VStack(spacing: MTSpacing.lg) {
-                // Logo / Icon
                 ZStack {
                     Circle()
                         .fill(Color.mtGreen.opacity(0.15))
                         .frame(width: 100, height: 100)
-                    Image(systemName: "car.fill")
-                        .font(.system(size: 44, weight: .medium))
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 52, weight: .medium))
                         .foregroundStyle(Color.mtGreen)
                 }
 
                 VStack(spacing: MTSpacing.sm) {
-                    Text("Mileage Tracker")
+                    Text("You're all set!")
                         .font(.system(size: 34, weight: .bold))
                         .foregroundStyle(Color.mtTextPrimary)
 
-                    Text("Automatic trip tracking for sole traders.\nYour data. Your device. Your iCloud.")
+                    Text("MileageTracker will automatically detect and log your trips in the background.")
                         .font(.system(size: 17))
                         .foregroundStyle(Color.mtTextSub)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                // Feature bullets
                 VStack(alignment: .leading, spacing: MTSpacing.md) {
-                    FeatureBullet(icon: "location.fill",
-                                  color: .mtGreen,
-                                  title: "Automatic trip detection",
-                                  detail: "GPS + motion sensors detect drives — no manual starts needed")
-                    
-                    // TODO: Move country first & have a dictionary of country -> tax services ready
-                    FeatureBullet(icon: "doc.text.fill",
-                                  color: .blue,
-                                  title: "Tax-ready reports",
-                                  detail: "Export IRD or ATO compliant mileage logs as PDF")
-                    FeatureBullet(icon: "lock.icloud.fill",
-                                  color: .purple,
-                                  title: "Privacy first",
-                                  detail: "All data stays on your device and your iCloud")
+                    SummaryRow(icon: "location.fill",   color: .mtGreen,  text: "Location access granted")
+                    SummaryRow(icon: "figure.walk",     color: .blue,     text: "Motion detection ready")
+                    SummaryRow(icon: "car.fill",        color: .orange,   text: "Vehicle added")
+                    SummaryRow(icon: "clock.fill",      color: .purple,   text: "Tracking schedule configured")
                 }
                 .padding(MTSpacing.md)
                 .mtCard()
@@ -53,7 +42,7 @@ struct WelcomeStep: View {
 
             Spacer()
 
-            Button("Get Started") { vm.advance() }
+            Button("Start Tracking") { vm.complete(using: appState) }
                 .buttonStyle(MTPrimaryButtonStyle())
                 .padding(.horizontal, MTSpacing.lg)
                 .padding(.bottom, MTSpacing.xl)
@@ -61,23 +50,20 @@ struct WelcomeStep: View {
     }
 }
 
-private struct FeatureBullet: View {
+private struct SummaryRow: View {
     let icon: String
     let color: Color
-    let title: String
-    let detail: String
+    let text: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: MTSpacing.md) {
+        HStack(spacing: MTSpacing.md) {
             Image(systemName: icon)
-                .font(.system(size: 20))
+                .font(.system(size: 18))
                 .foregroundStyle(color)
                 .frame(width: 28)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 15, weight: .semibold))
-                Text(detail).font(.system(size: 13)).foregroundStyle(Color.mtTextSub)
-            }
+            Text(text)
+                .font(.system(size: 15))
+                .foregroundStyle(Color.mtTextPrimary)
         }
     }
 }
