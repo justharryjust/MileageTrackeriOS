@@ -52,7 +52,7 @@ final class TripLogger: ObservableObject {
     @Published private(set) var entries: [LogEntry] = []
 
     private let fileURL: URL
-    private let maxFileBytes = 5 * 1024 * 1024  // 5 MB rolling cap
+    private let maxFileBytes = 20 * 1024 * 1024  // 5 MB rolling cap
     private let logger = Logger(subsystem: "com.harryjust.MileageTrackeriOS", category: "TripLogger")
 
     static let timestampFormatter: DateFormatter = {
@@ -76,7 +76,7 @@ final class TripLogger: ObservableObject {
         let entry = LogEntry(date: Date(), category: category, message: message)
         // Append to in-memory buffer (ring)
         entries.append(entry)
-        if entries.count > 500 { entries.removeFirst(entries.count - 500) }
+        if entries.count > 5000 { entries.removeFirst(entries.count - 5000) }
         // Write to file
         appendToFile(entry.formatted + "\n")
         // Also emit to unified logging (visible in Console.app)

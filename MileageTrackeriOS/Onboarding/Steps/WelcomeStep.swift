@@ -19,7 +19,7 @@ struct WelcomeStep: View {
                 }
 
                 VStack(spacing: MTSpacing.sm) {
-                    Text("MileageTracker")
+                    Text("Mileage Tracker")
                         .font(.system(size: 34, weight: .bold))
                         .foregroundStyle(Color.mtTextPrimary)
 
@@ -35,7 +35,9 @@ struct WelcomeStep: View {
                     FeatureBullet(icon: "location.fill",
                                   color: .mtGreen,
                                   title: "Automatic trip detection",
-                                  detail: "GPS + motion sensors detect drives — no tap needed")
+                                  detail: "GPS + motion sensors detect drives — no manual starts needed")
+                    
+                    // TODO: Move country first & have a dictionary of country -> tax services ready
                     FeatureBullet(icon: "doc.text.fill",
                                   color: .blue,
                                   title: "Tax-ready reports",

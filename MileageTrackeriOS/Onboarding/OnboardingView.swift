@@ -25,11 +25,9 @@ final class OnboardingViewModel {
         let region = Locale.current.region?.identifier ?? ""
         return region == "AU" ? .australia : .newZealand
     }()
-    var claimMethod: ClaimMethod   = .standardRate
-    var customRateCents: Double    = 87  // cents per km/mile
-    var customRateLowerBound: Int  = 0
-    var customRateUpperBound: Int  = 1000
-    var distanceUnit: DistanceUnit = .kilometres
+    var claimMethod: ClaimMethod       = .standardRate
+    var customRateTiers: [CustomRateTier] = [.initial]
+    var distanceUnit: DistanceUnit     = .kilometres
 
     // Vehicle fields
     var vehicleName: String         = ""
@@ -65,9 +63,7 @@ final class OnboardingViewModel {
         repo.claimMethod   = claimMethod
         repo.distanceUnit  = distanceUnit
         if claimMethod == .customRate {
-            repo.customRatePerKm      = customRateCents / 100.0
-            repo.customRateLowerBound = customRateLowerBound
-            repo.customRateUpperBound = customRateUpperBound
+            repo.setCustomRateThresholds(customRateTiers)
         }
         repo.addVehicle(
             name         : vehicleName.trimmingCharacters(in: .whitespaces),

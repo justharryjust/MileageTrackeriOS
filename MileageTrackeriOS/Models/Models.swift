@@ -26,12 +26,45 @@ enum Jurisdiction: String, CaseIterable, PersistableEnum {
     }
 }
 
+struct MileageRates {
+    struct Thresholds {
+        let centsPerKm: Double
+        let lowerBound: Int
+        let upperBound: Int
+    }
+    let name: String?
+    let fuelType: [FuelType]?
+    let thresholds: [Thresholds]
+}
+
+// MARK: - CustomRateTier (value type for OnboardingViewModel — not persisted)
+
+struct CustomRateTier: Identifiable {
+    var id = UUID()
+    var lowerBound: Int
+    var upperBound: Int
+    var centsPerUnit: Double
+
+    static var initial: CustomRateTier {
+        .init(lowerBound: 0, upperBound: 5000, centsPerUnit: 100)
+    }
+}
+
+// MARK: - RateThreshold (Realm embedded object — persisted per tier)
+
+final class RateThreshold: EmbeddedObject {
+    @Persisted var lowerBound: Int    = 0
+    @Persisted var upperBound: Int    = 5000
+    @Persisted var centsPerUnit: Double = 100
+}
+
+
 // MARK: - Claim Method
 
 enum ClaimMethod: String, CaseIterable, PersistableEnum {
     case standardRate = "standard"
-    case customRate   = "custom"
     case logbook      = "logbook"
+    case customRate   = "custom"
 
     var displayName: String {
         switch self {
@@ -278,6 +311,7 @@ final class UserProfile: Object {
     @Persisted var customRatePerKm: Double?
     @Persisted var customRateLowerBound: Int      = 0
     @Persisted var customRateUpperBound: Int      = 1000
+    @Persisted var customRateThresholds: List<RateThreshold>
     @Persisted var distanceUnit: DistanceUnit     = .kilometres
     @Persisted var hasCompletedOnboarding: Bool   = false
     @Persisted var trialStartedAt: Date?

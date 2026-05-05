@@ -79,6 +79,24 @@ final class UserProfileRepository {
         set { write { self.profile.customRateUpperBound = newValue } }
     }
 
+    func setCustomRateThresholds(_ tiers: [CustomRateTier]) {
+        write {
+            self.profile.customRateThresholds.removeAll()
+            for tier in tiers {
+                let t = RateThreshold()
+                t.lowerBound   = tier.lowerBound
+                t.upperBound   = tier.upperBound
+                t.centsPerUnit = tier.centsPerUnit
+                self.profile.customRateThresholds.append(t)
+            }
+            if let first = tiers.first {
+                self.profile.customRatePerKm      = first.centsPerUnit / 100.0
+                self.profile.customRateLowerBound = first.lowerBound
+                self.profile.customRateUpperBound = first.upperBound
+            }
+        }
+    }
+
     var distanceUnit: DistanceUnit {
         get { profile.distanceUnit }
         set { write { self.profile.distanceUnit = newValue } }
