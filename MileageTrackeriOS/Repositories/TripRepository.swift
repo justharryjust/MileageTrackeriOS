@@ -207,6 +207,15 @@ final class TripRepository {
         }
     }
 
+    // MARK: - Date-filtered Queries (for export/reporting)
+
+    /// Returns all trips within a date range, sorted oldest first (for CSV export ordering).
+    func trips(from: Date, to: Date) -> [Trip] {
+        allTrips
+            .filter { $0.startedAt >= from && $0.startedAt <= to }
+            .sorted { $0.startedAt < $1.startedAt }
+    }
+
     // MARK: - Trip Points
 
     func tripPoints(for trip: Trip) -> [TripPoint] {

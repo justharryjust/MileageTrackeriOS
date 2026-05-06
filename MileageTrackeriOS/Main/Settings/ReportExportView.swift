@@ -7,47 +7,37 @@ struct ReportExportView: View {
 
     @State private var startDate: Date
     @State private var endDate: Date
-    @State private var selectedVehicleId: String = ""
     @State private var isExporting = false
     @State private var exportURL: URL?
 
     private var profile: UserProfile { appState.profileRepo.profile }
     private var trips: [Trip] { appState.tripRepo.allTrips }
-    private var vehicles: [Vehicle] { appState.profileRepo.vehicles }
 
     private var filteredTrips: [Trip] {
-        trips.filter { trip in
-            let inRange = trip.startedAt >= startDate && trip.startedAt <= endDate
-            let matchesVehicle = selectedVehicleId.isEmpty || trip.vehicleId == selectedVehicleId
-            let isBusiness = trip.category == .business
-            return inRange && matchesVehicle && isBusiness
-        }
-        .sorted { $0.startedAt < $1.startedAt }
+        trips.filter { $0.startedAt >= startDate && $0.startedAt <= endDate }
+            .sorted { $0.startedAt < $1.startedAt }
     }
 
     private var totalDistance: Double {
         filteredTrips.reduce(0) { $0 + ($1.distanceMetres / 1000) }
     }
 
-    /// Cumulative business km from tax-year start to the report's start date.
-    private var baseCumulativeKm: Double {
-        let taxYearStart = profile.jurisdiction.taxYear.containing(startDate).start
-        return appState.tripRepo.allTrips
-            .filter { $0.category == .business && $0.startedAt >= taxYearStart && $0.startedAt < startDate }
-            .reduce(0) { $0 + ($1.distanceMetres / 1000) }
-    }
-
     private var totalValue: Double {
-        var cumKm = baseCumulativeKm
+        var cumKm = 0.0
         return filteredTrips.reduce(0) { total, trip in
             cumKm += trip.distanceMetres / 1000
             return total + appState.mileageCalculator.dollarValue(for: trip, profile: profile, cumulativeKm: cumKm)
         }
     }
 
-    init(startDate: Date, endDate: Date) {
-        _startDate = State(initialValue: startDate)
-        _endDate = State(initialValue: endDate)
+    init() {
+        let cal = Calendar.current
+        let now = Date()
+        // Default to current tax year
+        let taxYear = Jurisdiction.newZealand.taxYear  // overridden in onAppear
+        let ty = taxYear.containing(now)
+        _startDate = State(initialValue: ty.start)
+        _endDate = State(initialValue: ty.end)
     }
 
     var body: some View {
@@ -82,14 +72,6 @@ struct ReportExportView: View {
                     Spacer()
                     Text(profile.jurisdiction.displayName)
                         .foregroundStyle(Color.mtTextSub)
-                }
-                if vehicles.count > 1 {
-                    Picker("Vehicle", selection: $selectedVehicleId) {
-                        Text("All").tag("")
-                        ForEach(vehicles) { v in
-                            Text(v.name.isEmpty ? v.registration : v.name).tag(v.id)
-                        }
-                    }
                 }
             }
 
@@ -147,8 +129,7 @@ struct ReportExportView: View {
                         trips: filteredTrips,
                         calculator: appState.mileageCalculator,
                         profile: profile,
-                        dateRange: (startDate, endDate),
-                        baseCumulativeKm: baseCumulativeKm
+                        dateRange: (startDate, endDate)
                     )
                     exportURL = url
                     isExporting = true
@@ -168,7 +149,9 @@ struct ReportExportView: View {
             }
         }
         .onAppear {
-            selectedVehicleId = appState.profileRepo.defaultVehicle?.id ?? ""
+            let ty = profile.jurisdiction.taxYear.containing(Date())
+            startDate = ty.start
+            endDate = ty.end
         }
     }
 
@@ -190,3 +173,5 @@ struct ReportExportView: View {
         ]
     }
 }
+
+

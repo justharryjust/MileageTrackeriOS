@@ -37,6 +37,7 @@ final class OnboardingViewModel {
     var vehicleName: String         = ""
     var vehicleRegistration: String = ""
     var fuelType: FuelType          = .petrol
+    var initialOdometerKm: String   = ""   // captured when claim method is .logbook
     var trackingSchedule: [DayScheduleSnapshot] = DayScheduleSnapshot.defaults
 
     var currentStep: OnboardingStep = .intro
@@ -71,6 +72,17 @@ final class OnboardingViewModel {
         )
         repo.applySchedule(trackingSchedule)
         repo.hasCompletedOnboarding = true
+
+        // Save initial odometer reading if logbook method was chosen
+        if claimMethod == .logbook, let km = Double(initialOdometerKm), km > 0,
+           let vehicleId = repo.defaultVehicle?.id {
+            appState.odometerRepo.recordReading(
+                vehicleId: vehicleId,
+                readingKm: km,
+                source: .onboarding
+            )
+        }
+
         appState.startTracking()
         TripLogger.shared.log("Onboarding complete — \(jurisdiction.displayName), \(claimMethod.displayName)", category: .system)
         withAnimation { isCompleted = true }

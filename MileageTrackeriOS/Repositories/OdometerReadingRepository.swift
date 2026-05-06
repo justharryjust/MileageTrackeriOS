@@ -42,13 +42,6 @@ final class OdometerReadingRepository {
             .sorted { $0.recordedAt < $1.recordedAt }
     }
 
-    /// Returns the first and last odometer readings in the given date range.
-    /// Used by the logbook method to calculate total kilometres from odometer delta.
-    func periodBookends(for vehicleId: String, from: Date, to: Date) -> (start: OdometerReading?, end: OdometerReading?) {
-        let range = readings(for: vehicleId, from: from, to: to)
-        return (range.first, range.last)
-    }
-
     // MARK: - Mutations
 
     func recordReading(

@@ -10,7 +10,7 @@ final class RealmProvider {
     private(set) var realm: Realm
 
     /// Current schema version — bump this whenever the model changes and add a migration block.
-    static let schemaVersion: UInt64 = 4
+    static let schemaVersion: UInt64 = 5
 
     private init() {
         let config = Realm.Configuration(
@@ -22,6 +22,9 @@ final class RealmProvider {
                 //           Populated lazily in UserProfileRepository.init
                 // v3 -> v4: added UserProfile.customRateThresholds (List<RateThreshold>)
                 //           Empty list default requires no migration action
+                // v4 -> v5: added Trip.businessUsePercent (optional Double),
+                //           OdometerReading.source (OdometerSource, default .manual)
+                //           Both are new optional/enum fields — no migration action needed
             },
             objectTypes: [
                 UserProfile.self,

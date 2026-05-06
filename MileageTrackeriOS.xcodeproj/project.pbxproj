@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DE6308942FAB61230051D2A5 /* DevelopmentPlan.md in Resources */ = {isa = PBXBuildFile; fileRef = DE6308912FAB61230051D2A5 /* DevelopmentPlan.md */; };
+		DE6308952FAB61230051D2A5 /* ProjectBrief.md in Resources */ = {isa = PBXBuildFile; fileRef = DE6308922FAB61230051D2A5 /* ProjectBrief.md */; };
+		DE6308992FAB614A0051D2A5 /* missing+bugs.md in Resources */ = {isa = PBXBuildFile; fileRef = DE6308972FAB614A0051D2A5 /* missing+bugs.md */; };
+		DE63089A2FAB614A0051D2A5 /* futurework.md in Resources */ = {isa = PBXBuildFile; fileRef = DE6308962FAB614A0051D2A5 /* futurework.md */; };
+		DE63089B2FAB614A0051D2A5 /* pre-release.md in Resources */ = {isa = PBXBuildFile; fileRef = DE6308982FAB614A0051D2A5 /* pre-release.md */; };
 		DEA884C72F9788BF008FC71A /* RealmSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DEA884C62F9788BF008FC71A /* RealmSwift */; };
 		DEA884D02F9788BF008FC71A /* RealmSwift in Embed Frameworks */ = {isa = PBXBuildFile; productRef = DEA884C62F9788BF008FC71A /* RealmSwift */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		DEAB9B602F97B78F00B4A412 /* RealmSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DEA884C62F9788BF008FC71A /* RealmSwift */; };
@@ -44,6 +49,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		DE6308912FAB61230051D2A5 /* DevelopmentPlan.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = DevelopmentPlan.md; sourceTree = "<group>"; };
+		DE6308922FAB61230051D2A5 /* ProjectBrief.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ProjectBrief.md; sourceTree = "<group>"; };
+		DE6308962FAB614A0051D2A5 /* futurework.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = futurework.md; sourceTree = "<group>"; };
+		DE6308972FAB614A0051D2A5 /* missing+bugs.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "missing+bugs.md"; sourceTree = "<group>"; };
+		DE6308982FAB614A0051D2A5 /* pre-release.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "pre-release.md"; sourceTree = "<group>"; };
 		DEA8833A2F9758D3008FC71A /* MileageTrackeriOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MileageTrackeriOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DEA883492F9758D6008FC71A /* MileageTrackeriOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MileageTrackeriOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DEA883532F9758D6008FC71A /* MileageTrackeriOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MileageTrackeriOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -121,9 +131,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		DE6308932FAB61230051D2A5 /* Docs */ = {
+			isa = PBXGroup;
+			children = (
+				DE6308962FAB614A0051D2A5 /* futurework.md */,
+				DE6308972FAB614A0051D2A5 /* missing+bugs.md */,
+				DE6308982FAB614A0051D2A5 /* pre-release.md */,
+				DE6308912FAB61230051D2A5 /* DevelopmentPlan.md */,
+				DE6308922FAB61230051D2A5 /* ProjectBrief.md */,
+			);
+			path = Docs;
+			sourceTree = "<group>";
+		};
 		DEA883312F9758D3008FC71A = {
 			isa = PBXGroup;
 			children = (
+				DE6308932FAB61230051D2A5 /* Docs */,
 				DEA8833C2F9758D3008FC71A /* MileageTrackeriOS */,
 				DEA8834C2F9758D6008FC71A /* MileageTrackeriOSTests */,
 				DEA883562F9758D6008FC71A /* MileageTrackeriOSUITests */,
@@ -267,6 +290,11 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DE6308992FAB614A0051D2A5 /* missing+bugs.md in Resources */,
+				DE63089A2FAB614A0051D2A5 /* futurework.md in Resources */,
+				DE63089B2FAB614A0051D2A5 /* pre-release.md in Resources */,
+				DE6308942FAB61230051D2A5 /* DevelopmentPlan.md in Resources */,
+				DE6308952FAB61230051D2A5 /* ProjectBrief.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
