@@ -115,6 +115,14 @@ final class MotionManager {
 
     func queryRecentActivity(since: Date) {
         guard CMMotionActivityManager.isActivityAvailable() else { return }
+        // queryActivityStarting triggers the system permission dialog on first call —
+        // same as startActivityUpdates. Only run the catch-up query once the user has
+        // explicitly granted access, otherwise a background location wake during
+        // onboarding would show the motion prompt before the user reaches that step.
+        guard CMMotionActivityManager.authorizationStatus() == .authorized else {
+            logger.log("Motion not authorized — skipping catch-up query", category: .motion)
+            return
+        }
         let now = Date()
         logger.log("Querying missed motion activities from \(since) to \(now)", category: .motion)
 

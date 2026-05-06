@@ -1,14 +1,35 @@
 // TripRecorder — Core trip detection state machine
-// See DevelopmentPlan §3.1 for heuristics rationale.
 //
 // STATE TRANSITIONS:
 //  idle ──► detecting ──► recording ──► ending ──► idle (trip saved)
 //
-// DETECTION IMPROVEMENTS:
-//  • Only medium/high confidence automotive activity triggers state transitions (item 1)
-//  • CLVisit departure pre-arms a "visit departed" flag used as a secondary confirmation (item 2)
-//  • GPS drops to significant-location during .ending resume window (item 6)
-//  • visitDepartureAt is stored in the saved Trip for accurate start anchoring (item 7)
+// TRIP START — three independent paths (no single signal required):
+//
+//  Path A  CMMotion      handleActivityUpdate: automotive (med/high conf, or low when backed by
+//                        geofence/car-kit) → .detecting → GPS peak-speed gate → .recording
+//                        Primary path. Confidence filter blocks buses/trams/elevators.
+//
+//  Path B  Geofence+GPS  handleRegionDeparture starts high-accuracy GPS immediately;
+//                        handleLocationUpdate(idle): speed ≥ minSpeedKmh + live region anchor
+//                        → .detecting. Works without CMMotion (e.g. parking garages).
+//
+//  Path C  CarKit+GPS    handleCarKitConnected starts high-accuracy GPS immediately;
+//                        handleLocationUpdate(idle): speed ≥ minSpeedKmh + live car-kit expiry
+//                        → .detecting. GPS speed confirms movement before CMMotion wakes up.
+//
+// TRIP END — two independent paths:
+//
+//  Path A  CMMotion      handleActivityUpdate(recording): stationary/non-automotive (med/high)
+//                        → 60 s stationary timer → .ending. Primary path.
+//
+//  Path B  GPS speed     handleLocationUpdate(recording): tracks lastMovingAt; if speed stays
+//                        below threshold for stationaryEndWindowSeconds → stationary timer.
+//                        Fires when CMMotion is delayed or stuck on automotive.
+//
+//  Path C  CarKit disc.  handleCarKitDisconnected(recording) → immediate stationary timer.
+//                        Engine off / exiting the car typically drops Bluetooth first.
+//                        Disconnect during .detecting or .idle does NOT end — user may be
+//                        changing audio source mid-drive.
 
 import Foundation
 import CoreLocation
@@ -24,6 +45,50 @@ private enum Heuristic {
  static let resumeWindowSeconds       : TimeInterval = 90
  static let minimumTripDistanceMetres : Double       = 1000
  static let minimumTripDurationSeconds: TimeInterval = 60
+}
+
+// MARK: - Trip Checkpoint (crash / kill recovery)
+
+private struct TripCheckpoint: Codable {
+    struct StoredLocation: Codable {
+        let latitude: Double
+        let longitude: Double
+        let altitude: Double
+        let speedMs: Double
+        let horizontalAccuracy: Double
+        let timestamp: Date
+
+        var clLocation: CLLocation {
+            CLLocation(
+                coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+                altitude: altitude,
+                horizontalAccuracy: horizontalAccuracy,
+                verticalAccuracy: -1,
+                course: -1,
+                speed: speedMs,
+                timestamp: timestamp
+            )
+        }
+
+        init(_ loc: CLLocation) {
+            latitude           = loc.coordinate.latitude
+            longitude          = loc.coordinate.longitude
+            altitude           = loc.altitude
+            speedMs            = loc.speed
+            horizontalAccuracy = loc.horizontalAccuracy
+            timestamp          = loc.timestamp
+        }
+    }
+
+    enum Phase: String, Codable { case detecting, recording, ending }
+
+    let phase: Phase
+    let tripStartedAt: Date
+    let stoppedAt: Date?
+    let distanceMetres: Double
+    let locations: [StoredLocation]
+    let visitDepartureAt: Date?
+    let activeCarKitName: String?
 }
 
 // MARK: - TripRecorder
@@ -44,7 +109,6 @@ final class TripRecorder {
  private var profileRepo: UserProfileRepository?
 
  // MARK: Private tracking
-    // TODO: Collected locations & detection buffer should be persisted to disk incase something bad happens to the app during a trip
  var collectedLocations: [CLLocation] = []
  /// Locations buffered during .detecting — prepended to collectedLocations on trip confirmation
  var detectionBuffer: [CLLocation] = []
@@ -56,6 +120,9 @@ final class TripRecorder {
  var peakSpeedKmhDuringDetection: Double = 0
  /// When true, the detection window is halved because a strong pre-arm signal is present
  private var fastTrackDetection: Bool = false
+ /// Timestamp of the last GPS fix with speed ≥ minSpeedKmh during .recording — drives the GPS-speed end path
+ private var lastMovingAt: Date?
+ private var locationsSinceLastCheckpoint = 0
 
  /// Set when a CLVisit departure fires — used as a secondary confirmation signal
  var visitDepartureAt: Date?
@@ -118,6 +185,7 @@ final class TripRecorder {
             self?.handleCarKitDisconnected(event)
         }
         logger.log("TripRecorder configured with repositories", category: .trip)
+        recoverFromCheckpoint()
  }
 
  // MARK: - Car Kit Handlers
@@ -128,10 +196,10 @@ final class TripRecorder {
 
      switch state {
      case .idle:
-         // Pre-arm: set a 10-minute window. If automotive motion arrives within
-         // that window the trip start is anchored to the connect time.
          carKitConnectExpiry = Date().addingTimeInterval(carKitPreArmWindowSeconds)
-         logger.log("Car kit connected (\"\(event.deviceName)\") — pre-armed for \(Int(carKitPreArmWindowSeconds))s", category: .trip)
+         logger.log("Car kit connected (\"\(event.deviceName)\") — pre-armed for \(Int(carKitPreArmWindowSeconds))s, starting GPS", category: .trip)
+         // Start GPS immediately so we have speed data before CMMotion wakes up
+         locationManager?.startHighAccuracyUpdates()
 
      case .detecting, .recording, .ending:
          logger.log("Car kit connected (\"\(event.deviceName)\") mid-trip — name recorded", category: .trip)
@@ -199,7 +267,10 @@ final class TripRecorder {
      }
      departureAnchorLocation = anchor
      departureAnchorExpiry   = Date().addingTimeInterval(visitDepartureWindowSeconds)
-     logger.log("Region departure anchor stored at (\(String(format:"%.5f", anchor.coordinate.latitude)), \(String(format:"%.5f", anchor.coordinate.longitude)))", category: .trip)
+     logger.log("Region departure anchor stored at (\(String(format:"%.5f", anchor.coordinate.latitude)), \(String(format:"%.5f", anchor.coordinate.longitude))) — starting GPS", category: .trip)
+     // Geofence exit is strong geographic evidence — start GPS immediately so the
+     // GPS-speed path can confirm movement without waiting for CMMotion
+     locationManager?.startHighAccuracyUpdates()
  }
 
  private func consumeDepartureAnchor() -> CLLocation? {
@@ -219,24 +290,29 @@ final class TripRecorder {
   private func handleActivityUpdate(_ activity: DetectedActivity) {
       switch state {
       case .idle:
-          // Item 1: require at least medium confidence to avoid buses/trams/elevators
-          guard activity.isAutomotive, activity.confidence != .low else {
-              if activity.isAutomotive {
-                  logger.log("Low-confidence automotive, ignored — not entering detecting", category: .trip)
-              } else {
-                  logger.log("Not automotive, ignored — not entering detecting", category: .trip)
-              }
+          guard activity.isAutomotive else {
+              logger.log("Not automotive, ignored — not entering detecting", category: .trip)
               return
           }
-          // Log whether a visit departure or car-kit is backing this signal
           let visitBacked  = visitDepartureExpiry.map { Date() < $0 } ?? false
           let carKitBacked = carKitConnectExpiry.map { Date() < $0 } ?? false
-          // Fast-track: halve the detection window when a strong pre-arm signal is present
-          fastTrackDetection = visitBacked || carKitBacked
-          logger.log("Automotive detected (conf:\(activity.confidence == .high ? "high" : "medium"), visitBacked:\(visitBacked), carKitBacked:\(carKitBacked), fastTrack:\(fastTrackDetection)) — entering detecting", category: .trip)
+          // regionBacked uses departureAnchorExpiry — set only by geofence exits, not plain CLVisit
+          let regionBacked = departureAnchorExpiry.map { Date() < $0 } ?? false
+          // Geofence exit or car-kit connect is strong enough evidence to accept low-confidence
+          // automotive (e.g. slow parking-lot exit or garage start where CMMotion is uncertain)
+          let acceptLowConf = regionBacked || carKitBacked
+          guard acceptLowConf || activity.confidence != .low else {
+              logger.log("Low-confidence automotive, no geofence/car-kit pre-arm — ignored", category: .trip)
+              return
+          }
+          fastTrackDetection = visitBacked || carKitBacked || regionBacked
+          let confLabel = activity.confidence == .high ? "high" : activity.confidence == .medium ? "medium" : "low"
+          logger.log("Automotive detected (conf:\(confLabel), visitBacked:\(visitBacked), carKitBacked:\(carKitBacked), regionBacked:\(regionBacked), fastTrack:\(fastTrackDetection)) — entering detecting", category: .trip)
           transitionTo(.detecting(since: Date()))
           startDetectionTimer()
-          locationManager?.startHighAccuracyUpdates()
+          if locationManager?.isHighAccuracyActive != true {
+              locationManager?.startHighAccuracyUpdates()
+          }
 
       case .detecting(let since):
           if !activity.isAutomotive && activity.isStationary && activity.confidence != .low {
@@ -309,6 +385,7 @@ final class TripRecorder {
              collectedLocations = (anchor.map { [$0] } ?? []) + detectionBuffer + [location]
              detectionBuffer.removeAll()
              tripStartedAt = collectedLocations.first?.timestamp ?? Date()
+             lastMovingAt  = Date()
              transitionTo(.recording(startedAt: tripStartedAt!, distanceMetres: calculateTotalDistance()))
          } else {
              detectionBuffer.append(location)
@@ -317,6 +394,18 @@ final class TripRecorder {
      case .recording(let startedAt, _):
          collectedLocations.append(location)
          let dist = calculateTotalDistance()
+         // GPS-speed end path: track last confirmed movement; trigger end timer if prolonged stop
+         if location.speed >= 0 {
+             if location.speed * 3.6 >= heuristicMinSpeedKmh {
+                 lastMovingAt = location.timestamp
+             } else {
+                 let reference = lastMovingAt ?? Date()
+                 if Date().timeIntervalSince(reference) > Heuristic.stationaryEndWindowSeconds {
+                     logger.log("GPS-speed end path: no movement for \(Int(Date().timeIntervalSince(reference)))s — starting end timer", category: .trip)
+                     startStationaryTimer(recordingStartedAt: startedAt, distance: dist)
+                 }
+             }
+         }
          transitionTo(.recording(startedAt: startedAt, distanceMetres: dist))
 
      case .ending:
@@ -333,7 +422,23 @@ final class TripRecorder {
          }
 
      case .idle:
-         break
+         let regionLive = departureAnchorExpiry.map { Date() < $0 } ?? false
+         let carKitLive = carKitConnectExpiry.map { Date() < $0 } ?? false
+         // No live pre-arm — if GPS was running for a pre-arm that has since expired, stop it
+         guard regionLive || carKitLive else {
+             if locationManager?.isHighAccuracyActive == true {
+                 logger.log("GPS-speed path: pre-arm expired — stopping high-accuracy GPS", category: .trip)
+                 locationManager?.stopHighAccuracyUpdates()
+             }
+             break
+         }
+         guard location.speed >= 0, location.speed * 3.6 >= heuristicMinSpeedKmh else { break }
+         let source = regionLive ? "region anchor" : "car-kit"
+         logger.log("GPS-speed path: \(String(format:"%.1f", location.speed * 3.6)) km/h with \(source) pre-arm — entering detecting without CMMotion", category: .trip)
+         fastTrackDetection = true
+         transitionTo(.detecting(since: Date()))
+         startDetectionTimer()
+         // GPS already running from handleRegionDeparture / handleCarKitConnected
      }
  }
 
@@ -443,6 +548,7 @@ final class TripRecorder {
     }
 
     private func reset() {
+        clearCheckpoint()
         collectedLocations.removeAll()
         detectionBuffer.removeAll()
         peakSpeedKmhDuringDetection = 0
@@ -453,7 +559,8 @@ final class TripRecorder {
         departureAnchorLocation = nil
         departureAnchorExpiry   = nil
         activeCarKitName        = nil
-        carKitConnectExpiry  = nil
+        carKitConnectExpiry     = nil
+        lastMovingAt            = nil
         locationManager?.stopHighAccuracyUpdates()
         transitionTo(.idle)
     }
@@ -464,6 +571,7 @@ final class TripRecorder {
      let old = state
      state = newState
      logger.log("State: \(label(old)) → \(label(newState))", category: .trip)
+     checkpointIfNeeded(from: old, to: newState)
  }
 
  private func label(_ s: TripRecorderState) -> String {
@@ -472,6 +580,111 @@ final class TripRecorder {
      case .detecting(let d):           return "detecting(\(Int(abs(d.timeIntervalSinceNow)))s ago)"
      case .recording(let d, let dist): return "recording(\(Int(dist))m since \(Int(abs(d.timeIntervalSinceNow)))s)"
      case .ending(let d, _, let dist): return "ending(\(Int(dist))m started \(Int(abs(d.timeIntervalSinceNow)))s)"
+     }
+ }
+
+ // MARK: - Checkpoint persistence
+
+ private static let checkpointURL: URL = {
+     let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+     return dir.appendingPathComponent("trip_checkpoint.json")
+ }()
+
+ private func checkpointIfNeeded(from old: TripRecorderState, to new: TripRecorderState) {
+     switch new {
+     case .idle:
+         break  // reset() calls clearCheckpoint()
+     case .recording:
+         if case .recording = old {
+             // Same phase — throttle to every 10 location updates to avoid constant I/O
+             locationsSinceLastCheckpoint += 1
+             if locationsSinceLastCheckpoint >= 10 {
+                 locationsSinceLastCheckpoint = 0
+                 saveCheckpoint()
+             }
+         } else {
+             locationsSinceLastCheckpoint = 0
+             saveCheckpoint()
+         }
+     default:
+         saveCheckpoint()
+     }
+ }
+
+ private func saveCheckpoint() {
+     let phase: TripCheckpoint.Phase
+     let startedAt: Date
+     let stoppedAt: Date?
+     let distance: Double
+
+     switch state {
+     case .recording(let s, let d):     phase = .recording; startedAt = s; stoppedAt = nil; distance = d
+     case .ending(let s, let t, let d): phase = .ending;    startedAt = s; stoppedAt = t;   distance = d
+     case .detecting(let s):            phase = .detecting; startedAt = s; stoppedAt = nil; distance = 0
+     case .idle: return
+     }
+
+     let checkpoint = TripCheckpoint(
+         phase: phase,
+         tripStartedAt: startedAt,
+         stoppedAt: stoppedAt,
+         distanceMetres: distance,
+         locations: collectedLocations.map { TripCheckpoint.StoredLocation($0) },
+         visitDepartureAt: visitDepartureAt,
+         activeCarKitName: activeCarKitName
+     )
+     do {
+         let data = try JSONEncoder().encode(checkpoint)
+         try data.write(to: Self.checkpointURL, options: .atomic)
+     } catch {
+         logger.log("Checkpoint save failed: \(error)", category: .system)
+     }
+ }
+
+ private func clearCheckpoint() {
+     try? FileManager.default.removeItem(at: Self.checkpointURL)
+ }
+
+ private func recoverFromCheckpoint() {
+     guard let data = try? Data(contentsOf: Self.checkpointURL),
+           let checkpoint = try? JSONDecoder().decode(TripCheckpoint.self, from: data) else { return }
+     clearCheckpoint()
+     guard checkpoint.phase != .detecting else {
+         logger.log("Checkpoint: detecting phase discarded — no confirmed trip", category: .trip)
+         return
+     }
+     logger.log("Checkpoint: recovering \(checkpoint.locations.count)-pt \(checkpoint.phase.rawValue) trip from \(checkpoint.tripStartedAt)", category: .trip)
+     saveRecoveredTrip(from: checkpoint)
+ }
+
+ private func saveRecoveredTrip(from checkpoint: TripCheckpoint) {
+     let locations = checkpoint.locations.map { $0.clLocation }
+     let endedAt   = checkpoint.stoppedAt ?? locations.last?.timestamp ?? Date()
+     let duration  = endedAt.timeIntervalSince(checkpoint.tripStartedAt)
+
+     guard checkpoint.distanceMetres >= heuristicMinTripDistance,
+           duration >= heuristicMinTripDuration else {
+         logger.log("Checkpoint: recovered trip too short (dist:\(Int(checkpoint.distanceMetres))m dur:\(Int(duration))s) — discarded", category: .trip)
+         return
+     }
+
+     let vehicleId = profileRepo?.defaultVehicle?.id ?? ""
+     Task { [weak self] in
+         guard let self else { return }
+         let startAddress = await resolveAddress(for: locations.first) ?? ""
+         let endAddress   = await resolveAddress(for: locations.last) ?? ""
+         tripRepo?.saveTrip(
+             vehicleId:        vehicleId,
+             startedAt:        checkpoint.tripStartedAt,
+             endedAt:          endedAt,
+             distanceMetres:   checkpoint.distanceMetres,
+             locations:        locations,
+             startAddress:     startAddress,
+             endAddress:       endAddress,
+             visitDepartureAt: checkpoint.visitDepartureAt,
+             carKitName:       checkpoint.activeCarKitName
+         )
+         logger.log("Checkpoint: recovered trip saved ✅ dist:\(Int(checkpoint.distanceMetres))m dur:\(Int(duration))s", category: .trip)
      }
  }
 

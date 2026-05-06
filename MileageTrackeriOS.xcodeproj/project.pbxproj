@@ -10,7 +10,6 @@
 		DEA884C72F9788BF008FC71A /* RealmSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DEA884C62F9788BF008FC71A /* RealmSwift */; };
 		DEA884D02F9788BF008FC71A /* RealmSwift in Embed Frameworks */ = {isa = PBXBuildFile; productRef = DEA884C62F9788BF008FC71A /* RealmSwift */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		DEAB9B602F97B78F00B4A412 /* RealmSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DEA884C62F9788BF008FC71A /* RealmSwift */; };
-		DEAB9BB32F98D03400B4A412 /* CLAUDE.md in Resources */ = {isa = PBXBuildFile; fileRef = DEAB9BB22F98D02400B4A412 /* CLAUDE.md */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -48,14 +47,27 @@
 		DEA8833A2F9758D3008FC71A /* MileageTrackeriOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MileageTrackeriOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DEA883492F9758D6008FC71A /* MileageTrackeriOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MileageTrackeriOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DEA883532F9758D6008FC71A /* MileageTrackeriOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MileageTrackeriOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		DEAB9BB22F98D02400B4A412 /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
 		BB0000000000000000000001 /* Exceptions for "MileageTrackeriOS" folder in "MileageTrackeriOS" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				App/CLAUDE.md,
+				CLAUDE.md,
 				Info.plist,
+				Localisaion/CLAUDE.md,
+				Logging/CLAUDE.md,
+				Main/CLAUDE.md,
+				Main/Home/CLAUDE.md,
+				Main/Settings/CLAUDE.md,
+				Main/Trips/CLAUDE.md,
+				Managers/CLAUDE.md,
+				Models/CLAUDE.md,
+				Onboarding/CLAUDE.md,
+				Onboarding/Steps/CLAUDE.md,
+				Repositories/CLAUDE.md,
+				Shared/CLAUDE.md,
 			);
 			target = DEA883392F9758D3008FC71A /* MileageTrackeriOS */;
 		};
@@ -112,7 +124,6 @@
 		DEA883312F9758D3008FC71A = {
 			isa = PBXGroup;
 			children = (
-				DEAB9BB22F98D02400B4A412 /* CLAUDE.md */,
 				DEA8833C2F9758D3008FC71A /* MileageTrackeriOS */,
 				DEA8834C2F9758D6008FC71A /* MileageTrackeriOSTests */,
 				DEA883562F9758D6008FC71A /* MileageTrackeriOSUITests */,
@@ -256,7 +267,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				DEAB9BB32F98D03400B4A412 /* CLAUDE.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

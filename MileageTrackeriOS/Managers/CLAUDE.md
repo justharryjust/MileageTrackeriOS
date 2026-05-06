@@ -70,13 +70,35 @@ idle → detecting → recording → ending → idle (trip saved)
 
 `departureAnchorLocation: CLLocation?` — stored when `onRegionDeparture` fires. On trip confirmation it is prepended to `collectedLocations`, making the region center (parking spot) the authoritative geographic trip start. Consumed and cleared on confirm or reset.
 
+### Trip start paths
+
+Three independent paths can start a trip — no single signal is required.
+
+| Path | Trigger | Why |
+|------|---------|-----|
+| A — CMMotion | `handleActivityUpdate`: automotive activity (medium/high confidence, or low when geofence/car-kit backed) → `.detecting` → GPS peak-speed gate → `.recording` | Primary path. Reliable when device motion is clear. Confidence filter blocks buses/trams/elevators. Low-confidence accepted when a geographic or hardware pre-arm backs it. |
+| B — Geofence + GPS | `handleRegionDeparture` starts high-accuracy GPS; `handleLocationUpdate` idle: speed ≥ 8 km/h with live region anchor → `.detecting` | Geofence exit proves the car left its parking spot. GPS speed then confirms movement without CMMotion — useful in parking garages or when CMMotion is slow to report. |
+| C — Car-kit + GPS | `handleCarKitConnected` starts high-accuracy GPS; `handleLocationUpdate` idle: speed ≥ 8 km/h with live car-kit pre-arm → `.detecting` | Bluetooth car-kit connect is strong driver intent. GPS streams immediately so speed can confirm movement before CMMotion wakes up. |
+
+All paths converge on `.detecting` → GPS speed/window confirmation → `.recording`.
+
+### Trip end paths
+
+Two independent paths can end a trip.
+
+| Path | Trigger | Why |
+|------|---------|-----|
+| A — CMMotion | `handleActivityUpdate` in recording: stationary/non-automotive (medium/high confidence) → 60 s stationary timer → `.ending` | Primary path. CMMotion reliably detects when the car stops. Medium/high threshold avoids false ends at traffic lights. |
+| B — GPS speed | `handleLocationUpdate` in recording: speed below threshold for 60 s (via `lastMovingAt`) → stationary timer | Catches stops where CMMotion is delayed, stuck on automotive, or unavailable. |
+| C — Car-kit disconnect | `handleCarKitDisconnected` in recording → immediate stationary timer | Engine off / exiting the car typically disconnects car Bluetooth. Fires the end window immediately rather than waiting for CMMotion to catch up. Disconnect during `.detecting` or `.idle` does **not** end a trip — the user may be changing audio source mid-drive. |
+
 ### Pre-arm signals
 
 | Signal | Window | Effect |
 |--------|--------|--------|
-| CLVisit / region departure | 600 s | Sets `visitDepartureAt`, enables fast-track |
-| Car-kit connect | 600 s | Sets `carKitConnectExpiry`, enables fast-track |
-| Car-kit disconnect | immediate | Starts end timer if recording |
+| CLVisit / region departure | 600 s | Sets `visitDepartureAt`, enables fast-track; region departure also starts high-accuracy GPS immediately (path B) |
+| Car-kit connect | 600 s | Sets `carKitConnectExpiry`, enables fast-track, starts high-accuracy GPS immediately (path C) |
+| Car-kit disconnect in `.recording` | immediate | Starts stationary timer (end path C) |
 
 ---
 
