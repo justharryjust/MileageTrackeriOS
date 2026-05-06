@@ -1,49 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xcodebuild -scheme MileageTrackeriOS -destination 'generic/platform/iOS' build)",
-      "Bash(xcodebuild -project MileageTrackeriOS.xcodeproj -scheme MileageTrackeriOS -destination 'platform=iOS Simulator,name=iPhone 16' build)",
-      "Bash(xcodebuild -project MileageTrackeriOS.xcodeproj -scheme MileageTrackeriOS -destination 'platform=iOS Simulator,name=iPhone 17' build)",
-      "Bash(xcodebuild -project MileageTrackeriOS.xcodeproj -scheme MileageTrackeriOS -destination 'platform=iOS Simulator,name=iPhone 17' test)",
-      "WebSearch",
-      "Bash(ruby -e \"require 'xcodeproj'\")",
-      "Bash(echo \"exit: $?\")",
-      "Bash(xcodebuild -project MileageTrackeriOS.xcodeproj -scheme MileageTrackerWidgetExtension -destination 'platform=iOS Simulator,name=iPhone 17' build)",
-      "Bash(xcodebuild *)",
-      "Bash(plutil -p /Users/harryjust/Library/Developer/Xcode/DerivedData/MileageTrackeriOS-eltodccjqpwiyldzwazmplphntfz/Build/Products/Debug-iphonesimulator/MileageTrackeriOS.app/Info.plist)",
-      "Bash(plutil -p /Users/harryjust/Library/Developer/Xcode/DerivedData/MileageTrackeriOS-eltodccjqpwiyldzwazmplphntfz/Build/Products/Debug-iphonesimulator/MileageTrackeriOS.app/PlugIns/MileageTrackerWidgetExtension.appex/Info.plist)",
-      "Bash(xcrun xcodebuild *)",
-      "Bash(xcrun simctl *)",
-      "Bash(git -C /Users/harryjust/Development/MileageTracker/MileageTrackeriOS status)",
-      "Bash(git -C /Users/harryjust/Development/MileageTracker/MileageTrackeriOS log -3 --oneline)",
-      "Bash(git -C /Users/harryjust/Development/MileageTracker/MileageTrackeriOS log --oneline 95e9eb9..1ba155e)",
-      "Bash(git -C /Users/harryjust/Development/MileageTracker/MileageTrackeriOS show --stat 1ba155e)",
-      "Bash(git -C /Users/harryjust/Development/MileageTracker/MileageTrackeriOS show 1ba155e -- MileageTrackeriOS/Managers/TripRecorder.swift MileageTrackeriOS/Managers/BluetoothManager.swift)",
-      "Bash(grep -n *)",
-      "Read(//Users/harryjust/Development/MileageTracker/MileageTrackeriOS/**)",
-      "Bash(git -C /Users/harryjust/Development/MileageTracker/MileageTrackeriOS add MileageTrackeriOS/Managers/TripRecorder.swift)",
-      "Bash(git -C /Users/harryjust/Development/MileageTracker/MileageTrackeriOS commit --no-edit)",
-      "Bash(AIR=\"127305A2-9DC7-4E77-8F12-E311EB18BAAA\" *)",
-      "Bash(ping -c 4 127.0.0.1)",
-      "Bash(crontab -l)",
-      "Bash(ps -eo pid,etime,command)",
-      "Bash(bash /private/tmp/claude-501/-Users-harryjust-Development-MileageTracker-MileageTrackeriOS/a0ebbbf4-42ba-4389-a53b-176e96a2ab01/scratchpad/create_tickets.sh)",
-      "Bash(awk '{print \"size\",$2,\" used\",$3,\" avail\",$4,\" \\(\"$5\" used\\)\"}')",
-      "Bash(memory_pressure)",
-      "Bash(vm_stat)"
-    ]
-  },
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "git diff --name-only -- '*/*.swift' | grep -q . && git diff --name-only -- '*/*.swift' | while IFS= read -r file; do dir=$(dirname \"$file\"); echo \"  • $file → check $dir/CLAUDE.md\"; done"
-          }
-        ]
-      }
+      "Bash(xcodebuild -scheme MileageTrackeriOS -destination 'generic/platform=iOS' build)"
     ]
   }
 }

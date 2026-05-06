@@ -26,8 +26,11 @@ final class UserProfileRepository {
         }
 
         profile = realm.object(ofType: UserProfile.self, forPrimaryKey: "singleton")!
-
-        // Populate default tracking schedule if this is a new or migrated profile
+        hasCompletedOnboarding = profile.hasCompletedOnboarding
+        
+        
+        
+        //   Populate default tracking schedule if this is a new or migrated profile
         if profile.trackingSchedule.isEmpty { populateDefaultSchedule() }
 
         // Observe profile changes
@@ -102,9 +105,8 @@ final class UserProfileRepository {
         set { write { self.profile.distanceUnit = newValue } }
     }
 
-    var hasCompletedOnboarding: Bool {
-        get { profile.hasCompletedOnboarding }
-        set { write { self.profile.hasCompletedOnboarding = newValue } }
+    var hasCompletedOnboarding: Bool = true {
+        didSet { write { self.profile.hasCompletedOnboarding = hasCompletedOnboarding } }
     }
 
     // MARK: - Vehicle Management
