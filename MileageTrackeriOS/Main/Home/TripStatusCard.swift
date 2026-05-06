@@ -30,9 +30,9 @@ struct TripStatusCard: View {
                         switch state {
                         case .idle:
                             Text("Waiting for your next drive")
-                        case .detecting(let since):
+                        case .suspected(let since, _):
                             Text("Confirming drive… \(Int(Date().timeIntervalSince(since)))s")
-                        case .recording:
+                        case .active:
                             HStack(spacing: MTSpacing.sm) {
                                 if let dist = state.distanceString() {
                                     Label(dist, systemImage: "arrow.right")
@@ -41,8 +41,10 @@ struct TripStatusCard: View {
                                     Label(dur, systemImage: "timer")
                                 }
                             }
-                        case .ending:
-                            Text("Checking if trip has ended…")
+                        case .pausing(_, _, let pauseStart):
+                            Text("Paused — \(Int(Date().timeIntervalSince(pauseStart)))s")
+                        case .ending(_, _, let reason):
+                            Text(reason == .walkingDetected ? "Walking detected — finishing…" : "Finishing trip…")
                         }
                     }
                     .font(.system(size: 13))
@@ -59,7 +61,7 @@ struct TripStatusCard: View {
             .padding(MTSpacing.md)
 
             // Expanded recording info strip
-            if case .recording = state {
+            if state.isRecording {
                 Divider().padding(.horizontal, MTSpacing.md)
                 RecordingStrip(locationManager: appState.locationManager)
                     .padding(MTSpacing.md)
@@ -89,8 +91,8 @@ struct TripStatusCard: View {
                 elapsedSeconds += 1
             }
         }
-        // Pulse animation for recording state
-        if case .recording = state {
+        // Pulse animation for recording states
+        if state.isRecording {
             withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
                 pulseScale = 1.35
             }
@@ -114,8 +116,9 @@ private struct StatusDot: View {
     var dotColor: Color {
         switch state {
         case .idle:      return Color.mtBorder
-        case .detecting: return Color.mtWarning
-        case .recording: return Color.mtRecording
+        case .suspected: return Color.mtWarning
+        case .active:    return Color.mtRecording
+        case .pausing:   return Color.orange
         case .ending:    return Color.mtGreenDark
         }
     }

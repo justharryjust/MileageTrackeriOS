@@ -346,42 +346,77 @@ struct DayScheduleSnapshot: Identifiable {
 
 enum TripRecorderState: Equatable {
     case idle
-    case detecting(since: Date)
-    case recording(startedAt: Date, distanceMetres: Double)
-    case ending(recordingStartedAt: Date, stoppedAt: Date, distanceMetres: Double)
+    case suspected(since: Date, reason: SuspectedReason)
+    case active(startedAt: Date, distanceMetres: Double)
+    case pausing(startedAt: Date, distanceMetres: Double, pauseStart: Date)
+    case ending(startedAt: Date, distanceMetres: Double, reason: EndingReason)
 
+    enum SuspectedReason: Equatable {
+        case carPlay
+        case knownCarBT
+        case geofenceExit
+        case visitDeparture
+        case motion
+        case slcMoving
+    }
+
+    enum EndingReason: Equatable {
+        case fastPath
+        case walkingDetected
+        case pauseLimitExceeded
+        case userForced
+    }
+
+    /// True when a trip is in progress (recording or pausing).
+    var isRecording: Bool {
+        switch self {
+        case .active, .pausing: return true
+        default: return false
+        }
+    }
+
+    /// True when any non-idle state is active, for UI border/pulse.
     var isActive: Bool {
         switch self {
-        case .recording, .ending: return true
-        default: return false
+        case .idle: return false
+        default: return true
         }
     }
 
     var displayTitle: String {
         switch self {
         case .idle:      return "No Active Trip"
-        case .detecting: return "Detecting Trip…"
-        case .recording: return "Recording Trip"
+        case .suspected: return "Detecting Trip…"
+        case .active:    return "Recording Trip"
+        case .pausing:   return "Trip Paused"
         case .ending:    return "Finishing Trip…"
         }
     }
 
-    func durationString(now: Date = Date()) -> String? {
+    /// Returns the startedAt date for any non-idle state.
+    var startedAt: Date? {
         switch self {
-        case .recording(let start, _), .ending(let start, _, _):
-            let elapsed = now.timeIntervalSince(start)
-            let h = Int(elapsed) / 3600
-            let m = (Int(elapsed) % 3600) / 60
-            let s = Int(elapsed) % 60
-            if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
-            return String(format: "%02d:%02d", m, s)
-        default: return nil
+        case .idle:                                          return nil
+        case .suspected(let since, _):                       return since
+        case .active(let startedAt, _):                      return startedAt
+        case .pausing(let startedAt, _, _):                  return startedAt
+        case .ending(let startedAt, _, _):                   return startedAt
         }
+    }
+
+    func durationString(now: Date = Date()) -> String? {
+        guard let start = startedAt else { return nil }
+        let elapsed = now.timeIntervalSince(start)
+        let h = Int(elapsed) / 3600
+        let m = (Int(elapsed) % 3600) / 60
+        let s = Int(elapsed) % 60
+        if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
+        return String(format: "%02d:%02d", m, s)
     }
 
     func distanceString() -> String? {
         switch self {
-        case .recording(_, let d), .ending(_, _, let d):
+        case .active(_, let d), .pausing(_, let d, _), .ending(_, let d, _):
             if d < 1000 { return String(format: "%.0f m", d) }
             return String(format: "%.1f km", d / 1000)
         default: return nil

@@ -11,26 +11,27 @@ struct WelcomeStep: View {
             VStack(spacing: MTSpacing.lg) {
                 ZStack {
                     Circle()
-                        .fill(Color.mtGreen.opacity(0.15))
-                        .frame(width: 100, height: 100)
+                        .fill(Color.mtGreen.opacity(0.12))
+                        .frame(width: 88, height: 88)
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 52, weight: .medium))
+                        .font(.system(size: 44, weight: .medium))
                         .foregroundStyle(Color.mtGreen)
                 }
 
                 VStack(spacing: MTSpacing.sm) {
-                    Text("You're all set!")
-                        .font(.system(size: 34, weight: .bold))
+                    Text("You're all set")
+                        .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(Color.mtTextPrimary)
 
                     Text("MileageTracker will automatically detect and log your trips in the background.")
-                        .font(.system(size: 17))
+                        .font(.system(size: 15))
                         .foregroundStyle(Color.mtTextSub)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, MTSpacing.lg)
                 }
 
-                VStack(alignment: .leading, spacing: MTSpacing.md) {
+                VStack(alignment: .leading, spacing: MTSpacing.sm) {
                     SummaryRow(icon: "location.fill",   color: .mtGreen,  text: "Location access granted")
                     SummaryRow(icon: "figure.walk",     color: .blue,     text: "Motion detection ready")
                     SummaryRow(icon: "car.fill",        color: .orange,   text: "Vehicle added")
@@ -58,9 +59,9 @@ private struct SummaryRow: View {
     var body: some View {
         HStack(spacing: MTSpacing.md) {
             Image(systemName: icon)
-                .font(.system(size: 18))
+                .font(.system(size: 16))
                 .foregroundStyle(color)
-                .frame(width: 28)
+                .frame(width: 24)
             Text(text)
                 .font(.system(size: 15))
                 .foregroundStyle(Color.mtTextPrimary)

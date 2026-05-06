@@ -1,24 +1,23 @@
-// oardingView — NavigationStack-based 7-step onboarding coordinator
+// OnboardingView — step-based onboarding coordinator with clean, lightweight transitions
 
 import SwiftUI
 
 // MARK: - Steps Enum
 
 enum OnboardingStep: Int, CaseIterable {
-    case jurisdiction      = 0
-    case vehicleAndUnit    = 1
-    case claimMethod       = 2
-    case locationPermission = 3
-    case motionPermission  = 4
-    case trackingHours     = 5
-    case welcome           = 6
+    case intro          = 0
+    case jurisdiction   = 1
+    case vehicleAndUnit = 2
+    case claimMethod    = 3
+    case permissions    = 4
+    case trackingHours  = 5
+    case welcome        = 6
 }
 
 // MARK: - Shared ViewModel
 
 @Observable
 final class OnboardingViewModel {
-    // ISO-3166-1 alpha-2 code chosen in JurisdictionStep; maps to Jurisdiction on complete()
     var regionCode: String = {
         Locale.current.region?.identifier ?? "NZ"
     }()
@@ -40,10 +39,8 @@ final class OnboardingViewModel {
     var fuelType: FuelType          = .petrol
     var trackingSchedule: [DayScheduleSnapshot] = DayScheduleSnapshot.defaults
 
-    var currentStep: OnboardingStep = .jurisdiction
-    private(set) var goingForward: Bool = true
+    var currentStep: OnboardingStep = .intro
 
-    /// Set to true when setup is done — OnboardingView observes this
     var isCompleted: Bool = false
 
     var isVehicleValid: Bool {
@@ -52,14 +49,12 @@ final class OnboardingViewModel {
 
     func advance() {
         guard let next = OnboardingStep(rawValue: currentStep.rawValue + 1) else { return }
-        goingForward = true
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) { currentStep = next }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { currentStep = next }
     }
 
     func goBack() {
         guard let prev = OnboardingStep(rawValue: currentStep.rawValue - 1) else { return }
-        goingForward = false
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) { currentStep = prev }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { currentStep = prev }
     }
 
     func complete(using appState: AppState) {
@@ -93,77 +88,70 @@ struct OnboardingView: View {
             Color.mtBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Top bar: back button + progress
-                HStack(spacing: MTSpacing.md) {
-                    if vm.currentStep != .jurisdiction {
-                        Button {
-                            vm.goBack()
-                        } label: {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundStyle(Color.mtTextPrimary)
-                                .frame(width: 36, height: 36)
-                                .background(Color.mtSurface)
-                                .clipShape(Circle())
-                        }
-                        .transition(.opacity)
-                    } else {
-                        Spacer().frame(width: 36)
-                    }
+                // Top bar — back button + progress dots
+                topBar
+                    .padding(.horizontal, MTSpacing.lg)
+                    .padding(.top, MTSpacing.md)
 
-                    ProgressBar(step: vm.currentStep)
-
-                    Spacer().frame(width: 36)
-                }
-                .padding(.horizontal, MTSpacing.md)
-                .padding(.top, MTSpacing.md)
-
-                Spacer()
-            }
-
-            VStack {
-                switch vm.currentStep {
-                case .jurisdiction:       JurisdictionStep(vm: vm)
-                case .vehicleAndUnit:     VehicleAndUnitStep(vm: vm)
-                case .claimMethod:        ClaimMethodStep(vm: vm)
-                case .locationPermission: LocationPermissionStep(vm: vm)
-                case .motionPermission:   MotionPermissionStep(vm: vm)
-                case .trackingHours:      TrackingHoursStep(vm: vm)
-                case .welcome:            WelcomeStep(vm: vm)
-                }
-            }
-            .id(vm.currentStep)
-            .transition(
-                .asymmetric(
-                    insertion: .move(edge: vm.goingForward ? .trailing : .leading).combined(with: .opacity),
-                    removal:   .move(edge: vm.goingForward ? .leading  : .trailing).combined(with: .opacity)
-                )
-            )
-            .padding(.top, 50)
-        }
-        // No broad .animation here — each transition is driven by withAnimation in advance()/goBack()
-    }
-}
-
-// MARK: - Progress Bar
-
-private struct ProgressBar: View {
-    let step: OnboardingStep
-
-    private var progress: Double {
-        Double(step.rawValue) / Double(OnboardingStep.allCases.count - 1)
-    }
-
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.mtBorder).frame(height: 4)
-                Capsule().fill(Color.mtGreen)
-                    .frame(width: max(geo.size.width * progress, 0), height: 4)
-                    .animation(.spring(response: 0.5), value: progress)
+                // Step content
+                stepContent
+                    .frame(maxHeight: .infinity)
             }
         }
-        .frame(height: 4)
+    }
+
+    // MARK: - Top Bar
+
+    private var topBar: some View {
+        HStack(spacing: MTSpacing.md) {
+            // Back button — hidden on first step
+            if vm.currentStep != .intro {
+                Button { vm.goBack() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.mtTextSub)
+                }
+            } else {
+                Color.clear.frame(width: 24)
+            }
+
+            // Progress dots
+            HStack(spacing: 6) {
+                ForEach(OnboardingStep.allCases, id: \.rawValue) { step in
+                    Capsule()
+                        .fill(step.rawValue <= vm.currentStep.rawValue ? Color.mtGreen : Color.mtBorder)
+                        .frame(
+                            width: step.rawValue == vm.currentStep.rawValue ? 24 : 8,
+                            height: 8
+                        )
+                        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: vm.currentStep)
+                }
+            }
+            .frame(maxWidth: .infinity)
+
+            // Spacer to balance the back button
+            Color.clear.frame(width: 24)
+        }
+        .frame(height: 32)
+    }
+
+    // MARK: - Step Content
+
+    private var stepContent: some View {
+        Group {
+            switch vm.currentStep {
+            case .intro:          IntroStep(vm: vm)
+            case .jurisdiction:   JurisdictionStep(vm: vm)
+            case .vehicleAndUnit: VehicleAndUnitStep(vm: vm)
+            case .claimMethod:    ClaimMethodStep(vm: vm)
+            case .permissions:    PermissionsStep(vm: vm)
+            case .trackingHours:  TrackingHoursStep(vm: vm)
+            case .welcome:        WelcomeStep(vm: vm)
+            }
+        }
+        .id(vm.currentStep)
+        .transition(.opacity.combined(with: .offset(y: 12)))
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: vm.currentStep)
     }
 }
 
@@ -175,39 +163,48 @@ struct OnboardingStepShell<Content: View>: View {
     let title: String
     let subtitle: String
     @ViewBuilder let content: () -> Content
+    var contentScrolls: Bool = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: MTSpacing.lg) {
-                // Icon — animates independently with scale+fade
-                ZStack {
-                    Circle()
-                        .fill(iconColor.opacity(0.15))
-                        .frame(width: 72, height: 72)
-                    Image(systemName: icon)
-                        .font(.system(size: 32, weight: .medium))
-                        .foregroundStyle(iconColor)
+        Group {
+            if contentScrolls {
+                ScrollView {
+                    innerContent
                 }
-                .padding(.top, MTSpacing.xxl + 10)
-                .transition(.scale(scale: 0.7).combined(with: .opacity))
-                .id(icon) // triggers its own transition when icon changes between steps
-
-                // Heading
-                VStack(alignment: .leading, spacing: MTSpacing.sm) {
-                    Text(title)
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundStyle(Color.mtTextPrimary)
-                    Text(subtitle)
-                        .font(.system(size: 16))
-                        .foregroundStyle(Color.mtTextSub)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                content()
-
-                Spacer(minLength: MTSpacing.xxl)
+            } else {
+                innerContent
             }
-            .padding(.horizontal, MTSpacing.lg)
         }
+    }
+
+    private var innerContent: some View {
+        VStack(alignment: .leading, spacing: MTSpacing.lg) {
+            // Icon — smaller, less padding
+            ZStack {
+                Circle()
+                    .fill(iconColor.opacity(0.12))
+                    .frame(width: 56, height: 56)
+                Image(systemName: icon)
+                    .font(.system(size: 26, weight: .medium))
+                    .foregroundStyle(iconColor)
+            }
+            .padding(.top, MTSpacing.lg)
+
+            // Heading
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 26, weight: .bold))
+                    .foregroundStyle(Color.mtTextPrimary)
+                Text(subtitle)
+                    .font(.system(size: 15))
+                    .foregroundStyle(Color.mtTextSub)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            content()
+
+            Spacer(minLength: MTSpacing.xl)
+        }
+        .padding(.horizontal, MTSpacing.lg)
     }
 }
