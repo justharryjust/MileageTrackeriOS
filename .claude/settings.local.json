@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xcodebuild -scheme MileageTrackeriOS -destination 'generic/platform=iOS' build)"
+      "Bash(xcodebuild -scheme MileageTrackeriOS -destination 'generic/platform=iOS' build)",
+      "Bash(xcodebuild -project MileageTrackeriOS.xcodeproj -scheme MileageTrackeriOS -destination 'platform=iOS Simulator,name=iPhone 16' build)",
+      "Bash(xcodebuild -project MileageTrackeriOS.xcodeproj -scheme MileageTrackeriOS -destination 'platform=iOS Simulator,name=iPhone 17' build)",
+      "Bash(xcodebuild -project MileageTrackeriOS.xcodeproj -scheme MileageTrackeriOS -destination 'platform=iOS Simulator,name=iPhone 17' test)"
     ]
   }
 }

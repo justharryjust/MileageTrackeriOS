@@ -31,6 +31,7 @@ struct CarKitEvent {
     enum EventType { case connected, disconnected }
     let type      : EventType
     let deviceName: String
+    let portUID   : String?   // AVAudioSessionPortDescription.uid — stable-enough BT fingerprint
     let timestamp : Date
 }
 
@@ -92,11 +93,12 @@ final class BluetoothManager {
             let carPorts = carKitPorts(in: session.currentRoute.outputs)
             if let port = carPorts.first {
                 let name = port.portName
+                let uid  = port.uid
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
                     self.connectedCarKitName = name
-                    let event = CarKitEvent(type: .connected, deviceName: name, timestamp: Date())
-                    self.logger.log("Car kit connected: \"\(name)\"", category: .system)
+                    let event = CarKitEvent(type: .connected, deviceName: name, portUID: uid, timestamp: Date())
+                    self.logger.log("Car kit connected: \"\(name)\" uid:\(uid)", category: .system)
                     self.onCarKitConnected?(event)
                 }
             }
@@ -107,11 +109,12 @@ final class BluetoothManager {
             let removedCarPorts = carKitPorts(in: previous.outputs)
             if let port = removedCarPorts.first {
                 let name = port.portName
+                let uid  = port.uid
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
                     self.connectedCarKitName = nil
-                    let event = CarKitEvent(type: .disconnected, deviceName: name, timestamp: Date())
-                    self.logger.log("Car kit disconnected: \"\(name)\"", category: .system)
+                    let event = CarKitEvent(type: .disconnected, deviceName: name, portUID: uid, timestamp: Date())
+                    self.logger.log("Car kit disconnected: \"\(name)\" uid:\(uid)", category: .system)
                     self.onCarKitDisconnected?(event)
                 }
             }

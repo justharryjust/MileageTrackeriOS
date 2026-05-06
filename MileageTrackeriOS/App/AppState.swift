@@ -55,9 +55,10 @@ final class AppState {
     /// Call once onboarding is complete (or on app launch when already onboarded).
     func startTracking() {
         motionManager.startActivityUpdates()
+        motionManager.startBatteryMonitoring()
         bluetoothManager.startMonitoring()
         locationManager.startSignificantLocationMonitoring()
         locationManager.startVisitMonitoring()
-        TripLogger.shared.log("Tracking started — motion, bluetooth, significant-location, and visit monitoring active", category: .system)
+        TripLogger.shared.log("Tracking started — motion, pedometer, battery, bluetooth, significant-location, and visit monitoring active", category: .system)
     }
 }

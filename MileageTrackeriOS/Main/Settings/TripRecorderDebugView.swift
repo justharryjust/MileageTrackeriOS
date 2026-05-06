@@ -29,6 +29,7 @@ struct TripRecorderDebugView: View {
             locationSection
             carKitSection
             visitSection
+            pedometerBatterySection
             logSection
         }
         .navigationTitle("Trip Recorder Debug")
@@ -205,7 +206,7 @@ struct TripRecorderDebugView: View {
                 label: "Simulate Car Kit Connected",
                 icon: "car.side.and.exclamationmark", color: .mtGreen
             ) {
-                let event = CarKitEvent(type: .connected, deviceName: "Debug Car Kit", timestamp: Date())
+                let event = CarKitEvent(type: .connected, deviceName: "Debug Car Kit", portUID: "debug.uid", timestamp: Date())
                 log("Car kit connected: \"\(event.deviceName)\"")
                 bluetooth.onCarKitConnected?(event)
             }
@@ -215,14 +216,14 @@ struct TripRecorderDebugView: View {
                 icon: "car.side.and.exclamationmark", color: .red
             ) {
                 let name = bluetooth.connectedCarKitName ?? "Debug Car Kit"
-                let event = CarKitEvent(type: .disconnected, deviceName: name, timestamp: Date())
+                let event = CarKitEvent(type: .disconnected, deviceName: name, portUID: "debug.uid", timestamp: Date())
                 log("Car kit disconnected: \"\(event.deviceName)\"")
                 bluetooth.onCarKitDisconnected?(event)
             }
         } header: {
             Label("Car Kit Events", systemImage: "car.side")
         } footer: {
-            Text("Connect fires the pre-arm window and anchors the trip start. Disconnect during recording starts the end timer immediately — simulating engine off.")
+            Text("Connect fires pre-arm and anchors trip start. Disconnect mid-trip no longer ends immediately — soft signal (motion + speed recency, charging) holds the trip alive per v2 rules.")
                 .font(.caption)
         }
     }
@@ -240,6 +241,14 @@ struct TripRecorderDebugView: View {
             }
 
             DebugButton(
+                label: "Simulate Visit Arrival (now)",
+                icon: "figure.walk.arrival", color: .teal
+            ) {
+                log("Visit arrival injected")
+                location.onVisitArrival?()
+            }
+
+            DebugButton(
                 label: "Simulate Significant Location Wake",
                 icon: "antenna.radiowaves.left.and.right", color: .teal
             ) {
@@ -252,17 +261,68 @@ struct TripRecorderDebugView: View {
                 label: "Force Trip Finalisation",
                 icon: "stop.fill", color: .red
             ) {
-                if case .recording(let start, let dist) = recorder.state {
-                    log("Force finalise — dist: \(Int(dist))m")
-                    recorder.finaliseTripAndReset(startedAt: start, distance: dist)
+                if recorder.state.isRecording {
+                    log("Force finalise — state: \(recorder.state.displayTitle)")
+                    recorder.forceFinaliseFromDebug()
                 } else {
-                    log("⚠️ Not in recording state — cannot finalise")
+                    log("⚠️ Not recording — cannot finalise")
                 }
             }
         } header: {
             Label("Visit & Wake Events", systemImage: "bell.and.waveform")
         } footer: {
             Text("Visit departure triggers the pre-arm window AND the motion catch-up query — same as a real background wake.")
+                .font(.caption)
+        }
+    }
+
+    // MARK: - Pedometer / Battery Injection
+
+    private var pedometerBatterySection: some View {
+        Section {
+            DebugButton(
+                label: "Inject Pedometer Steps (0)",
+                icon: "shoeprints.fill", color: .gray
+            ) {
+                log("Pedometer: 0 steps in 30s")
+                motion.onPedometerUpdate?(0)
+            }
+
+            DebugButton(
+                label: "Inject Pedometer Steps (15)",
+                icon: "shoeprints.fill", color: .blue
+            ) {
+                log("Pedometer: 15 steps in 30s")
+                motion.onPedometerUpdate?(15)
+            }
+
+            DebugButton(
+                label: "Inject Pedometer Steps (45) — triggers walking",
+                icon: "shoeprints.fill", color: .red
+            ) {
+                log("Pedometer: 45 steps in 30s — walking threshold")
+                motion.onPedometerUpdate?(45)
+            }
+
+            DebugButton(
+                label: "Inject Battery: Charging",
+                icon: "battery.100.bolt", color: .mtGreen
+            ) {
+                log("Battery state: charging")
+                motion.onBatteryStateChange?(.charging)
+            }
+
+            DebugButton(
+                label: "Inject Battery: Unplugged",
+                icon: "battery.75", color: .orange
+            ) {
+                log("Battery state: unplugged")
+                motion.onBatteryStateChange?(.unplugged)
+            }
+        } header: {
+            Label("Pedometer & Battery", systemImage: "sensor.fill")
+        } footer: {
+            Text("Pedometer steps > 30 in 30s triggers walking rejection. Battery charging during trip counts as soft engine signal.")
                 .font(.caption)
         }
     }
@@ -335,18 +395,20 @@ struct TripRecorderDebugView: View {
 
     private var stateLabel: String {
         switch recorder.state {
-        case .idle:                        return "idle"
-        case .detecting(let since):        return "detecting (\(Int(abs(since.timeIntervalSinceNow)))s)"
-        case .recording(_, let dist):      return "recording (\(String(format: "%.0f", dist / 1000))km)"
-        case .ending(_, let stopped, _):   return "ending (\(Int(abs(stopped.timeIntervalSinceNow)))s ago)"
+        case .idle:                                    return "idle"
+        case .suspected(let since, let reason):        return "suspected (\(Int(abs(since.timeIntervalSinceNow)))s \(reason))"
+        case .active(_, let dist):                     return "active (\(String(format: "%.0f", dist / 1000))km)"
+        case .pausing(_, let dist, let ps):            return "pausing (\(String(format: "%.0f", dist / 1000))km paused \(Int(abs(ps.timeIntervalSinceNow)))s)"
+        case .ending(_, let dist, let reason):         return "ending (\(String(format: "%.0f", dist / 1000))km \(reason))"
         }
     }
 
     private var stateColor: Color {
         switch recorder.state {
         case .idle:        return .gray
-        case .detecting:   return .orange
-        case .recording:   return .mtGreen
+        case .suspected:   return .orange
+        case .active:      return .mtGreen
+        case .pausing:     return .orange
         case .ending:      return .red
         }
     }

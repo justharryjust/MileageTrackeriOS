@@ -30,6 +30,9 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     /// Delivers the departure time — TripRecorder uses this to pre-arm detection.
     var onVisitDeparture: ((Date) -> Void)?
 
+    /// Fires when the OS detects the user has arrived at a known visit location.
+    var onVisitArrival: (() -> Void)?
+
     /// Fires on a region exit with a CLLocation anchored to the region center.
     /// TripRecorder uses this as the authoritative geographic trip start point.
     var onRegionDeparture: ((CLLocation) -> Void)?
@@ -41,6 +44,10 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     /// Tracks the last time a background wake was received, used as the `since` date
     /// for motion catch-up queries.
     private(set) var lastBackgroundWakeAt: Date?
+
+    /// Cached from the most recent SLC/visit/region fix. Used as the cold-start
+    /// polyline anchor when GPS hasn't acquired yet (e.g. underground garage).
+    private(set) var lastGoodFix: CLLocation?
 
     override init() {
         super.init()
@@ -180,6 +187,15 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         }
     }
 
+    // MARK: - One-Shot Location (cold-start fallback)
+
+    /// Requests a single high-accuracy fix. Used as a fallback when `lastGoodFix` is nil
+    /// and TripRecorder needs a start coordinate immediately.
+    func requestOneShotLocation() {
+        manager.requestLocation()
+        logger.log("Requested one-shot location", category: .location)
+    }
+
     // MARK: - CLLocationManagerDelegate
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
@@ -210,6 +226,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         // A departure is signalled when departureDate is not distantFuture
         guard visit.departureDate != .distantFuture else {
             logger.log("CLVisit arrival recorded at (\(String(format:"%.4f",visit.coordinate.latitude)), \(String(format:"%.4f",visit.coordinate.longitude)))", category: .location)
+            onVisitArrival?()
             return
         }
         logger.log("CLVisit departure at \(visit.departureDate) — notifying TripRecorder", category: .location)
@@ -274,6 +291,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
 
         currentLocation = loc
         lastKnownSpeed  = loc.speed
+        lastGoodFix     = loc
 
         let speedKmh = loc.speed >= 0 ? String(format: "%.1f km/h", loc.speed * 3.6) : "unknown speed"
         let acc      = String(format: "±%.0fm", loc.horizontalAccuracy)

@@ -1,19 +1,17 @@
-// MotionManager — CMMotionActivityManager wrapper
-// Classifies current physical activity (automotive, walking, stationary, etc.)
-// and feeds that signal into TripRecorder to make trip start/end decisions.
+// MotionManager — CoreMotion wrapper
+// Classifies physical activity (automotive, walking, stationary, etc.),
+// tracks pedometer step cadence, relative altitude changes, and battery state.
+// Feeds all signals into TripRecorder for trip start/end decisions.
 //
 // BACKGROUND BEHAVIOUR:
-//  • Updates are delivered to a dedicated serial background OperationQueue, not .main.
-//    This ensures the M-series coprocessor can deliver batched updates during brief
-//    background wakes (visit departure, significant-location) without waiting for the
-//    main run loop to resume.
+//  • Activity updates are delivered to a dedicated serial background OperationQueue.
+//  • Pedometer & altimeter updates run on their own internal queues.
 //  • @Observable state mutations are dispatched back to @MainActor explicitly.
-//  • queryRecentActivity(since:) should be called whenever the app is woken from
-//    background (AppDelegate/SceneDelegate applicationDidBecomeActive or background task)
-//    to catch up on any activities that occurred while the app was fully suspended.
+//  • queryRecentActivity(since:) replays missed activities after background wakes.
 
 import Foundation
 import CoreMotion
+import UIKit
 
 // MARK: - Detected Activity
 
@@ -54,18 +52,29 @@ final class MotionManager {
     var currentActivity: DetectedActivity?
     var isAvailable: Bool = CMMotionActivityManager.isActivityAvailable()
     var isAuthorized: Bool = false
+    var isPedometerAvailable: Bool = CMPedometer.isStepCountingAvailable()
+    var isAltimeterAvailable: Bool = CMAltimeter.isRelativeAltitudeAvailable()
 
-    // Callback fires on each new activity — TripRecorder subscribes
+    // Callbacks — wired by TripRecorder
     var onActivityUpdate: ((DetectedActivity) -> Void)?
+    var onPedometerUpdate: ((Int) -> Void)?       // step count in last 30s
+    var onAltimeterUpdate: ((Double) -> Void)?     // relative altitude change (m)
+    var onBatteryStateChange: ((UIDevice.BatteryState) -> Void)?
 
     // MARK: Private
     private let activityManager = CMMotionActivityManager()
+    private let pedometer = CMPedometer()
+    private let altimeter = CMAltimeter()
     private let logger = TripLogger.shared
-    private var isStarted = false
+    private var isActivityStarted = false
+    private var isPedometerStarted = false
+    private var isAltimeterStarted = false
+    private var isBatteryObserving = false
 
-    /// Dedicated background queue for CMMotionActivityManager delivery.
-    /// Using a background queue means updates are processed even during brief
-    /// background wakes — the coprocessor doesn't wait for the main run loop.
+    /// Rolling window of pedometer data for recent-step queries.
+    private var pedometerHistory: [(timestamp: Date, steps: Int)] = []
+    private let pedometerHistoryLock = NSLock()
+
     private let motionQueue: OperationQueue = {
         let q = OperationQueue()
         q.name = "com.mileagetracker.motionqueue"
@@ -74,20 +83,19 @@ final class MotionManager {
         return q
     }()
 
-    // MARK: - Start / Stop
+    // MARK: - Activity Updates
 
     func startActivityUpdates() {
         guard CMMotionActivityManager.isActivityAvailable() else {
             logger.log("CMMotionActivityManager not available on this device", category: .motion)
             return
         }
-        guard !isStarted else { return }
-        isStarted = true
+        guard !isActivityStarted else { return }
+        isActivityStarted = true
 
         activityManager.startActivityUpdates(to: motionQueue) { [weak self] activity in
             guard let self, let activity else { return }
             let detected = self.classify(activity)
-            // Dispatch @Observable mutations and callbacks back to MainActor
             DispatchQueue.main.async {
                 self.currentActivity = detected
                 self.isAuthorized    = true
@@ -99,26 +107,16 @@ final class MotionManager {
     }
 
     func stopActivityUpdates() {
-        guard isStarted else { return }
-        isStarted = false
+        guard isActivityStarted else { return }
+        isActivityStarted = false
         activityManager.stopActivityUpdates()
         logger.log("Stopped CMMotionActivityManager updates", category: .motion)
     }
 
     // MARK: - Catch-up query for background wakes
-    //
-    // Call this when the app is woken from background (e.g. visit departure,
-    // significant-location change). It queries the coprocessor history for
-    // activities since `since` and replays them through the normal callback
-    // in chronological order, so TripRecorder can reconstruct what happened
-    // while the app was suspended.
 
     func queryRecentActivity(since: Date) {
         guard CMMotionActivityManager.isActivityAvailable() else { return }
-        // queryActivityStarting triggers the system permission dialog on first call —
-        // same as startActivityUpdates. Only run the catch-up query once the user has
-        // explicitly granted access, otherwise a background location wake during
-        // onboarding would show the motion prompt before the user reaches that step.
         guard CMMotionActivityManager.authorizationStatus() == .authorized else {
             logger.log("Motion not authorized — skipping catch-up query", category: .motion)
             return
@@ -137,7 +135,6 @@ final class MotionManager {
                 return
             }
             self.logger.log("Motion query: replaying \(activities.count) missed activities", category: .motion)
-            // Replay in order on MainActor so TripRecorder state machine processes them sequentially
             let detected = activities.map { self.classify($0) }
             DispatchQueue.main.async {
                 for activity in detected {
@@ -149,11 +146,133 @@ final class MotionManager {
         }
     }
 
+    // MARK: - Pedometer
+
+    func startPedometerUpdates(from start: Date) {
+        guard CMPedometer.isStepCountingAvailable(), !isPedometerStarted else { return }
+        isPedometerStarted = true
+
+        pedometer.startUpdates(from: start) { [weak self] data, error in
+            guard let self, let data, error == nil else { return }
+            let steps = data.numberOfSteps.intValue
+            let now = Date()
+            self.pedometerHistoryLock.lock()
+            self.pedometerHistory.append((now, steps))
+            // Keep only last 120s
+            while let first = self.pedometerHistory.first, now.timeIntervalSince(first.timestamp) > 120 {
+                self.pedometerHistory.removeFirst()
+            }
+            self.pedometerHistoryLock.unlock()
+
+            let recent = self.recentSteps(window: 30)
+            DispatchQueue.main.async {
+                self.onPedometerUpdate?(recent)
+            }
+        }
+        logger.log("Started pedometer updates from \(start)", category: .motion)
+    }
+
+    func stopPedometerUpdates() {
+        guard isPedometerStarted else { return }
+        isPedometerStarted = false
+        pedometer.stopUpdates()
+        pedometerHistory.removeAll()
+        logger.log("Stopped pedometer updates", category: .motion)
+    }
+
+    /// Steps counted in the last `window` seconds.
+    func recentSteps(window: TimeInterval = 30) -> Int {
+        pedometerHistoryLock.lock()
+        defer { pedometerHistoryLock.unlock() }
+        let cutoff = Date().addingTimeInterval(-window)
+        guard let newest = pedometerHistory.last,
+              let oldestIdx = pedometerHistory.lastIndex(where: { $0.timestamp <= cutoff }) else {
+            // No data yet or all data is within window — return latest cumulative
+            return pedometerHistory.last?.steps ?? 0
+        }
+        let oldest = pedometerHistory[oldestIdx]
+        return max(0, newest.steps - oldest.steps)
+    }
+
+    // MARK: - Altimeter
+
+    func startAltimeterUpdates() {
+        guard CMAltimeter.isRelativeAltitudeAvailable(), !isAltimeterStarted else { return }
+        isAltimeterStarted = true
+
+        altimeter.startRelativeAltitudeUpdates(to: .main) { [weak self] data, error in
+            guard let self, let data, error == nil else { return }
+            let delta = data.relativeAltitude.doubleValue
+            self.onAltimeterUpdate?(delta)
+        }
+        logger.log("Started altimeter updates", category: .motion)
+    }
+
+    func stopAltimeterUpdates() {
+        guard isAltimeterStarted else { return }
+        isAltimeterStarted = false
+        altimeter.stopRelativeAltitudeUpdates()
+        logger.log("Stopped altimeter updates", category: .motion)
+    }
+
+    // MARK: - Battery State
+
+    func startBatteryMonitoring() {
+        guard !isBatteryObserving else { return }
+        isBatteryObserving = true
+        UIDevice.current.isBatteryMonitoringEnabled = true
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(batteryStateDidChange),
+            name: UIDevice.batteryStateDidChangeNotification,
+            object: nil
+        )
+
+        // Fire current state immediately
+        let state = UIDevice.current.batteryState
+        DispatchQueue.main.async {
+            self.onBatteryStateChange?(state)
+        }
+        logger.log("Started battery state monitoring (current: \(label(for: state)))", category: .motion)
+    }
+
+    func stopBatteryMonitoring() {
+        guard isBatteryObserving else { return }
+        isBatteryObserving = false
+        UIDevice.current.isBatteryMonitoringEnabled = false
+        NotificationCenter.default.removeObserver(self, name: UIDevice.batteryStateDidChangeNotification, object: nil)
+        logger.log("Stopped battery state monitoring", category: .motion)
+    }
+
+    @objc private func batteryStateDidChange(_ notification: Notification) {
+        let state = UIDevice.current.batteryState
+        DispatchQueue.main.async { [weak self] in
+            self?.logger.log("Battery state changed: \(self?.label(for: state) ?? "?")", category: .motion)
+            self?.onBatteryStateChange?(state)
+        }
+    }
+
+    /// Whether the device was observed to begin charging during the current trip context.
+    /// TripRecorder manages the "during trip" part — this is just the current state.
+    var isCharging: Bool {
+        UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full
+    }
+
+    private func label(for state: UIDevice.BatteryState) -> String {
+        switch state {
+        case .unknown:    return "unknown"
+        case .unplugged:  return "unplugged"
+        case .charging:   return "charging"
+        case .full:       return "full"
+        @unknown default: return "?"
+        }
+    }
+
     // MARK: - Classification
 
     private func classify(_ activity: CMMotionActivity) -> DetectedActivity {
         let type: DetectedActivity.ActivityType
-        // Priority order: automotive > cycling > running > walking > stationary
         if activity.automotive {
             type = .automotive
         } else if activity.cycling {

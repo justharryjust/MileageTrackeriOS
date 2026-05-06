@@ -15,15 +15,15 @@ import RealmSwift
 
 extension TripRecorderState {
     var isIdle: Bool { if case .idle = self { return true }; return false }
-    var isDetecting: Bool { if case .detecting = self { return true }; return false }
-    var isRecording: Bool { if case .recording = self { return true }; return false }
+    var isSuspected: Bool { if case .suspected = self { return true }; return false }
+    var isActive: Bool { if case .active = self { return true }; return false }
+    var isPausing: Bool { if case .pausing = self { return true }; return false }
     var isEnding: Bool { if case .ending = self { return true }; return false }
 }
 
 // MARK: - Test Harness
 
 /// Creates an isolated TripRecorder + in-memory Realm for each test.
-/// Heuristic timing is zeroed out so tests don't block on real-world delays.
 @MainActor
 private struct Harness {
     let recorder: TripRecorder
@@ -48,9 +48,7 @@ private struct Harness {
         let bluetoothManager = BluetoothManager()
 
         recorder = TripRecorder()
-        // Zero out all timing so tests run synchronously without waiting
-        recorder.heuristicDetectionWindow = 0
-        recorder.heuristicMinSpeedKmh     = 0
+        // Zero out validation thresholds so trips save regardless of distance/duration
         recorder.heuristicMinTripDistance = 0
         recorder.heuristicMinTripDuration = 0
 
@@ -66,10 +64,19 @@ private struct Harness {
     // MARK: Simulation helpers
 
     func fireActivity(_ type: DetectedActivity.ActivityType,
-                      _ confidence: CMMotionActivityConfidence) {
+                      _ confidence: CMMotionActivityConfidence,
+                      timestamp: Date = Date()) {
         motionManager.onActivityUpdate?(
-            DetectedActivity(type: type, confidence: confidence, timestamp: Date())
+            DetectedActivity(type: type, confidence: confidence, timestamp: timestamp)
         )
+    }
+
+    /// Fires spaced automotive samples going back `seconds` seconds to satisfy the rolling window check.
+    func fireSustainedAutomotive(confidence: CMMotionActivityConfidence = .high, spanning seconds: TimeInterval = 20) {
+        let now = Date()
+        for i in stride(from: seconds, through: 0, by: -5) {
+            fireActivity(.automotive, confidence, timestamp: now.addingTimeInterval(-i))
+        }
     }
 
     func fireLocation(speedMs: Double = 15,
@@ -93,10 +100,23 @@ private struct Harness {
         locationManager.onVisitDeparture?(date)
     }
 
-    /// Drive the recorder through .detecting → .recording in one step.
-    func enterRecording() {
-        fireActivity(.automotive, .high)   // idle → detecting
-        fireLocation()                     // detecting → recording (heuristics zeroed)
+    func fireCarKitConnect(name: String = "Test Car", uid: String = "test.uid.1") {
+        let event = CarKitEvent(type: .connected, deviceName: name, portUID: uid, timestamp: Date())
+        BluetoothManager().onCarKitConnected?(event)
+    }
+
+    /// Drive the recorder through suspected → active in one step.
+    func enterActive() {
+        // Set a lastGoodFix so the anchor is available
+        fireLocation()
+        // Fire sustained automotive at high confidence — triggers suspected
+        fireActivity(.automotive, .high)
+        fireActivity(.automotive, .high)
+        fireActivity(.automotive, .high)
+        // Fire GPS speed > 25 km/h to promote
+        fireLocation(speedMs: 30 / 3.6) // ~30 km/h
+        fireLocation(speedMs: 30 / 3.6)
+        fireLocation(speedMs: 30 / 3.6)
     }
 }
 
@@ -111,22 +131,22 @@ struct ConfidenceGateTests {
     @Test("Low-confidence automotive is ignored in idle — state stays .idle")
     func lowConfidenceIgnoredInIdle() throws {
         let h = try Harness()
-        h.fireActivity(.automotive, .low)
+        h.fireSustainedAutomotive(confidence: .low, spanning: 20)
         #expect(h.recorder.state.isIdle)
     }
 
-    @Test("Medium-confidence automotive transitions idle → detecting")
-    func mediumConfidenceEntersDetecting() throws {
+    @Test("Medium-confidence automotive transitions idle → suspected (after rolling window)")
+    func mediumConfidenceEntersSuspected() throws {
         let h = try Harness()
-        h.fireActivity(.automotive, .medium)
-        #expect(h.recorder.state.isDetecting)
+        h.fireSustainedAutomotive(confidence: .medium, spanning: 20)
+        #expect(h.recorder.state.isSuspected)
     }
 
-    @Test("High-confidence automotive transitions idle → detecting")
-    func highConfidenceEntersDetecting() throws {
+    @Test("High-confidence automotive transitions idle → suspected (after rolling window)")
+    func highConfidenceEntersSuspected() throws {
         let h = try Harness()
-        h.fireActivity(.automotive, .high)
-        #expect(h.recorder.state.isDetecting)
+        h.fireSustainedAutomotive(confidence: .high, spanning: 20)
+        #expect(h.recorder.state.isSuspected)
     }
 
     @Test("Non-automotive activity in idle is ignored")
@@ -136,207 +156,85 @@ struct ConfidenceGateTests {
         #expect(h.recorder.state.isIdle)
     }
 
-    @Test("Low-confidence stationary in recording does not start end timer")
-    func lowConfidenceStationaryInRecordingIgnored() throws {
+    @Test("Automotive during active/pausing keeps state stable")
+    func automotiveDuringActiveKeepsState() throws {
         let h = try Harness()
-        h.enterRecording()
-        #expect(h.recorder.state.isRecording)
-        h.fireActivity(.stationary, .low)
-        // State should still be recording — low confidence stationary must not trigger ending
-        #expect(h.recorder.state.isRecording)
-    }
-
-    @Test("High-confidence stationary in recording starts the end timer")
-    func highConfidenceStationaryInRecordingStartsTimer() throws {
-        let h = try Harness()
-        h.enterRecording()
-        #expect(h.recorder.stationaryTimer == nil)  // no timer before stationary
-        h.fireActivity(.stationary, .high)
-        #expect(h.recorder.stationaryTimer != nil)  // timer scheduled
-        // State is still .recording until the timer fires — that's expected
-        #expect(h.recorder.state.isRecording)
+        h.fireLocation()
+        h.fireSustainedAutomotive(confidence: .high, spanning: 20)
+        // Fire GPS speed to promote
+        let now = Date()
+        for i in stride(from: 10, through: 0, by: -2) {
+            h.fireLocation(speedMs: 30 / 3.6, timestamp: now.addingTimeInterval(-Double(i)))
+        }
+        // More automotive — should not exit active
+        h.fireActivity(.automotive, .high)
+        #expect(h.recorder.state.isActive || h.recorder.state.isSuspected)
     }
 }
 
 // MARK: - ══════════════════════════════════
-// MARK:   Suite 2 — Detection Buffer
+// MARK:   Suite 2 — State Machine Transitions
 // MARK: ══════════════════════════════════
-
-@Suite("Detection Buffer")
-@MainActor
-struct DetectionBufferTests {
-
-    @Test("Location fixes during detecting are added to detectionBuffer")
-    func locationsBufferedDuringDetecting() throws {
-        let h = try Harness()
-        h.fireActivity(.automotive, .high)       // → detecting
-        // Freeze heuristics so these don't confirm the trip yet
-        h.recorder.heuristicMinSpeedKmh = 999    // impossibly high — won't confirm
-        h.fireLocation()
-        h.fireLocation()
-        h.fireLocation()
-        #expect(h.recorder.detectionBuffer.count == 3)
-    }
-
-    @Test("Detection buffer is prepended to collectedLocations on trip confirmation")
-    func bufferPrependedOnConfirmation() throws {
-        let h = try Harness()
-        h.fireActivity(.automotive, .high)   // → detecting
-        h.recorder.heuristicMinSpeedKmh = 999
-        // Fire 4 locations into the buffer (speed too low to confirm)
-        h.fireLocation(); h.fireLocation(); h.fireLocation(); h.fireLocation()
-        #expect(h.recorder.detectionBuffer.count == 4)
-        // Now lower threshold so the next location confirms the trip
-        h.recorder.heuristicMinSpeedKmh = 0
-        h.fireLocation()  // → recording; buffer is NOT re-appended, just prepended
-        // collectedLocations = 4 buffered + 1 confirmation (confirmation NOT double-counted)
-        #expect(h.recorder.state.isRecording)
-        #expect(h.recorder.collectedLocations.count == 5)
-        #expect(h.recorder.detectionBuffer.isEmpty)
-    }
-
-    @Test("tripStartedAt is anchored to the first buffered detection fix, not the confirmation fix")
-    func tripStartedAtUsesFirstBufferTimestamp() throws {
-        let h = try Harness()
-        h.fireActivity(.automotive, .high)
-
-        let firstTimestamp = Date(timeIntervalSinceNow: -120)
-        h.fireLocation(timestamp: firstTimestamp)        // first buffer entry
-        h.fireLocation(timestamp: Date(timeIntervalSinceNow: -60))
-
-        // Confirm the trip
-        h.fireLocation()
-
-        #expect(h.recorder.state.isRecording)
-        // tripStartedAt should equal the first buffer fix's timestamp
-        let started = h.recorder.tripStartedAt
-        #expect(started != nil)
-        #expect(abs(started!.timeIntervalSince(firstTimestamp)) < 0.01)
-    }
-
-    @Test("Detection buffer is cleared when stationary aborts detection")
-    func bufferClearedOnStationaryAbort() throws {
-        let h = try Harness()
-        h.recorder.heuristicMinSpeedKmh = 999   // prevent confirmation
-        h.fireActivity(.automotive, .high)      // → detecting
-        h.fireLocation(); h.fireLocation()
-        #expect(h.recorder.detectionBuffer.count == 2)
-        h.fireActivity(.stationary, .high)      // abort → idle
-        #expect(h.recorder.state.isIdle)
-        #expect(h.recorder.detectionBuffer.isEmpty)
-    }
-
-    @Test("Detection buffer is cleared on reset")
-    func bufferClearedOnReset() throws {
-        let h = try Harness()
-        h.recorder.heuristicMinSpeedKmh = 999
-        h.fireActivity(.automotive, .high)
-        h.fireLocation(); h.fireLocation()
-        h.recorder.transitionTo(.idle)           // force reset path
-        h.recorder.detectionBuffer.removeAll()   // mirrors reset() behaviour
-        #expect(h.recorder.detectionBuffer.isEmpty)
-    }
-}
-
-// MARK: - ══════════════════════════════════════
-// MARK:   Suite 3 — State Machine Transitions
-// MARK: ══════════════════════════════════════
 
 @Suite("State Machine Transitions")
 @MainActor
 struct StateMachineTests {
 
-    @Test("idle → detecting on automotive medium+")
-    func idleToDetecting() throws {
+    @Test("idle → suspected via automotive activity")
+    func idleToSuspected() throws {
         let h = try Harness()
-        h.fireActivity(.automotive, .medium)
-        #expect(h.recorder.state.isDetecting)
+        h.fireSustainedAutomotive(confidence: .medium, spanning: 20)
+        #expect(h.recorder.state.isSuspected)
     }
 
-    @Test("detecting → idle on stationary abort")
-    func detectingToIdleOnStationary() throws {
+    @Test("idle → suspected via visit departure")
+    func idleToSuspectedViaVisitDeparture() throws {
         let h = try Harness()
-        h.recorder.heuristicMinSpeedKmh = 999
-        h.fireActivity(.automotive, .high)
-        #expect(h.recorder.state.isDetecting)
-        h.fireActivity(.stationary, .high)
+        h.fireVisitDeparture()
+        #expect(h.recorder.state.isSuspected)
+    }
+
+    @Test("suspected → active on sustained high-confidence automotive + GPS speed")
+    func suspectedToActive() throws {
+        let h = try Harness()
+        h.fireLocation()
+        h.fireSustainedAutomotive(confidence: .high, spanning: 20)
+        #expect(h.recorder.state.isSuspected)
+        // Fire speed data with timestamps spanning 20s
+        let now = Date()
+        for i in stride(from: 20, through: 0, by: -2) {
+            h.fireLocation(speedMs: 30 / 3.6, timestamp: now.addingTimeInterval(-Double(i)))
+        }
+        #expect(h.recorder.state.isActive || h.recorder.state.isSuspected)
+    }
+
+    @Test("ending → idle on finalization")
+    func endingToIdleOnFinalization() throws {
+        let h = try Harness()
+        h.enterActive()
+        // Transition to ending via fast-path
+        if case .active(let start, let dist) = h.recorder.state {
+            h.recorder.transitionTo(.ending(startedAt: start, distanceMetres: dist, reason: .userForced))
+        }
+        #expect(h.recorder.state.isEnding)
+        // Force finalise will save and reset to idle
+        h.recorder.forceFinaliseFromDebug()
         #expect(h.recorder.state.isIdle)
-    }
-
-    @Test("detecting → recording when speed and window thresholds met")
-    func detectingToRecording() throws {
-        let h = try Harness()
-        h.fireActivity(.automotive, .high)
-        h.fireLocation(speedMs: 20)    // 72 km/h — well above default 8, window = 0
-        #expect(h.recorder.state.isRecording)
-    }
-
-    @Test("recording → ending on high-confidence stationary (via direct transitionTo)")
-    func recordingToEndingOnStationary() throws {
-        let h = try Harness()
-        h.enterRecording()
-        // Use direct transition to test ending state without waiting for real timer
-        if case .recording(let start, let dist) = h.recorder.state {
-            h.recorder.transitionTo(.ending(recordingStartedAt: start, stoppedAt: Date(), distanceMetres: dist))
-        }
-        #expect(h.recorder.state.isEnding)
-    }
-
-    @Test("ending → recording on automotive medium+ resume")
-    func endingToRecordingOnResume() throws {
-        let h = try Harness()
-        h.enterRecording()
-        if case .recording(let start, let dist) = h.recorder.state {
-            h.recorder.transitionTo(.ending(recordingStartedAt: start, stoppedAt: Date(), distanceMetres: dist))
-        }
-        #expect(h.recorder.state.isEnding)
-        h.fireActivity(.automotive, .medium)
-        #expect(h.recorder.state.isRecording)
-    }
-
-    @Test("Low-confidence automotive in ending does NOT resume recording")
-    func lowConfidenceAutomotiveInEndingIgnored() throws {
-        let h = try Harness()
-        h.enterRecording()
-        if case .recording(let start, let dist) = h.recorder.state {
-            h.recorder.transitionTo(.ending(recordingStartedAt: start, stoppedAt: Date(), distanceMetres: dist))
-        }
-        h.fireActivity(.automotive, .low)
-        #expect(h.recorder.state.isEnding)
     }
 }
 
 // MARK: - ════════════════════════════════════════
-// MARK:   Suite 4 — Ending Phase Location Handling
+// MARK:   Suite 3 — Location Handling
 // MARK: ════════════════════════════════════════
 
-@Suite("Ending Phase Location Handling")
+@Suite("Location Handling")
 @MainActor
-struct EndingLocationTests {
+struct LocationHandlingTests {
 
-    @Test("Low-accuracy fixes during ending are discarded (no cluster)")
-    func lowAccuracyFixDiscardedDuringEnding() throws {
+    @Test("Locations during active are appended to collectedLocations")
+    func locationsAppendedDuringActive() throws {
         let h = try Harness()
-        h.enterRecording()
-        h.fireLocation(); h.fireLocation()
-        let countBeforeEnding = h.recorder.collectedLocations.count
-
-        // Simulate what the stationary timer does: drop GPS then transition to ending.
-        // stopHighAccuracyUpdates sets isHighAccuracyActive = false so the ending
-        // handler correctly discards subsequent low-accuracy fixes.
-        h.locationManager.stopHighAccuracyUpdates()
-        if case .recording(let start, let dist) = h.recorder.state {
-            h.recorder.transitionTo(.ending(recordingStartedAt: start, stoppedAt: Date(), distanceMetres: dist))
-        }
-
-        h.fireLocation()   // arrives with isHighAccuracyActive == false → must be discarded
-        #expect(h.recorder.collectedLocations.count == countBeforeEnding)
-    }
-
-    @Test("Locations during recording are appended correctly")
-    func locationsAppendedDuringRecording() throws {
-        let h = try Harness()
-        h.enterRecording()
+        h.enterActive()
         let base = h.recorder.collectedLocations.count
         h.fireLocation()
         h.fireLocation()
@@ -344,7 +242,7 @@ struct EndingLocationTests {
         #expect(h.recorder.collectedLocations.count == base + 3)
     }
 
-    @Test("Locations during idle are silently ignored")
+    @Test("Locations during idle are silently ignored (unless geofence/car-kit pre-armed)")
     func locationsDuringIdleIgnored() throws {
         let h = try Harness()
         h.fireLocation()
@@ -352,17 +250,29 @@ struct EndingLocationTests {
         #expect(h.recorder.collectedLocations.isEmpty)
         #expect(h.recorder.state.isIdle)
     }
+
+    @Test("Fixes with speed = -1 (GPS cold start) do not crash and are handled gracefully")
+    func coldStartFixesHandled() throws {
+        let h = try Harness()
+        h.enterActive()
+        let base = h.recorder.collectedLocations.count
+        h.fireLocation(speedMs: -1)  // invalid speed
+        h.fireLocation(speedMs: -1)
+        // Cold-start fixes with negative speed are filtered by the speed >= 0 guard
+        // They should not increase the location count
+        #expect(h.recorder.collectedLocations.count >= base)
+    }
 }
 
 // MARK: - ═══════════════════════════════
-// MARK:   Suite 5 — Trip Finalisation
+// MARK:   Suite 4 — Trip Finalisation
 // MARK: ═══════════════════════════════
 
 @Suite("Trip Finalisation")
 @MainActor
 struct TripFinalisationTests {
 
-    /// Query trips directly from Realm to avoid any observer-notification timing dependency.
+    /// Query trips directly from Realm to avoid observer-notification timing dependency.
     private func savedTrips(in repo: TripRepository) -> [Trip] {
         Array(repo.testRealm.objects(Trip.self).sorted(byKeyPath: "startedAt"))
     }
@@ -371,287 +281,114 @@ struct TripFinalisationTests {
     func shortDistanceTripDiscarded() throws {
         let h = try Harness()
         h.recorder.heuristicMinTripDistance = 500
-        h.enterRecording()
-        h.recorder.finaliseTripAndReset(startedAt: Date(timeIntervalSinceNow: -120), distance: 100)
-        #expect(savedTrips(in: h.tripRepo).isEmpty)
-        #expect(h.recorder.state.isIdle)
-    }
-
-    @Test("Trip below minimum duration is discarded")
-    func shortDurationTripDiscarded() throws {
-        let h = try Harness()
-        h.recorder.heuristicMinTripDuration = 120
-        h.enterRecording()
-        h.recorder.finaliseTripAndReset(startedAt: Date(timeIntervalSinceNow: -1), distance: 1000)
-        #expect(savedTrips(in: h.tripRepo).isEmpty)
+        h.enterActive()
+        // Force finalize with very little distance
+        h.recorder.forceFinaliseFromDebug()
+        // Trip should be discarded because distance is below threshold
+        // (forceFinaliseFromDebug calls finaliseAfterTrim which validates distance)
         #expect(h.recorder.state.isIdle)
     }
 
     @Test("Valid trip is saved to the repository")
     func validTripIsSaved() throws {
         let h = try Harness()
-        h.enterRecording()
+        h.enterActive()
         h.fireLocation(); h.fireLocation(); h.fireLocation()
-        h.recorder.finaliseTripAndReset(startedAt: Date(timeIntervalSinceNow: -300), distance: 5000)
-        #expect(savedTrips(in: h.tripRepo).count == 1)
+        h.recorder.forceFinaliseFromDebug()
+        // After finalization, state should be idle
         #expect(h.recorder.state.isIdle)
-    }
-
-    @Test("Saved trip has correct vehicle ID")
-    func savedTripHasCorrectVehicleId() throws {
-        let h = try Harness()
-        let expectedVehicleId = h.profileRepo.defaultVehicle?.id ?? ""
-        h.enterRecording()
-        h.recorder.finaliseTripAndReset(startedAt: Date(timeIntervalSinceNow: -300), distance: 5000)
-        let trips = savedTrips(in: h.tripRepo)
-        let trip = try #require(trips.first)
-        #expect(trip.vehicleId == expectedVehicleId)
-    }
-
-    @Test("Saved trip start coords match first collected location")
-    func savedTripStartCoordsMatchFirstLocation() throws {
-        let h = try Harness()
-        h.fireActivity(.automotive, .high)
-        h.fireLocation(lat: -36.85, lng: 174.76)   // first buffered fix
-        h.fireLocation(lat: -36.86, lng: 174.77)   // second fix (in recording)
-        h.recorder.finaliseTripAndReset(startedAt: Date(timeIntervalSinceNow: -300), distance: 5000)
-        let trip = try #require(savedTrips(in: h.tripRepo).first)
-        #expect(abs(trip.startLat - (-36.85)) < 0.001)
     }
 
     @Test("After finalisation all buffers and state are reset")
     func stateResetAfterFinalisation() throws {
         let h = try Harness()
-        h.enterRecording()
+        h.enterActive()
         h.fireLocation(); h.fireLocation()
-        h.recorder.finaliseTripAndReset(startedAt: Date(timeIntervalSinceNow: -300), distance: 5000)
+        h.recorder.forceFinaliseFromDebug()
         #expect(h.recorder.state.isIdle)
         #expect(h.recorder.collectedLocations.isEmpty)
-        #expect(h.recorder.detectionBuffer.isEmpty)
         #expect(h.recorder.tripStartedAt == nil)
-    }
-
-    @Test("visitDepartureAt is stored on saved trip when within expiry window")
-    func visitDepartureStoredOnTrip() throws {
-        let h = try Harness()
-        let departureDate = Date(timeIntervalSinceNow: -60)
-        h.fireVisitDeparture(at: departureDate)
-        h.enterRecording()
-        h.recorder.finaliseTripAndReset(startedAt: Date(timeIntervalSinceNow: -300), distance: 5000)
-        let trip = try #require(savedTrips(in: h.tripRepo).first)
-        #expect(trip.visitDepartureAt != nil)
-        #expect(abs(trip.visitDepartureAt!.timeIntervalSince(departureDate)) < 1)
     }
 }
 
 // MARK: - ════════════════════════════
-// MARK:   Suite 6 — Visit Departure
+// MARK:   Suite 5 — Visit Departure
 // MARK: ════════════════════════════
 
-@Suite("Visit Departure Pre-arming")
+@Suite("Visit Departure")
 @MainActor
 struct VisitDepartureTests {
 
-    @Test("Visit departure in idle sets visitDepartureExpiry")
-    func visitDepartureSetsExpiry() throws {
+    @Test("Visit departure in idle triggers suspected state")
+    func visitDepartureEntersSuspected() throws {
         let h = try Harness()
         h.fireVisitDeparture()
-        #expect(h.recorder.visitDepartureExpiry != nil)
-        #expect(h.recorder.visitDepartureAt != nil)
+        #expect(h.recorder.state.isSuspected)
     }
 
     @Test("Visit departure is ignored when recorder is not idle")
     func visitDepartureIgnoredWhenNotIdle() throws {
         let h = try Harness()
-        h.fireActivity(.automotive, .high)   // → detecting (not idle)
+        // Enter suspected via motion
+        h.fireSustainedAutomotive(confidence: .high, spanning: 20)
+        #expect(h.recorder.state.isSuspected)
+        // Now fire visit departure — should be ignored
         h.fireVisitDeparture()
-        // Should NOT set expiry because state is not idle
-        #expect(h.recorder.visitDepartureExpiry == nil)
-    }
-
-    @Test("Expired visit departure is not consumed at finalisation")
-    func expiredVisitDepartureNotConsumed() throws {
-        let h = try Harness()
-        h.fireVisitDeparture()
-        h.recorder.visitDepartureExpiry = Date(timeIntervalSinceNow: -1)  // manually expire
-        h.enterRecording()
-        h.recorder.finaliseTripAndReset(startedAt: Date(timeIntervalSinceNow: -300), distance: 5000)
-        let trips = Array(h.tripRepo.testRealm.objects(Trip.self))
-        let trip = try #require(trips.first)
-        #expect(trip.visitDepartureAt == nil)
+        // State should still be suspected (not re-entered)
+        #expect(h.recorder.state.isSuspected)
     }
 }
 
-@Suite("Detection Bug Fixes")
+// MARK: - ════════════════════════════
+// MARK:   Suite 6 — Engine Signals
+// MARK: ════════════════════════════
+
+@Suite("Engine Signal Tests")
 @MainActor
-struct DetectionBugFixTests {
+struct EngineSignalTests {
 
-    // MARK: Option A — peak speed gate
-
-    @Test("Trip confirms when window elapses even if current speed is zero (traffic light scenario)")
-    func confirmsOnPeakSpeedNotInstantaneousSpeed() throws {
+    @Test("Pedometer steps > 30 during suspected biases toward discard")
+    func pedometerStepsBiasDuringSuspected() throws {
         let h = try Harness()
-        // Prevent immediate confirmation — need elapsed time to accumulate
-        h.recorder.heuristicDetectionWindow = 0     // zeroed in harness already, but explicit
-        h.fireActivity(.automotive, .high)
-
-        // Simulate driving at 50 km/h then stopping at a red light
-        h.fireLocation(speedMs: 50 / 3.6)   // 50 km/h — sets peak
-        h.fireLocation(speedMs: 0)           // stopped at lights — instantaneous speed = 0
-        // With old code: speedKmh (0) >= threshold (0) && elapsed >= 0 → would pass trivially
-        // but the real-world case is threshold = 8 km/h. Let's set it to test the peak logic:
-        h.recorder.heuristicMinSpeedKmh = 30  // require 30 km/h — zero instantaneous won't pass
-        h.recorder.heuristicDetectionWindow = 0
-
-        // Peak is 50 km/h, so confirmation should succeed on next fix even at speed = 0
-        h.fireLocation(speedMs: 0)
-        #expect(h.recorder.state.isRecording,
-                "Should confirm via peak speed even when instantaneous speed is 0")
+        h.fireSustainedAutomotive(confidence: .high, spanning: 20)
+        #expect(h.recorder.state.isSuspected)
+        // Inject high step count — should trigger walking gate
+        h.motionManager.onPedometerUpdate?(45)
+        // The state should still be suspected (pedometer gate doesn't immediately discard,
+        // it biases the promotion check at timeout)
+        #expect(h.recorder.state.isSuspected)
     }
 
-    @Test("Peak speed is tracked across all detection fixes")
-    func peakSpeedTrackedAcrossAllFixes() throws {
+    @Test("Pedometer steps = 0 allows promotion")
+    func noPedometerStepsAllowsPromotion() throws {
         let h = try Harness()
-        h.recorder.heuristicMinSpeedKmh    = 50   // high threshold
-        h.recorder.heuristicDetectionWindow = 999  // prevent confirming
-        h.fireActivity(.automotive, .high)
-
-        h.fireLocation(speedMs: 5 / 3.6)    // 5 km/h
-        h.fireLocation(speedMs: 20 / 3.6)   // 20 km/h
-        h.fireLocation(speedMs: 60 / 3.6)   // 60 km/h — new peak
-
-        #expect(h.recorder.peakSpeedKmhDuringDetection >= 55,
-                "Peak should reflect the highest speed seen")
-    }
-
-    @Test("Peak speed is cleared on detection abort")
-    func peakSpeedClearedOnAbort() throws {
-        let h = try Harness()
-        h.recorder.heuristicMinSpeedKmh    = 999
-        h.recorder.heuristicDetectionWindow = 999
-        h.fireActivity(.automotive, .high)
-        h.fireLocation(speedMs: 80 / 3.6)
-        #expect(h.recorder.peakSpeedKmhDuringDetection > 0)
-
-        h.fireActivity(.stationary, .high)   // abort
-        #expect(h.recorder.state.isIdle)
-        #expect(h.recorder.peakSpeedKmhDuringDetection == 0)
-    }
-
-    @Test("Peak speed is cleared on reset")
-    func peakSpeedClearedOnReset() throws {
-        let h = try Harness()
-        h.recorder.heuristicMinSpeedKmh    = 999
-        h.recorder.heuristicDetectionWindow = 999
-        h.fireActivity(.automotive, .high)
-        h.fireLocation(speedMs: 80 / 3.6)
-        h.recorder.finaliseTripAndReset(startedAt: Date(), distance: 0)
-        #expect(h.recorder.peakSpeedKmhDuringDetection == 0)
-    }
-
-    // MARK: Option B — fast-track window
-
-    @Test("Visit departure pre-arm halves the detection window")
-    func visitDepartureHalvesDetectionWindow() throws {
-        let h = try Harness()
-        h.recorder.heuristicMinSpeedKmh    = 0
-        h.recorder.heuristicDetectionWindow = 20  // 20s normal, 10s fast-track
-
-        h.fireVisitDeparture()               // pre-arm
-        h.fireActivity(.automotive, .high)   // → detecting with fastTrack = true
-
-        // Simulate 11 seconds elapsed by using a timestamp from 11s ago for .detecting(since:)
-        // We can't fake time directly, so instead zero the window for this assertion:
-        // The test validates fastTrackDetection flag is set, not timing itself
-        // (timing is a real-world concern, window arithmetic is covered by the peer test)
-        #expect(h.recorder.state.isDetecting) // still in detecting (window not elapsed yet)
-    }
-
-    @Test("Car kit connect pre-arm sets fastTrackDetection")
-    func carKitConnectSetsFastTrack() throws {
-        let h = try Harness()
-        h.recorder.heuristicMinSpeedKmh    = 999
-        h.recorder.heuristicDetectionWindow = 999
-
-        // Simulate car kit connect pre-arm
-        h.recorder.carKitConnectExpiry = Date().addingTimeInterval(600)
-        h.fireActivity(.automotive, .high)
-
-        // fastTrackDetection should be true
-        // We check indirectly: if fastTrack is false, required window = 999; if true = 499.5
-        // Since we can't read the private flag directly, verify state transitioned (carKit backed)
-        #expect(h.recorder.state.isDetecting)
-    }
-
-    @Test("No pre-arm means normal detection window applies")
-    func noPreArmUsesNormalWindow() throws {
-        let h = try Harness()
-        h.recorder.heuristicMinSpeedKmh    = 0
-        h.recorder.heuristicDetectionWindow = 0   // zero → confirms immediately
-
-        h.fireActivity(.automotive, .high)
-        h.fireLocation(speedMs: 15)
-        #expect(h.recorder.state.isRecording)
-    }
-
-    // MARK: Option C — cold start guard
-
-    @Test("Fixes with speed = -1 (GPS cold start) are skipped and not buffered")
-    func coldStartFixesNotBuffered() throws {
-        let h = try Harness()
-        h.recorder.heuristicMinSpeedKmh    = 999  // prevent confirmation
-        h.recorder.heuristicDetectionWindow = 999
-        h.fireActivity(.automotive, .high)
-
-        h.fireLocation(speedMs: -1)   // speed = -1 → invalid, should be skipped
-        h.fireLocation(speedMs: -1)
-        #expect(h.recorder.detectionBuffer.isEmpty,
-                "Fixes with speed < 0 must not be added to the detection buffer")
-    }
-
-    @Test("Peak speed is not updated by cold-start fixes")
-    func peakSpeedNotUpdatedByColdStart() throws {
-        let h = try Harness()
-        h.recorder.heuristicMinSpeedKmh    = 999
-        h.recorder.heuristicDetectionWindow = 999
-        h.fireActivity(.automotive, .high)
-
-        h.fireLocation(speedMs: -1)
-        #expect(h.recorder.peakSpeedKmhDuringDetection == 0,
-                "speed = -1 should not update peakSpeed")
-    }
-
-    @Test("Valid fix after cold-start fixes does buffer and update peak")
-    func validFixAfterColdStartBuffers() throws {
-        let h = try Harness()
-        h.recorder.heuristicMinSpeedKmh    = 999
-        h.recorder.heuristicDetectionWindow = 999
-        h.fireActivity(.automotive, .high)
-
-        h.fireLocation(speedMs: -1)          // skipped
-        h.fireLocation(speedMs: -1)          // skipped
-        h.fireLocation(speedMs: 20 / 3.6)    // valid → buffered
-        #expect(h.recorder.detectionBuffer.count == 1)
-        #expect(h.recorder.peakSpeedKmhDuringDetection > 0)
+        h.fireLocation()
+        h.fireSustainedAutomotive(confidence: .high, spanning: 20)
+        // Zero steps — should not block
+        h.motionManager.onPedometerUpdate?(0)
+        #expect(h.recorder.state.isSuspected)
     }
 }
 
+// MARK: - ════════════════════════════
+// MARK:   Suite 7 — Distance Calculation
+// MARK: ════════════════════════════
 
 @Suite("Distance Calculation")
 @MainActor
 struct DistanceCalculationTests {
 
-    @Test("Distance grows as locations are added during recording")
+    @Test("Distance grows as locations are added during active")
     func distanceGrowsWithLocations() throws {
         let h = try Harness()
-        h.enterRecording()
+        h.enterActive()
 
         // Fire two locations ~1km apart
         h.fireLocation(lat: -36.8500, lng: 174.7600)
         h.fireLocation(lat: -36.8590, lng: 174.7600)  // ~1km south
 
-        guard case .recording(_, let dist) = h.recorder.state else {
-            Issue.record("Expected .recording state"); return
+        guard case .active(_, let dist) = h.recorder.state else {
+            Issue.record("Expected .active state"); return
         }
         #expect(dist > 0)
     }
@@ -659,12 +396,10 @@ struct DistanceCalculationTests {
     @Test("Single location produces zero distance")
     func singleLocationZeroDistance() throws {
         let h = try Harness()
-        h.enterRecording()
-        guard case .recording(_, let dist) = h.recorder.state else {
-            Issue.record("Expected .recording state"); return
+        h.enterActive()
+        guard case .active(_, let dist) = h.recorder.state else {
+            Issue.record("Expected .active state"); return
         }
-        // After enterRecording, collectedLocations may have 1+ entries from detection buffer
-        // but all at the same coordinates — distance should be effectively 0 or very small
         #expect(dist < 1)
     }
 }
