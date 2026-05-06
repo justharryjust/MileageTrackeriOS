@@ -13,6 +13,11 @@ final class AppState {
     let realmProvider       : RealmProvider
     let profileRepo         : UserProfileRepository
     let tripRepo            : TripRepository
+    let odometerRepo        : OdometerReadingRepository
+
+    // MARK: - Business Logic
+    let mileageCalculator   : MileageCalculator
+    let reportGenerator     : ReportGenerator
 
     // MARK: - Hardware Managers
     let locationManager     : LocationManager
@@ -26,16 +31,21 @@ final class AppState {
         let realm     = realmProvider.realm
 
         // 2. Build repositories
-        profileRepo = UserProfileRepository(realm: realm)
-        tripRepo    = TripRepository(realm: realm)
+        profileRepo  = UserProfileRepository(realm: realm)
+        tripRepo     = TripRepository(realm: realm)
+        odometerRepo = OdometerReadingRepository(realm: realm)
 
-        // 3. Hardware managers
+        // 3. Business logic
+        mileageCalculator = MileageCalculator()
+        reportGenerator   = ReportGenerator()
+
+        // 4. Hardware managers
         locationManager  = LocationManager()
         motionManager    = MotionManager()
         bluetoothManager = BluetoothManager()
         tripRecorder     = TripRecorder.shared
 
-        // 4. Wire TripRecorder
+        // 6. Wire TripRecorder
         tripRecorder.configure(
             location    : locationManager,
             motion      : motionManager,

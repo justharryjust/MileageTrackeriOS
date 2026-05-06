@@ -247,6 +247,7 @@ final class Trip: Object, ObjectKeyIdentifiable {
     @Persisted var isSyncedToCloud: Bool          = false
     @Persisted var visitDepartureAt: Date?        // set when a CLVisit departure pre-armed this trip
     @Persisted var carKitName: String?            // name of car-kit connected when trip started, if any
+    @Persisted var businessUsePercent: Double?    // only set when claim method is .logbook
     @Persisted var createdAt: Date                = Date()
     @Persisted var updatedAt: Date                = Date()
     // TODO: 
@@ -268,6 +269,11 @@ final class Trip: Object, ObjectKeyIdentifiable {
     }
 }
 
+enum OdometerSource: String, PersistableEnum {
+    case manual
+    case onboarding
+}
+
 // MARK: - OdometerReading
 
 final class OdometerReading: Object, ObjectKeyIdentifiable {
@@ -277,6 +283,7 @@ final class OdometerReading: Object, ObjectKeyIdentifiable {
     @Persisted var recordedAt: Date              = Date()
     @Persisted var tripId: String?
     @Persisted var notes: String?
+    @Persisted var source: OdometerSource        = .manual
 }
 
 // MARK: - Collection safe subscript

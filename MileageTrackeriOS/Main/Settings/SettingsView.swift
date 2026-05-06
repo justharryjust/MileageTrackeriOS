@@ -44,6 +44,29 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("Reporting") {
+                    NavigationLink {
+                        ReportExportView()
+                            .environment(appState)
+                    } label: {
+                        Label("Mileage Report", systemImage: "doc.text.fill")
+                    }
+
+                    NavigationLink {
+                        OdometerLogView()
+                            .environment(appState)
+                    } label: {
+                        Label("Odometer Log", systemImage: "speedometer")
+                    }
+
+                    NavigationLink {
+                        MethodInfoView()
+                            .environment(appState)
+                    } label: {
+                        Label("Which method to choose?", systemImage: "questionmark.circle")
+                    }
+                }
+
                 Section("Data") {
                     LabeledContent("Total trips", value: "\(appState.tripRepo.allTrips.count)")
                     LabeledContent("Business trips", value: "\(appState.tripRepo.businessTrips.count)")
