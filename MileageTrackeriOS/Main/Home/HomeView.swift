@@ -12,6 +12,10 @@ struct HomeView: View {
                     TripStatusCard()
                         .padding(.top, MTSpacing.sm)
 
+                    // MARK: Manual Trip Controls
+                    ManualTripControls()
+                        .padding(.top, MTSpacing.xs)
+
                     // MARK: Quick Stats
                     QuickStatsRow()
 
@@ -245,6 +249,63 @@ private struct RecentTripsSection: View {
         case .business:      return .mtGreen
         case .personal:      return .blue
         case .uncategorised: return .mtWarning
+        }
+    }
+}
+
+// MARK: - Manual Trip Controls
+
+private struct ManualTripControls: View {
+    @Environment(AppState.self) private var appState
+
+    private var state: TripRecorderState { appState.tripRecorder.state }
+
+    var body: some View {
+        HStack(spacing: MTSpacing.sm) {
+            if state.isRecording {
+                // ── Stop Trip ──
+                Button {
+                    appState.tripRecorder.forceFinaliseFromDebug()
+                } label: {
+                    Label("Stop Trip", systemImage: "stop.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, MTSpacing.sm + 2)
+                        .background(Color.mtRecording)
+                        .clipShape(RoundedRectangle(cornerRadius: MTRadius.md))
+                }
+            } else if case .idle = state {
+                // ── Start Trip ──
+                Button {
+                    appState.tripRecorder.forceStartManualTrip()
+                } label: {
+                    Label("Start Trip", systemImage: "play.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, MTSpacing.sm + 2)
+                        .background(Color.mtGreen)
+                        .clipShape(RoundedRectangle(cornerRadius: MTRadius.md))
+                }
+            } else {
+                // Suspected or ending — show ghost button
+                Button {
+                    appState.tripRecorder.forceFinaliseFromDebug()
+                } label: {
+                    Label("Cancel", systemImage: "xmark")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color.mtTextSub)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, MTSpacing.sm + 2)
+                        .background(Color.mtSurface)
+                        .clipShape(RoundedRectangle(cornerRadius: MTRadius.md))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: MTRadius.md)
+                                .strokeBorder(Color.mtBorder, lineWidth: 1)
+                        )
+                }
+            }
         }
     }
 }

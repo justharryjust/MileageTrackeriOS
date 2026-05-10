@@ -19,6 +19,12 @@ final class AppState {
     let mileageCalculator   : MileageCalculator
     let reportGenerator     : ReportGenerator
 
+    // MARK: - Live Activity
+    let liveActivityManager : LiveActivityManager
+
+    // MARK: - Notifications
+    let notificationManager : NotificationManager
+
     // MARK: - Hardware Managers
     let locationManager     : LocationManager
     let motionManager       : MotionManager
@@ -40,16 +46,20 @@ final class AppState {
         reportGenerator   = ReportGenerator()
 
         // 4. Hardware managers
-        locationManager  = LocationManager()
-        motionManager    = MotionManager()
-        bluetoothManager = BluetoothManager()
-        tripRecorder     = TripRecorder.shared
+        locationManager     = LocationManager()
+        motionManager       = MotionManager()
+        bluetoothManager    = BluetoothManager()
+        liveActivityManager = LiveActivityManager()
+        notificationManager = NotificationManager()
+        tripRecorder        = TripRecorder.shared
 
         // 6. Wire TripRecorder
         tripRecorder.configure(
             location    : locationManager,
             motion      : motionManager,
             bluetooth   : bluetoothManager,
+            liveActivity: liveActivityManager,
+            notifications: notificationManager,
             tripRepo    : tripRepo,
             profileRepo : profileRepo
         )

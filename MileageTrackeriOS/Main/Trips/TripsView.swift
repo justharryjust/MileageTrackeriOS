@@ -9,7 +9,7 @@ struct TripsView: View {
 
     enum TripFilter: String, CaseIterable {
         case all           = "All"
-        case uncategorised = "Needs Review"
+        case uncategorised = "Review"
         case business      = "Business"
         case personal      = "Personal"
     }
@@ -25,33 +25,26 @@ struct TripsView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Filter pills
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: MTSpacing.sm) {
+            ZStack(alignment: .bottomTrailing) {
+                VStack(spacing: 0) {
+                    // Segmented filter — always visible
+                    Picker("Filter", selection: $selectedFilter) {
                         ForEach(TripFilter.allCases, id: \.self) { filter in
-                            FilterPill(
-                                label: filter.rawValue,
-                                badge: badgeCount(filter),
-                                isSelected: selectedFilter == filter
-                            ) {
-                                withAnimation { selectedFilter = filter }
-                            }
+                            Text(filterLabel(filter)).tag(filter)
                         }
                     }
+                    .pickerStyle(.segmented)
                     .padding(.horizontal, MTSpacing.md)
                     .padding(.vertical, MTSpacing.sm)
-                }
-                .background(Color.mtSurface)
 
-                Divider()
-
-                if displayedTrips.isEmpty {
-                    EmptyTripsPlaceholder(filter: selectedFilter)
-                } else {
-                    List {
-                        ForEach(displayedTrips) { trip in
-                            NavigationLink(destination: TripDetailView(trip: trip)) {
+                    if displayedTrips.isEmpty {
+                        EmptyTripsPlaceholder(filter: selectedFilter) {
+                            showManualTrip = true
+                        }
+                        .transition(.opacity)
+                    } else {
+                        List {
+                            ForEach(displayedTrips) { trip in
                                 TripRow(trip: trip)
                                     .swipeActions(edge: .leading, allowsFullSwipe: true) {
                                         Button {
@@ -70,29 +63,35 @@ struct TripsView: View {
                                         .tint(.blue)
                                     }
                                     .listRowBackground(Color.mtBackground)
-                                    .listRowSeparator(.hidden)
-                                    .listRowInsets(EdgeInsets(top: 4, leading: MTSpacing.md, bottom: 4, trailing: MTSpacing.md))
+                                    .listRowInsets(EdgeInsets(top: 6, leading: MTSpacing.md, bottom: 6, trailing: MTSpacing.md))
+                            }
+                            .onDelete { indexSet in
+                                indexSet.forEach { appState.tripRepo.deleteTrip(displayedTrips[$0]) }
                             }
                         }
-                        .onDelete { indexSet in
-                            indexSet.forEach { appState.tripRepo.deleteTrip(displayedTrips[$0]) }
-                        }
+                        .listStyle(.plain)
                     }
-                    .listStyle(.plain)
                 }
-            }
-            .background(Color.mtBackground)
-            .navigationTitle("Trips")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+
+                // Floating add button
+                if !displayedTrips.isEmpty {
                     Button {
                         showManualTrip = true
                     } label: {
                         Image(systemName: "plus")
-                            .fontWeight(.semibold)
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 56, height: 56)
+                            .background(Color.mtGreen)
+                            .clipShape(Circle())
+                            .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
                     }
+                    .padding(.trailing, MTSpacing.lg)
+                    .padding(.bottom, MTSpacing.lg)
                 }
             }
+            .background(Color.mtBackground)
+            .navigationTitle("Trips")
             .sheet(isPresented: $showManualTrip) {
                 ManualTripSheet()
                     .environment(appState)
@@ -100,11 +99,13 @@ struct TripsView: View {
         }
     }
 
-    private func badgeCount(_ filter: TripFilter) -> Int? {
+    private func filterLabel(_ filter: TripFilter) -> String {
         switch filter {
-        case .uncategorised: return appState.tripRepo.uncategorisedTrips.count > 0
-                                    ? appState.tripRepo.uncategorisedTrips.count : nil
-        default: return nil
+        case .uncategorised:
+            let count = appState.tripRepo.uncategorisedTrips.count
+            return count > 0 ? "Review (\(count))" : "Review"
+        default:
+            return filter.rawValue
         }
     }
 }
@@ -112,55 +113,98 @@ struct TripsView: View {
 // MARK: - TripRow
 
 private struct TripRow: View {
+    @Environment(AppState.self) private var appState
     let trip: Trip
 
     var body: some View {
-        HStack(spacing: MTSpacing.md) {
-            // Category dot
-            Circle()
-                .fill(categoryColor)
-                .frame(width: 10, height: 10)
-                .padding(.top, 2)
-
-            VStack(alignment: .leading, spacing: 4) {
-                // Route
-                HStack {
-                    Text(trip.startAddress.isEmpty ? "Unknown start" : trip.startAddress)
-                        .lineLimit(1)
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.mtTextSub)
-                    Text(trip.endAddress.isEmpty ? "Unknown end" : trip.endAddress)
-                        .lineLimit(1)
-                }
-                .font(.system(size: 14, weight: .medium))
-
-                // Meta row
-                HStack(spacing: MTSpacing.sm) {
-                    Text(trip.startedAt, style: .date)
-                    Text("·")
-                    Text(trip.distanceString)
-                    if let dur = trip.durationString {
-                        Text("·")
-                        Text(dur)
-                    }
-                }
-                .font(.system(size: 12))
-                .foregroundStyle(Color.mtTextSub)
+        NavigationLink(destination: TripDetailView(trip: trip)) {
+            rowContent
+        }
+        .contextMenu {
+            Button {
+                appState.tripRepo.categorise(trip, as: .business)
+            } label: {
+                Label("Mark as Business", systemImage: "briefcase.fill")
             }
-
-            Spacer()
-
-            // Dollar value if available
-            if let val = trip.dollarValue {
-                Text("$\(String(format: "%.2f", val))")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color.mtGreen)
+            Button {
+                appState.tripRepo.categorise(trip, as: .personal)
+            } label: {
+                Label("Mark as Personal", systemImage: "person.fill")
+            }
+            Divider()
+            Button(role: .destructive) {
+                appState.tripRepo.deleteTrip(trip)
+            } label: {
+                Label("Delete Trip", systemImage: "trash")
             }
         }
-        .padding(MTSpacing.md)
-        .background(Color.mtSurface)
-        .clipShape(RoundedRectangle(cornerRadius: MTRadius.md))
+    }
+
+    private var rowContent: some View {
+        HStack(alignment: .top, spacing: MTSpacing.md) {
+                // Route line — start dot, line, end pin
+                VStack(spacing: 0) {
+                    Circle()
+                        .fill(Color.mtGreen)
+                        .frame(width: 8, height: 8)
+                    Rectangle()
+                        .fill(Color.mtBorder)
+                        .frame(width: 1.5, height: 16)
+                    Circle()
+                        .fill(Color.mtRecording)
+                        .frame(width: 8, height: 8)
+                }
+                .padding(.top, 4)
+
+                // Trip details
+                VStack(alignment: .leading, spacing: 0) {
+                    // Start row
+                    HStack(spacing: 4) {
+                        Text(trip.startAddress.isEmpty ? "Unknown" : trip.startAddress)
+                            .lineLimit(1)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(Color.mtTextPrimary)
+                    }
+
+                    Spacer().frame(height: 12)
+
+                    // End row
+                    HStack(spacing: 4) {
+                        Text(trip.endAddress.isEmpty ? "Unknown" : trip.endAddress)
+                            .lineLimit(1)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(Color.mtTextPrimary)
+                    }
+
+                    Spacer().frame(height: 6)
+
+                    // Date + time + meta
+                    HStack(spacing: 6) {
+                        Text(trip.startedAt.formatted(date: .abbreviated, time: .shortened))
+                        Text("·")
+                        Text(trip.distanceString)
+                        if let dur = trip.durationString {
+                            Text("·")
+                            Text(dur)
+                        }
+                    }
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.mtTextSub)
+                }
+
+                Spacer(minLength: 4)
+
+                // Value + badge column
+                VStack(alignment: .trailing, spacing: 4) {
+                    if let val = trip.dollarValue {
+                        Text("$\(String(format: "%.2f", val))")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.mtGreen)
+                    }
+                    categoryBadge
+                }
+            }
+            .padding(.vertical, 6)
     }
 
     private var categoryColor: Color {
@@ -170,37 +214,15 @@ private struct TripRow: View {
         case .uncategorised: return .mtWarning
         }
     }
-}
 
-// MARK: - Filter Pill
-
-private struct FilterPill: View {
-    let label: String
-    let badge: Int?
-    let isSelected: Bool
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 4) {
-                Text(label)
-                    .font(.system(size: 13, weight: .medium))
-                if let b = badge {
-                    Text("\(b)")
-                        .font(.system(size: 11, weight: .bold))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(isSelected ? Color.white.opacity(0.3) : Color.mtWarning)
-                        .clipShape(Capsule())
-                        .foregroundStyle(isSelected ? Color.white : Color.white)
-                }
-            }
-            .foregroundStyle(isSelected ? .white : Color.mtTextPrimary)
-            .padding(.horizontal, MTSpacing.md)
-            .padding(.vertical, 6)
-            .background(isSelected ? Color.mtGreen : Color.mtSurface)
+    private var categoryBadge: some View {
+        Text(trip.category == .uncategorised ? "Review" : trip.category.rawValue.capitalized)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(categoryColor)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(categoryColor.opacity(0.12))
             .clipShape(Capsule())
-        }
     }
 }
 
@@ -208,24 +230,35 @@ private struct FilterPill: View {
 
 private struct EmptyTripsPlaceholder: View {
     let filter: TripsView.TripFilter
+    var onAddTap: (() -> Void)?
 
     var body: some View {
         VStack(spacing: MTSpacing.lg) {
+            Spacer()
+
             Image(systemName: "car.2.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(Color.mtBorder)
+
             VStack(spacing: MTSpacing.sm) {
                 Text(filter == .all ? "No trips yet" : "No \(filter.rawValue.lowercased()) trips")
                     .font(.system(size: 18, weight: .semibold))
                 Text(filter == .all
-                     ? "Auto-tracking will record your first drive.\nOr add a trip manually."
+                     ? "Auto-tracking will record your first drive."
                      : "Swipe trips left or right to categorise them.")
                     .font(.system(size: 14))
                     .foregroundStyle(Color.mtTextSub)
                     .multilineTextAlignment(.center)
             }
+
+            if filter == .all, let onAddTap {
+                Button("Add Trip Manually", action: onAddTap)
+                    .buttonStyle(MTSecondaryButtonStyle())
+                    .padding(.horizontal, MTSpacing.xl)
+            }
+
+            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(MTSpacing.xl)
     }
 }

@@ -32,88 +32,73 @@ struct TripDetailView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack(alignment: .bottom) {
-                // MARK: Map
-                Map(position: $position) {
-                    if showActualPath {
-                        // Actual driven path
-                        if actualCoordinates.count > 1 {
-                            MapPolyline(coordinates: actualCoordinates)
-                                .stroke(Color.teal, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
-                        }
-                    } else {
-                        // Planned route polyline
-                        if let route {
-                            MapPolyline(route.polyline)
-                                .stroke(Color.mtGreen, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
-                        }
-                    }
-
-                    // Start annotation
-                    Annotation("Start", coordinate: startCoord, anchor: .bottom) {
-                        TripPinView(color: .mtGreen, systemImage: "location.fill")
-                    }
-
-                    // End annotation (only when different from start)
-                    if !isSamePoint {
-                        Annotation("End", coordinate: endCoord, anchor: .bottom) {
-                            TripPinView(color: .red, systemImage: "flag.checkered")
-                        }
-                    }
+        Map(position: $position) {
+            if showActualPath {
+                if actualCoordinates.count > 1 {
+                    MapPolyline(coordinates: actualCoordinates)
+                        .stroke(Color.teal, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
                 }
-                .mapStyle(.standard(elevation: .realistic))
-                .ignoresSafeArea(edges: .top)
-
-                // MARK: Info Card
-                TripInfoCard(trip: trip)
-                    .padding(MTSpacing.md)
-                    .padding(.bottom, MTSpacing.lg)
+            } else {
+                if let route {
+                    MapPolyline(route.polyline)
+                        .stroke(Color.mtGreen, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                }
             }
-            .navigationTitle("Trip Detail")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button {
-                            appState.tripRepo.categorise(trip, as: .business)
-                        } label: {
-                            Label("Mark as Business", systemImage: "briefcase.fill")
-                        }
-                        Button {
-                            appState.tripRepo.categorise(trip, as: .personal)
-                        } label: {
-                            Label("Mark as Personal", systemImage: "person.fill")
-                        }
 
-                        Divider()
+            Annotation("Start", coordinate: startCoord, anchor: .bottom) {
+                TripPinView(color: .mtGreen, systemImage: "location.fill")
+            }
 
-                        Button {
-                            showActualPath.toggle()
-                            if !showActualPath {
-                                Task { await fetchRouteIfNeeded() }
-                            }
-                        } label: {
-                            Label(
-                                showActualPath ? "Show Road Route" : "Show Actual Path",
-                                systemImage: showActualPath ? "road.lanes" : "point.topleft.down.to.point.bottomright.curvepath.fill"
-                            )
-                        }
+            if !isSamePoint {
+                Annotation("End", coordinate: endCoord, anchor: .bottom) {
+                    TripPinView(color: .red, systemImage: "flag.checkered")
+                }
+            }
+        }
+        .mapStyle(.standard(elevation: .realistic))
+        .safeAreaInset(edge: .bottom) {
+            TripInfoCard(trip: trip)
+                .padding(.horizontal, MTSpacing.md)
+                .padding(.bottom, MTSpacing.sm)
+        }
+        .navigationTitle("Trip Detail")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        appState.tripRepo.categorise(trip, as: .business)
+                    } label: {
+                        Label("Mark as Business", systemImage: "briefcase.fill")
+                    }
+                    Button {
+                        appState.tripRepo.categorise(trip, as: .personal)
+                    } label: {
+                        Label("Mark as Personal", systemImage: "person.fill")
+                    }
 
-                        Button {
-                            // TODO:
-//                            appState.tripRepo.fixStartEnd
-                        } label: {
-                            Label("Fix start/end", systemImage: "person.fill")
+                    Divider()
+
+                    Button {
+                        showActualPath.toggle()
+                        if !showActualPath {
+                            Task { await fetchRouteIfNeeded() }
                         }
                     } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .fontWeight(.semibold)
+                        Label(
+                            showActualPath ? "Show Road Route" : "Show Actual Path",
+                            systemImage: showActualPath ? "road.lanes" : "point.topleft.down.to.point.bottomright.curvepath.fill"
+                        )
                     }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .fontWeight(.semibold)
                 }
             }
-            .task { await fetchRouteIfNeeded() }
         }
+        .onAppear { position = .automatic }
+        .task { await fetchRouteIfNeeded() }
     }
 
     // MARK: - Route Fetching
@@ -186,27 +171,26 @@ private struct TripInfoCard: View {
 
                 Spacer()
 
-                if let val = trip.dollarValue {
-                    Text("$\(String(format: "%.2f", val))")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(Color.mtGreen)
+                // Value + category badge
+                VStack(alignment: .trailing, spacing: 4) {
+                    if let val = trip.dollarValue {
+                        Text("$\(String(format: "%.2f", val))")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(Color.mtGreen)
+                    }
+                    categoryBadge
                 }
             }
             .padding(MTSpacing.md)
 
             Divider().padding(.horizontal, MTSpacing.md)
 
-            // Stats row
-            HStack(spacing: 0) {
-                StatCell(label: "Distance", value: trip.distanceString)
-                if let dur = trip.durationString {
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    StatCell(label: "Distance", value: trip.distanceString)
                     Divider().frame(height: 32)
-                    StatCell(label: "Duration", value: dur)
+                    StatCell(label: "Duration", value: trip.durationString ?? "—")
                 }
-                Divider().frame(height: 32)
-                StatCell(label: "Date", value: trip.startedAt.formatted(.dateTime.day().month(.abbreviated)))
-                Divider().frame(height: 32)
-                StatCell(label: "Category", value: trip.category.rawValue.capitalized, valueColor: categoryColor)
             }
             .padding(.vertical, MTSpacing.sm)
         }
@@ -217,12 +201,28 @@ private struct TripInfoCard: View {
         )
     }
 
+    private var categoryBadge: some View {
+        Text(trip.category == .uncategorised ? "Review" : trip.category.rawValue.capitalized)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(categoryColor)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(categoryColor.opacity(0.12))
+            .clipShape(Capsule())
+    }
+
     private var categoryColor: Color {
         switch trip.category {
         case .business:      return .mtGreen
         case .personal:      return .blue
         case .uncategorised: return .mtWarning
         }
+    }
+
+    private func formatTime(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f.string(from: date)
     }
 }
 
@@ -236,6 +236,8 @@ private struct StatCell: View {
             Text(value)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(valueColor)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
             Text(label)
                 .font(.system(size: 11))
                 .foregroundStyle(Color.mtTextSub)

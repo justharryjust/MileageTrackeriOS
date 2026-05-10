@@ -1,11 +1,27 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xcodebuild -scheme MileageTrackeriOS -destination 'generic/platform=iOS' build)",
+      "Bash(xcodebuild -scheme MileageTrackeriOS -destination 'generic/platform/iOS' build)",
       "Bash(xcodebuild -project MileageTrackeriOS.xcodeproj -scheme MileageTrackeriOS -destination 'platform=iOS Simulator,name=iPhone 16' build)",
       "Bash(xcodebuild -project MileageTrackeriOS.xcodeproj -scheme MileageTrackeriOS -destination 'platform=iOS Simulator,name=iPhone 17' build)",
       "Bash(xcodebuild -project MileageTrackeriOS.xcodeproj -scheme MileageTrackeriOS -destination 'platform=iOS Simulator,name=iPhone 17' test)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(ruby -e \"require 'xcodeproj'\")",
+      "Bash(echo \"exit: $?\")",
+      "Bash(xcodebuild -project MileageTrackeriOS.xcodeproj -scheme MileageTrackerWidgetExtension -destination 'platform=iOS Simulator,name=iPhone 17' build)",
+      "Bash(xcodebuild *)",
+      "Bash(plutil -p /Users/harryjust/Library/Developer/Xcode/DerivedData/MileageTrackeriOS-eltodccjqpwiyldzwazmplphntfz/Build/Products/Debug-iphonesimulator/MileageTrackeriOS.app/Info.plist)",
+      "Bash(plutil -p /Users/harryjust/Library/Developer/Xcode/DerivedData/MileageTrackeriOS-eltodccjqpwiyldzwazmplphntfz/Build/Products/Debug-iphonesimulator/MileageTrackeriOS.app/PlugIns/MileageTrackerWidgetExtension.appex/Info.plist)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "git diff --name-only -- '*/*.swift' | grep -q .",
+        "run": "git diff --name-only -- '*/*.swift' | while IFS= read -r file; do dir=$(dirname \"$file\"); echo \"  • $file → check $dir/CLAUDE.md\"; done",
+        "message": "Swift files changed. Review the CLAUDE.md files listed above and update them if the changes affect architecture, invariants, or API surface so future sessions have accurate context.",
+        "description": "Remind to update CLAUDE.md after Swift file changes"
+      }
     ]
   }
 }

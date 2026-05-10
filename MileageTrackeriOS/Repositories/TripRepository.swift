@@ -127,7 +127,7 @@ final class TripRepository {
     // MARK: - Save Manual Trip
 
     /// Persists a trip created by the user without GPS tracking.
-    /// No TripPoints are created — start/end coordinates come from MKLocalSearch.
+    /// Creates TripPoints for start, optional stops, and end so the map renders a polyline.
     func saveManualTrip(
         vehicleId     : String,
         startedAt     : Date,
@@ -139,6 +139,7 @@ final class TripRepository {
         startLng      : Double,
         endLat        : Double,
         endLng        : Double,
+        stops         : [(lat: Double, lng: Double)] = [],
         category      : TripCategory = .business,
         notes         : String? = nil
     ) {
@@ -157,9 +158,30 @@ final class TripRepository {
         trip.source         = .manual
         trip.notes          = notes
 
-        write { realm.add(trip) }
+        var points: [TripPoint] = [
+            TripPoint(tripId: trip.id, latitude: startLat, longitude: startLng,
+                      altitude: 0, speedMs: -1, accuracy: -1, recordedAt: startedAt)
+        ]
+        // Intermediate stops
+        let stopInterval = endedAt.timeIntervalSince(startedAt) / Double(stops.count + 1)
+        for (i, stop) in stops.enumerated() {
+            points.append(TripPoint(
+                tripId: trip.id, latitude: stop.lat, longitude: stop.lng,
+                altitude: 0, speedMs: -1, accuracy: -1,
+                recordedAt: startedAt.addingTimeInterval(stopInterval * Double(i + 1))
+            ))
+        }
+        points.append(
+            TripPoint(tripId: trip.id, latitude: endLat, longitude: endLng,
+                      altitude: 0, speedMs: -1, accuracy: -1, recordedAt: endedAt)
+        )
+
+        write {
+            realm.add(trip)
+            realm.add(points)
+        }
         TripLogger.shared.log(
-            "Manual trip saved ✅ id:\(trip.id.prefix(8)) \(startAddress) → \(endAddress) \(String(format:"%.0f",distanceMetres))m",
+            "Manual trip saved ✅ id:\(trip.id.prefix(8)) \(startAddress) → \(endAddress) \(String(format:"%.0f",distanceMetres))m pts:\(points.count)",
             category: .trip
         )
     }

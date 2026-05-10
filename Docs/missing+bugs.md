@@ -4,11 +4,6 @@ Analysis based on current codebase (2026-05-06).
 
 ## Missing Core Features
 
-### 1. Manual Trip Editing (High Priority)
-The `TripDetailView` toolbar has a placeholder "Fix start/end" button (line 106) that is not implemented.
-Users cannot edit trip addresses, recategorise trips with notes, or adjust start/end points
-when GPS drift produces incorrect locations. A trip editor sheet is needed.
-
 ### 2. Trip Merge (Medium Priority)
 The v2 design doc explicitly calls out case #7: "5-stop errand run, engine off each time — 5 separate
 trips logged." The plan says "user can merge in review queue." No merge UI or logic exists.
