@@ -134,6 +134,20 @@ final class UserProfileRepository {
         write { vehicle.isArchived = true }
     }
 
+    func unarchiveVehicle(_ vehicle: Vehicle) {
+        write { vehicle.isArchived = false }
+    }
+
+    func updateVehicle(_ vehicle: Vehicle, name: String, registration: String,
+                       type: VehicleType, fuelType: FuelType) {
+        write {
+            vehicle.name         = name
+            vehicle.registration = registration.uppercased()
+            vehicle.type         = type
+            vehicle.fuelType     = fuelType
+        }
+    }
+
 
     // MARK: - Tracking Schedule
 

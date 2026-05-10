@@ -126,52 +126,6 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         center.add(request)
     }
 
-    // MARK: - §1.E Trip Recovery Prompt
-
-    /// Notification action category for trip recovery decisions.
-    static let recoveryCategoryId = "com.mileagetracker.tripRecovery"
-    static let recoveryActionResume   = "TR_RESUME"
-    static let recoveryActionSaveAsIs = "TR_SAVE"
-    static let recoveryActionDiscard  = "TR_DISCARD"
-    static let recoveryUserInfoTripId = "tripId"
-
-    /// Register the recovery action category. Call once on launch.
-    func registerRecoveryActions() {
-        let resume = UNNotificationAction(identifier: Self.recoveryActionResume,
-                                          title: "Resume", options: [.foreground])
-        let saveAs = UNNotificationAction(identifier: Self.recoveryActionSaveAsIs,
-                                          title: "Save as-is", options: [])
-        let discard = UNNotificationAction(identifier: Self.recoveryActionDiscard,
-                                           title: "Discard", options: [.destructive])
-        let category = UNNotificationCategory(
-            identifier: Self.recoveryCategoryId,
-            actions: [resume, saveAs, discard],
-            intentIdentifiers: [],
-            options: []
-        )
-        center.setNotificationCategories([category])
-    }
-
-    /// §1.E: prompt the user when a recovered in-flight trip is past the auto-resume
-    /// window but still looks real. The user decides via notification actions whether
-    /// to resume, save as-is, or discard — avoiding silent data loss on long trips.
-    func sendTripRecoveryPrompt(distanceMetres: Double, durationSec: TimeInterval, inflightId: String) {
-        guard isAuthorized else { return }
-        let content = UNMutableNotificationContent()
-        content.title = "Resume trip?"
-        let km = String(format: "%.1f km", distanceMetres / 1000)
-        let mins = Int(durationSec / 60)
-        content.body = "We saved \(km) over \(mins) min before the app stopped. Resume it, save what we have, or discard?"
-        content.sound = .default
-        content.categoryIdentifier = Self.recoveryCategoryId
-        content.userInfo = [Self.recoveryUserInfoTripId: inflightId]
-        content.interruptionLevel = .timeSensitive
-
-        let request = UNNotificationRequest(identifier: "trip-recovery-\(inflightId)",
-                                            content: content, trigger: nil)
-        center.add(request)
-    }
-
     // MARK: - Reschedule All
 
     /// Called after profile changes (e.g. claim method switch, new vehicle).

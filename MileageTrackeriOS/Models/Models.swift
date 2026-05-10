@@ -343,8 +343,9 @@ struct DayScheduleSnapshot: Identifiable {
     var shortName  : String { Calendar.current.shortWeekdaySymbols[safe: weekday - 1] ?? "" }
 
     static var defaults: [DayScheduleSnapshot] {
-        [(1,false),(2,true),(3,true),(4,true),(5,true),(6,true),(7,false)].map {
-            DayScheduleSnapshot(weekday: $0.0, isEnabled: $0.1, startHour: 8, endHour: 17)
+        // Mon(2)…Sat(7), then Sun(1) last. Enabled Mon–Fri, 7am–6pm.
+        [(2,true),(3,true),(4,true),(5,true),(6,true),(7,false),(1,false)].map {
+            DayScheduleSnapshot(weekday: $0.0, isEnabled: $0.1, startHour: 7, endHour: 18)
         }
     }
 }

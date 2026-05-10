@@ -136,6 +136,8 @@ final class TripRecorder {
     private weak var locationManager: LocationManager?
     private weak var motionManager: MotionManager?
     private weak var bluetoothManager: BluetoothManager?
+    private weak var liveActivityManager: LiveActivityManager?
+    private weak var notificationManager: NotificationManager?
     private var tripRepo: TripRepository?
     private var profileRepo: UserProfileRepository?
 
@@ -150,6 +152,7 @@ final class TripRecorder {
 
     // MARK: Pausing state tracking
     private var pauseStart: Date?
+    private var evaluationTimer: Timer?
 
     // MARK: Signal state
     private var carPlayConnected = false
@@ -187,12 +190,16 @@ final class TripRecorder {
 
     func configure(location: LocationManager, motion: MotionManager,
                    bluetooth: BluetoothManager,
+                   liveActivity: LiveActivityManager,
+                   notifications: NotificationManager,
                    tripRepo: TripRepository, profileRepo: UserProfileRepository) {
-        self.locationManager  = location
-        self.motionManager    = motion
-        self.bluetoothManager = bluetooth
-        self.tripRepo         = tripRepo
-        self.profileRepo      = profileRepo
+        self.locationManager     = location
+        self.motionManager       = motion
+        self.bluetoothManager    = bluetooth
+        self.liveActivityManager = liveActivity
+        self.notificationManager = notifications
+        self.tripRepo            = tripRepo
+        self.profileRepo         = profileRepo
 
         location.onLocationUpdate = { [weak self] loc in
             self?.handleLocationUpdate(loc)
@@ -203,6 +210,7 @@ final class TripRecorder {
         motion.onPedometerUpdate = { [weak self] steps in
             self?.pedometerStepsInWindow = steps
             self?.evaluatePedometerGate(steps)
+            self?.evaluatePedometerEndTrigger(steps)
         }
         motion.onAltimeterUpdate = { _ in
             // Altimeter data is logged but not yet used for gating.
@@ -275,6 +283,7 @@ final class TripRecorder {
                 locationManager?.startHighAccuracyUpdates()
                 motionManager?.startPedometerUpdates(from: checkpoint.tripStartedAt)
                 motionManager?.startAltimeterUpdates()
+                startEvaluationTimer()
             } else {
                 // Gap too long — force-finalize
                 logger.log("Checkpoint: gap \(Int(gap))s exceeds recovery window — force-finalizing", category: .trip)
@@ -346,6 +355,18 @@ final class TripRecorder {
                 }
             }
 
+            // Motion-only pause trigger: sustained stationary without engine signal
+            // bridges the gap when GPS is silent (iOS background throttling).
+            if case .active = state,
+               activity.isStationary && activity.confidence == .high,
+               sustainedStationary(window: 45),
+               !softEngineSignal() {
+                pauseStart = Date()
+                let dist = calculateTotalDistance()
+                logger.log("Entering pausing — sustained stationary (motion-only)", category: .trip)
+                transitionTo(.pausing(startedAt: tripStartedAt!, distanceMetres: dist, pauseStart: pauseStart!))
+            }
+
         case .ending:
             break
         }
@@ -384,6 +405,8 @@ final class TripRecorder {
             let dist = calculateTotalDistance()
             evaluateTransitions(location, distance: dist)
             updateStateDistance(dist)
+            // Update Live Activity (throttled internally to every 5s)
+            liveActivityManager?.updateTrip(distanceMetres: dist, startedAt: tripStartedAt ?? Date())
 
         case .ending:
             // Only accept high-accuracy fixes during ending
@@ -442,21 +465,38 @@ final class TripRecorder {
     private func shouldPromote() -> Bool {
         // Hard engine signal + primary trigger → immediate promote
         if (suspectedReason == .carPlay || suspectedReason == .knownCarBT) && hardEngineSignal() {
+            logger.log("Promotion check: hard engine signal ✅", category: .trip)
             return true
         }
         // Sustained automotive at high confidence for 30s
         if sustainedAutomotive(window: Heuristic.automotiveSustained, confidence: .high) {
+            logger.log("Promotion check: sustained automotive (high) ✅", category: .trip)
             return true
         }
         // GPS speed > 25 km/h sustained 20s with automotive in last 60s
-        if recentGPSSpeedExceeded(window: 20, thresholdKmh: Heuristic.promotionSpeedKmh)
-            && automotiveInLast(Heuristic.softSignalWindow) {
+        let speedGate = recentGPSSpeedExceeded(window: 20, thresholdKmh: Heuristic.promotionSpeedKmh)
+        let hasAutomotive = automotiveInLast(Heuristic.softSignalWindow)
+        if speedGate && hasAutomotive {
+            logger.log("Promotion check: speed gate + automotive ✅", category: .trip)
+            return true
+        }
+        // GPS speed > 25 km/h sustained 20s + pedometer confirms not walking (zero steps).
+        // This handles the "phone in pocket" case where the accelerometer cannot
+        // confidently classify automotive but GPS clearly shows driving behaviour.
+        if speedGate && pedometerStepsInWindow == 0 {
+            logger.log("Promotion check: speed gate + pedometer=0 (pocket mode) ✅", category: .trip)
             return true
         }
         // Distance from suspected start > 250m and no walking
-        if distanceFromSuspectedStart() > Heuristic.promoteDistanceM && pedometerStepsInWindow == 0 {
+        let dist = distanceFromSuspectedStart()
+        if dist > Heuristic.promoteDistanceM && pedometerStepsInWindow == 0 {
+            let d = Int(dist)
+            logger.log("Promotion check: distance gate (\(d)m) ✅", category: .trip)
             return true
         }
+        // Log why promotion was rejected (for debugging)
+        let d = Int(dist)
+        logger.log("Promotion rejected — speed:\(speedGate) auto:\(hasAutomotive) steps:\(pedometerStepsInWindow) dist:\(d)m", category: .trip)
         return false
     }
 
@@ -479,6 +519,21 @@ final class TripRecorder {
         logger.log("Promoted to active — \(collectedLocations.count) pts, \(Int(dist))m", category: .trip)
         transitionTo(.active(startedAt: tripStartedAt!, distanceMetres: dist))
 
+        // Start Live Activity
+        liveActivityManager?.startTrip(
+            vehicleName: profileRepo?.defaultVehicle?.name ?? "",
+            startedAt: tripStartedAt ?? started
+        )
+
+        // Trip detected notification
+        notificationManager?.sendTripStarted(
+            vehicleName: profileRepo?.defaultVehicle?.name ?? ""
+        )
+
+        // Start recurring evaluation timer so the state machine can detect
+        // trip end even when iOS throttles background GPS delivery.
+        startEvaluationTimer()
+
         // Track battery state for "became charging during trip" signal
         if let motion = motionManager, motion.isCharging {
             batteryChargingDuringTrip = true
@@ -488,8 +543,10 @@ final class TripRecorder {
     }
 
     private func discardCurrent() {
+        liveActivityManager?.endTrip()
         promotionTimer?.invalidate()
         promotionTimer = nil
+        stopEvaluationTimer()
         detectionBuffer.removeAll()
         locationManager?.stopHighAccuracyUpdates()
         motionManager?.stopPedometerUpdates()
@@ -589,6 +646,13 @@ final class TripRecorder {
     // MARK: - Pause Limit (Dynamic)
 
     private func computePauseLimit() -> TimeInterval {
+        // Collapse to 30s when GPS is stale and motion is stationary —
+        // we've likely been parked for a while already.
+        if let lastLoc = collectedLocations.last,
+           Date().timeIntervalSince(lastLoc.timestamp) > Heuristic.gpsStaleTolerance,
+           lastMotionActivity?.isStationary == true {
+            return Heuristic.pauseLimitWalking()
+        }
         if visitArrivalRecent(window: 60) && !softEngineSignal() {
             return Heuristic.pauseLimitVisitNoSignal()
         }
@@ -599,6 +663,49 @@ final class TripRecorder {
             return Heuristic.pauseLimitEngineSoft()
         }
         return Heuristic.pauseLimitDefault()
+    }
+
+    // MARK: - Evaluation Timer
+
+    private func startEvaluationTimer() {
+        stopEvaluationTimer()
+        evaluationTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.evaluateTransitionsOnTimer()
+            }
+        }
+    }
+
+    private func stopEvaluationTimer() {
+        evaluationTimer?.invalidate()
+        evaluationTimer = nil
+    }
+
+    /// Fires every 15s during active/pausing so the state machine can detect
+    /// trip end even when iOS throttles background GPS delivery.
+    private func evaluateTransitionsOnTimer() {
+        let loc = collectedLocations.last ?? locationManager?.lastGoodFix
+        guard let lastLoc = loc else { return }
+        switch state {
+        case .active, .pausing:
+            evaluateTransitions(lastLoc, distance: calculateTotalDistance())
+        default:
+            break
+        }
+    }
+
+    // MARK: - Pedometer End Trigger
+
+    /// Called on every pedometer update. Triggers trip ending directly from
+    /// active state when walking is detected without an engine signal —
+    /// independent of GPS delivery so it works when iOS throttles background fixes.
+    private func evaluatePedometerEndTrigger(_ steps: Int) {
+        guard case .active = state, steps > 30, !softEngineSignal() else { return }
+        guard let startedAt = tripStartedAt else { return }
+        let dist = calculateTotalDistance()
+        logger.log("Walking detected without engine signal — ending trip (pedometer trigger)", category: .trip)
+        transitionTo(.ending(startedAt: startedAt, distanceMetres: dist, reason: .walkingDetected))
+        finaliseAfterTrim()
     }
 
     // MARK: - Trip Finalisation
@@ -779,6 +886,13 @@ final class TripRecorder {
         return recent.allSatisfy { $0.activity.isStationary && $0.activity.confidence == .high }
     }
 
+    private func sustainedStationary(window: TimeInterval) -> Bool {
+        let cutoff = Date().addingTimeInterval(-window)
+        let recent = motionHistory.filter { $0.timestamp >= cutoff }
+        guard recent.count >= 3 else { return false }
+        return recent.allSatisfy { $0.activity.isStationary }
+    }
+
     // MARK: - GPS Window Helpers
 
     private func recentGPSSpeedExceeded(window: TimeInterval, thresholdKmh: Double) -> Bool {
@@ -865,12 +979,16 @@ final class TripRecorder {
     private var departureAnchorExpiry: Date?
 
     private func handleRegionDeparture(_ anchor: CLLocation) {
-        guard case .idle = state else {
-            logger.log("Region departure ignored — not idle", category: .trip)
-            return
-        }
+        // Always store the anchor — it survives even if visit departure already entered Suspected.
+        // The visit departure fires first from LocationManager.didExitRegion, so the guard below
+        // would otherwise discard the anchor. Storing it unconditionally fixes the ~220m cold-start gap.
         departureAnchorLocation = anchor
         departureAnchorExpiry   = Date().addingTimeInterval(600)
+
+        guard case .idle = state else {
+            logger.log("Region departure anchor stored (already \(label(state)))", category: .trip)
+            return
+        }
         logger.log("Region departure anchor stored — starting GPS", category: .trip)
         locationManager?.startHighAccuracyUpdates()
         enterSuspected(reason: .geofenceExit)
@@ -981,7 +1099,9 @@ final class TripRecorder {
     // MARK: - Reset
 
     private func reset() {
+        liveActivityManager?.endTrip()
         clearCheckpoint()
+        stopEvaluationTimer()
         collectedLocations.removeAll()
         detectionBuffer.removeAll()
         tripStartedAt        = nil
@@ -1115,6 +1235,51 @@ final class TripRecorder {
 
     private func clearCheckpoint() {
         try? FileManager.default.removeItem(at: Self.checkpointURL)
+    }
+
+    // MARK: - Manual Trip Controls
+
+    /// Force-start a trip directly into `.active` — skips the Suspected window.
+    /// Used by the manual Start Trip button on the Home tab.
+    func forceStartManualTrip() {
+        guard case .idle = state else {
+            logger.log("Manual start ignored — not idle", category: .trip)
+            return
+        }
+        let now = Date()
+        suspectedAt = now
+        suspectedReason = .motion
+
+        // Use lastGoodFix as the anchor — if nil, fall back to request one-shot
+        let anchor = locationManager?.lastGoodFix
+
+        // Start GPS if not already running
+        if locationManager?.isHighAccuracyActive != true {
+            locationManager?.startHighAccuracyUpdates()
+        }
+
+        collectedLocations = anchor.map { [$0] } ?? []
+        tripStartedAt = anchor?.timestamp ?? now
+
+        let dist = calculateTotalDistance()
+        logger.log("Manual trip started — anchor: \(anchor != nil ? "yes" : "no"), \(Int(dist))m", category: .trip)
+        transitionTo(.active(startedAt: tripStartedAt!, distanceMetres: dist))
+
+        liveActivityManager?.startTrip(
+            vehicleName: profileRepo?.defaultVehicle?.name ?? "",
+            startedAt: tripStartedAt!
+        )
+
+        startEvaluationTimer()
+
+        if let motion = motionManager, motion.isCharging {
+            batteryChargingDuringTrip = true
+        } else {
+            batteryWasUnpluggedAtTripStart = true
+        }
+
+        motionManager?.startPedometerUpdates(from: now)
+        motionManager?.startAltimeterUpdates()
     }
 
     // MARK: - Force Finalise (Debug)

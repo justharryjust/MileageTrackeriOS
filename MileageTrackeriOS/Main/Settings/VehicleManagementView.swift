@@ -8,13 +8,10 @@ struct VehicleManagementView: View {
 
     @State private var showingAddSheet = false
     @State private var editingVehicle: Vehicle?
-    @State private var vehicleToDelete: Vehicle?
-    @State private var showArchiveConfirmation: Vehicle?
-    @State private var vehicleTripCounts: [String: Int] = [:]
 
     private var repo: UserProfileRepository { appState.profileRepo }
-    private var activeVehicles: [Vehicle] { repo.vehicles }
-    private var archivedVehicles: [Vehicle] { repo.allVehicles.filter { $0.isArchived } }
+    private var activeVehicles: [Vehicle] { repo.vehicles.filter { !$0.isArchived } }
+    private var archivedVehicles: [Vehicle] { repo.vehicles.filter { $0.isArchived } }
 
     var body: some View {
         List {
@@ -47,92 +44,20 @@ struct VehicleManagementView: View {
             }
         }
         .sheet(isPresented: $showingAddSheet) {
-            VehicleFormView(mode: .add) { name, reg, type, fuel, category in
-                repo.addVehicle(name: name, registration: reg, type: type, fuelType: fuel, defaultCategory: category)
+            VehicleFormView(mode: .add) { name, reg, type, fuel in
+                repo.addVehicle(name: name, registration: reg, type: type, fuelType: fuel)
                 showingAddSheet = false
             }
         }
         .sheet(item: $editingVehicle) { vehicle in
             VehicleFormView(
                 mode: .edit(vehicle: vehicle),
-                onSave: { name, reg, type, fuel, category in
+                onSave: { name, reg, type, fuel in
                     repo.updateVehicle(vehicle, name: name, registration: reg, type: type, fuelType: fuel)
-                    if category != vehicle.defaultCategory {
-                        repo.setVehicleDefaultCategory(vehicle, category)
-                    }
                     editingVehicle = nil
                 }
             )
         }
-        .onAppear {
-            loadTripCounts()
-        }
-        .confirmationDialog(
-            "Delete Vehicle",
-            isPresented: Binding(
-                get: { vehicleToDelete != nil },
-                set: { if !$0 { vehicleToDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            if let vehicle = vehicleToDelete {
-                Button("Delete", role: .destructive) {
-                    confirmDelete(vehicle)
-                }
-                Button("Cancel", role: .cancel) {
-                    vehicleToDelete = nil
-                }
-            }
-        } message: {
-            if let vehicle = vehicleToDelete {
-                let count = vehicleTripCounts[vehicle.id] ?? 0
-                if count > 0 {
-                    Text("This will also delete \(count) trip\(count == 1 ? "" : "s") associated with this vehicle. This action cannot be undone.")
-                } else {
-                    Text("This action cannot be undone.")
-                }
-            }
-        }
-        .confirmationDialog(
-            "Archive Vehicle",
-            isPresented: Binding(
-                get: { showArchiveConfirmation != nil },
-                set: { if !$0 { showArchiveConfirmation = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Text("Archive")
-            Button("Archive", role: .destructive) {
-                if let vehicle = showArchiveConfirmation {
-                    repo.archiveVehicle(vehicle)
-                }
-                showArchiveConfirmation = nil
-            }
-            Button("Cancel", role: .cancel) {
-                showArchiveConfirmation = nil
-            }
-        } message: {
-            if let vehicle = showArchiveConfirmation {
-                Text("Archive \(vehicle.name.isEmpty ? vehicle.registration : vehicle.name)? The vehicle will be hidden from the active list but its trips will be preserved.")
-            }
-        }
-    }
-
-    // MARK: - Helpers
-
-    private func loadTripCounts() {
-        var counts: [String: Int] = [:]
-        for vehicle in repo.allVehicles {
-            counts[vehicle.id] = appState.tripRepo.trips(for: vehicle.id).count
-        }
-        vehicleTripCounts = counts
-    }
-
-    private func confirmDelete(_ vehicle: Vehicle) {
-        repo.deleteVehicle(vehicle, tripRepo: appState.tripRepo)
-        vehicleToDelete = nil
-        // Refresh trip counts after deletion
-        loadTripCounts()
     }
 
     // MARK: - Vehicle Row
@@ -149,7 +74,7 @@ struct VehicleManagementView: View {
                     .foregroundStyle(vehicle.isDefault ? Color.mtGreen : Color.mtTextSub)
             }
 
-            // Name + plate + trip count
+            // Name + plate
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: MTSpacing.xs) {
                     Text(vehicle.name.isEmpty ? vehicle.registration : vehicle.name)
@@ -165,16 +90,9 @@ struct VehicleManagementView: View {
                             .clipShape(Capsule())
                     }
                 }
-                HStack(spacing: MTSpacing.xs) {
-                    Text("\(vehicle.registration) · \(vehicle.fuelType.displayName)")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.mtTextSub)
-                    if let count = vehicleTripCounts[vehicle.id], count > 0 {
-                        Text("· \(count) trip\(count == 1 ? "" : "s")")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color.mtTextSub)
-                    }
-                }
+                Text("\(vehicle.registration) · \(vehicle.fuelType.displayName)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.mtTextSub)
             }
 
             Spacer()
@@ -199,7 +117,7 @@ struct VehicleManagementView: View {
                     Divider()
 
                     Button(role: .destructive) {
-                        showArchiveConfirmation = vehicle
+                        repo.archiveVehicle(vehicle)
                     } label: {
                         Label("Archive", systemImage: "archivebox")
                     }
@@ -208,6 +126,7 @@ struct VehicleManagementView: View {
                         .font(.system(size: 16))
                         .foregroundStyle(Color.mtTextSub)
                 }
+                .disabled(isArchived)
             } else {
                 Button {
                     repo.unarchiveVehicle(vehicle)
@@ -221,18 +140,6 @@ struct VehicleManagementView: View {
             }
         }
         .padding(.vertical, 2)
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(role: .destructive) {
-                let count = vehicleTripCounts[vehicle.id] ?? 0
-                if count > 0 {
-                    vehicleToDelete = vehicle
-                } else {
-                    confirmDelete(vehicle)
-                }
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-        }
     }
 }
 
@@ -269,31 +176,24 @@ private struct VehicleFormView: View {
             if case .edit(let v) = self { return v.fuelType }
             return .petrol
         }
-
-        var initialCategory: TripCategory {
-            if case .edit(let v) = self { return v.defaultCategory }
-            return .uncategorised
-        }
     }
 
     let mode: Mode
-    let onSave: (String, String, VehicleType, FuelType, TripCategory) -> Void
+    let onSave: (String, String, VehicleType, FuelType) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
     @State private var registration: String
     @State private var vehicleType: VehicleType
     @State private var fuelType: FuelType
-    @State private var defaultCategory: TripCategory
 
-    init(mode: Mode, onSave: @escaping (String, String, VehicleType, FuelType, TripCategory) -> Void) {
+    init(mode: Mode, onSave: @escaping (String, String, VehicleType, FuelType) -> Void) {
         self.mode = mode
         self.onSave = onSave
         _name = State(initialValue: mode.initialName)
         _registration = State(initialValue: mode.initialReg)
         _vehicleType = State(initialValue: mode.initialType)
         _fuelType = State(initialValue: mode.initialFuel)
-        _defaultCategory = State(initialValue: mode.initialCategory)
     }
 
     var body: some View {
@@ -320,23 +220,13 @@ private struct VehicleFormView: View {
                     }
                 }
 
-                Section("Default Trip Category") {
-                    Picker("Default Category", selection: $defaultCategory) {
-                        Text("Business").tag(TripCategory.business)
-                        Text("Personal").tag(TripCategory.personal)
-                        Text("Uncategorised").tag(TripCategory.uncategorised)
-                    }
-                    .pickerStyle(.menu)
-                }
-
                 Section {
                     Button("Save") {
                         onSave(
                             name.trimmingCharacters(in: .whitespaces),
                             registration.trimmingCharacters(in: .whitespaces),
                             vehicleType,
-                            fuelType,
-                            defaultCategory
+                            fuelType
                         )
                     }
                     .buttonStyle(MTPrimaryButtonStyle())

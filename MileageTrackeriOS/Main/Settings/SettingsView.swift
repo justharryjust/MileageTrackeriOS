@@ -13,32 +13,94 @@ struct SettingsView: View {
                     } label: {
                         Label("Tracking Hours", systemImage: "clock")
                     }
+
+                    Toggle(isOn: Binding(
+                        get: { LiveActivityManager.isEnabled },
+                        set: { UserDefaults.standard.set($0, forKey: LiveActivityManager.liveActivityEnabledKey) }
+                    )) {
+                        Label("Live Activity", systemImage: "car.window.right")
+                    }
+                    .tint(Color.mtGreen)
+                }
+
+                Section("Notifications") {
+                    if !appState.notificationManager.isAuthorized {
+                        Button {
+                            appState.notificationManager.requestPermission()
+                        } label: {
+                            Label("Enable Notifications", systemImage: "bell.badge")
+                        }
+                    }
+
+                    Toggle(isOn: Binding(
+                        get: { NotificationManager.tripDetectedEnabled },
+                        set: { NotificationManager.tripDetectedEnabled = $0 }
+                    )) {
+                        Label("Trip Started", systemImage: "car.fill")
+                    }
+                    .tint(Color.mtGreen)
+
+                    Toggle(isOn: Binding(
+                        get: { NotificationManager.odometerReminderEnabled },
+                        set: { NotificationManager.odometerReminderEnabled = $0 }
+                    )) {
+                        Label("Odometer Reminder", systemImage: "speedometer")
+                    }
+                    .tint(Color.mtGreen)
+
+                    Toggle(isOn: Binding(
+                        get: { NotificationManager.weeklySummaryEnabled },
+                        set: { NotificationManager.weeklySummaryEnabled = $0 }
+                    )) {
+                        Label("Weekly Summary", systemImage: "chart.bar.fill")
+                    }
+                    .tint(Color.mtGreen)
                 }
 
                 Section("Profile") {
-                    LabeledContent("Jurisdiction", value: appState.profileRepo.jurisdiction.displayName)
-                    LabeledContent("Claim Method", value: appState.profileRepo.claimMethod.displayName)
+                    NavigationLink {
+                        ProfileEditView()
+                            .environment(appState)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Edit Profile")
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundStyle(Color.mtTextPrimary)
+                                Text("\(appState.profileRepo.jurisdiction.displayName) · \(appState.profileRepo.claimMethod.displayName) · \(appState.profileRepo.distanceUnit.displayName)")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Color.mtTextSub)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Color.mtBorder)
+                        }
+                    }
                 }
 
                 Section("Vehicles") {
-                    if appState.profileRepo.vehicles.isEmpty {
-                        Text("No vehicles added").foregroundStyle(Color.mtTextSub)
-                    } else {
-                        ForEach(appState.profileRepo.vehicles) { v in
-                            HStack {
+                    NavigationLink {
+                        VehicleManagementView()
+                            .environment(appState)
+                    } label: {
+                        HStack {
+                            if let v = appState.profileRepo.defaultVehicle {
                                 Image(systemName: v.type.icon).foregroundStyle(Color.mtGreen)
                                 VStack(alignment: .leading) {
-                                    Text(v.name).font(.system(size: 15, weight: .medium))
-                                    Text(v.registration)
-                                        .font(.system(size: 12, design: .monospaced))
+                                    Text(v.name.isEmpty ? v.registration : v.name)
+                                        .font(.system(size: 15, weight: .medium))
+                                        .foregroundStyle(Color.mtTextPrimary)
+                                    Text("\(v.registration) · \(v.fuelType.displayName)")
+                                        .font(.system(size: 12))
                                         .foregroundStyle(Color.mtTextSub)
                                 }
-                                if v.isDefault {
-                                    Spacer()
-                                    Text("Default")
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(Color.mtGreen)
-                                }
+                                Spacer()
+                                Text("\(appState.profileRepo.vehicles.count) vehicle\(appState.profileRepo.vehicles.count != 1 ? "s" : "")")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Color.mtTextSub)
+                            } else {
+                                Label("Add a vehicle", systemImage: "car.fill")
                             }
                         }
                     }
@@ -74,6 +136,14 @@ struct SettingsView: View {
                 }
 
                 // Debug / Diagnostics
+                Section("Help") {
+                    NavigationLink {
+                        TipsView()
+                    } label: {
+                        Label("Tips for Best Results", systemImage: "lightbulb.fill")
+                    }
+                }
+
                 Section("Diagnostics") {
                     NavigationLink {
                         DebugLogView()

@@ -49,13 +49,22 @@ final class MileageCalculator {
 
     // MARK: - Logbook Business Use %
 
-    /// Calculates business-use percentage from a set of odometer readings.
-    /// Returns a value between 0 and 1 (e.g. 0.35 = 35% business use).
-    func businessUsePercent(readings: [OdometerReading], trips: [Trip]) -> Double {
-        let businessKm = trips
-            .filter { $0.category == .business }
-            .reduce(0) { $0 + ($1.distanceMetres / 1000) }
-        let totalKm = trips.reduce(0) { $0 + ($1.distanceMetres / 1000) }
+    /// Calculates business-use percentage using odometer readings for total distance.
+    ///
+    /// **Why odometer, not trip data:**
+    /// Odometer captures every kilometre the vehicle travelled — including short trips GPS missed,
+    /// driving with the app force-killed, and trips during the 7-day personal-trip purge window.
+    /// Trip data alone would undercount total km and inflate the business percentage.
+    /// Tax authorities (IRD, ATO, HMRC) expect the odometer-based calculation.
+    ///
+    /// - Parameters:
+    ///   - businessTrips: business-category trips in the logbook period
+    ///   - odometerStart: first reading of the logbook period (km)
+    ///   - odometerEnd: last reading of the logbook period (km)
+    /// - Returns: business-use fraction between 0 and 1 (0.35 = 35%)
+    func businessUsePercent(businessTrips: [Trip], odometerStart: Double, odometerEnd: Double) -> Double {
+        let businessKm = businessTrips.reduce(0) { $0 + ($1.distanceMetres / 1000) }
+        let totalKm = odometerEnd - odometerStart
         guard totalKm > 0 else { return 0 }
         return min(businessKm / totalKm, 1.0)
     }

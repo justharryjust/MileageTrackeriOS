@@ -7,15 +7,21 @@ struct ReportExportView: View {
 
     @State private var startDate: Date
     @State private var endDate: Date
+    @State private var selectedVehicleId: String = ""
     @State private var isExporting = false
     @State private var exportURL: URL?
 
     private var profile: UserProfile { appState.profileRepo.profile }
     private var trips: [Trip] { appState.tripRepo.allTrips }
+    private var vehicles: [Vehicle] { appState.profileRepo.vehicles }
 
     private var filteredTrips: [Trip] {
-        trips.filter { $0.startedAt >= startDate && $0.startedAt <= endDate }
-            .sorted { $0.startedAt < $1.startedAt }
+        trips.filter { trip in
+            let inRange = trip.startedAt >= startDate && trip.startedAt <= endDate
+            let matchesVehicle = selectedVehicleId.isEmpty || trip.vehicleId == selectedVehicleId
+            return inRange && matchesVehicle
+        }
+        .sorted { $0.startedAt < $1.startedAt }
     }
 
     private var totalDistance: Double {
@@ -72,6 +78,14 @@ struct ReportExportView: View {
                     Spacer()
                     Text(profile.jurisdiction.displayName)
                         .foregroundStyle(Color.mtTextSub)
+                }
+                if vehicles.count > 1 {
+                    Picker("Vehicle", selection: $selectedVehicleId) {
+                        Text("All").tag("")
+                        ForEach(vehicles) { v in
+                            Text(v.name.isEmpty ? v.registration : v.name).tag(v.id)
+                        }
+                    }
                 }
             }
 
@@ -152,6 +166,7 @@ struct ReportExportView: View {
             let ty = profile.jurisdiction.taxYear.containing(Date())
             startDate = ty.start
             endDate = ty.end
+            selectedVehicleId = appState.profileRepo.defaultVehicle?.id ?? ""
         }
     }
 
