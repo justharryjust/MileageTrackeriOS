@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppState.self) private var appState
+    @State private var isSharingDebugData = false
+    @State private var debugDataURL: URL?
 
     var body: some View {
         NavigationStack {
@@ -162,6 +164,13 @@ struct SettingsView: View {
                     } label: {
                         Label("Potential Extensions", systemImage: "lightbulb")
                     }
+
+                    Button {
+                        debugDataURL = DebugDataCollector.collectDebugData(appState: appState)
+                        isSharingDebugData = true
+                    } label: {
+                        Label("Share Debug Data", systemImage: "ladybug")
+                    }
                 }
 
                 // Danger zone
@@ -172,6 +181,11 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .sheet(isPresented: $isSharingDebugData) {
+                if let url = debugDataURL {
+                    ShareSheet(items: [url])
+                }
+            }
         }
     }
 }

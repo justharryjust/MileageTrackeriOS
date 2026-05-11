@@ -175,6 +175,8 @@ enum TripCategory: String, CaseIterable, PersistableEnum {
 enum TripSource: String, PersistableEnum {
     case automatic = "automatic"
     case manual    = "manual"
+    case merged    = "merged"
+    case inflight  = "inflight"  // trip in progress, not yet committed
 }
 
 // MARK: - Vehicle
@@ -225,6 +227,13 @@ final class TripPoint: Object {
     }
 }
 
+// MARK: - Trip Processing Status
+
+enum TripProcessingStatus: String, PersistableEnum {
+    case complete   // addresses resolved, gaps filled
+    case pending    // needs address re-resolution and/or route snap retry
+}
+
 // MARK: - Trip
 
 final class Trip: Object, ObjectKeyIdentifiable {
@@ -248,9 +257,10 @@ final class Trip: Object, ObjectKeyIdentifiable {
     @Persisted var visitDepartureAt: Date?        // set when a CLVisit departure pre-armed this trip
     @Persisted var carKitName: String?            // name of car-kit connected when trip started, if any
     @Persisted var businessUsePercent: Double?    // only set when claim method is .logbook
+    @Persisted var processingStatus: TripProcessingStatus = .complete
+    @Persisted var processingRetries: Int         = 0
     @Persisted var createdAt: Date                = Date()
     @Persisted var updatedAt: Date                = Date()
-    // TODO: 
 
     // Non-persisted computed helpers
     var distanceKm: Double { distanceMetres / 1000 }

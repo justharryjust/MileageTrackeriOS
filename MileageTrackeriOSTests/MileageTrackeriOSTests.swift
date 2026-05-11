@@ -52,12 +52,17 @@ private struct Harness {
         recorder.heuristicMinTripDistance = 0
         recorder.heuristicMinTripDuration = 0
 
+        let liveActivityManager = LiveActivityManager()
+        let notificationManager = NotificationManager()
+
         recorder.configure(
-            location    : locationManager,
-            motion      : motionManager,
-            bluetooth   : bluetoothManager,
-            tripRepo    : tripRepo,
-            profileRepo : profileRepo
+            location      : locationManager,
+            motion        : motionManager,
+            bluetooth     : bluetoothManager,
+            liveActivity  : liveActivityManager,
+            notifications : notificationManager,
+            tripRepo      : tripRepo,
+            profileRepo   : profileRepo
         )
     }
 

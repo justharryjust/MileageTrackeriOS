@@ -10,7 +10,7 @@ final class RealmProvider {
     private(set) var realm: Realm
 
     /// Current schema version — bump this whenever the model changes and add a migration block.
-    static let schemaVersion: UInt64 = 5
+    static let schemaVersion: UInt64 = 6
 
     private init() {
         let config = Realm.Configuration(
@@ -25,6 +25,14 @@ final class RealmProvider {
                 // v4 -> v5: added Trip.businessUsePercent (optional Double),
                 //           OdometerReading.source (OdometerSource, default .manual)
                 //           Both are new optional/enum fields — no migration action needed
+                // v5 -> v6: added Trip.processingStatus (TripProcessingStatus, default .complete),
+                //           Trip.processingRetries (Int, default 0)
+                if oldVersion < 6 {
+                    migration.enumerateObjects(ofType: "Trip") { _, newObject in
+                        newObject?["processingStatus"] = TripProcessingStatus.complete.rawValue
+                        newObject?["processingRetries"] = 0
+                    }
+                }
             },
             objectTypes: [
                 UserProfile.self,
