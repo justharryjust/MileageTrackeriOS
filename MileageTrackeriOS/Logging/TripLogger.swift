@@ -54,7 +54,7 @@ final class TripLogger: ObservableObject {
 
     private let textLogURL: URL       // human-readable, exportable
     private let entriesCacheURL: URL   // serialised entries for the debug viewer
-    private let maxEntries      = 5000
+    private let maxEntries      = 10000
     private let maxFileBytes    = 5 * 1024 * 1024   // 5 MB rolling cap for text log
     private let logger = Logger(subsystem: "com.harryjust.MileageTrackeriOS", category: "TripLogger")
 

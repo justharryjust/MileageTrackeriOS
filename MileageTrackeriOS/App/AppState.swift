@@ -4,6 +4,7 @@
 
 import Foundation
 import RealmSwift
+import UIKit
 
 @Observable
 final class AppState {
@@ -69,6 +70,14 @@ final class AppState {
         // If onboarding is already complete, start tracking immediately
         if profileRepo.hasCompletedOnboarding {
             startTracking()
+        }
+
+        // Retry offline-saved trips when the app comes to the foreground
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.tripRecorder.reprocessPendingTrips()
         }
     }
 

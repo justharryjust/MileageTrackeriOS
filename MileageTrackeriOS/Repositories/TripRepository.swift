@@ -60,6 +60,85 @@ final class TripRepository {
         totalDollarValue  = business.compactMap(\.dollarValue).reduce(0, +)
     }
 
+    // MARK: - In-flight Trip Management (called by TripRecorder during active recording)
+
+    /// Creates an in-flight Trip in Realm so it survives crashes. No TripPoints yet —
+    /// those are appended via `appendPoints` as GPS fixes arrive.
+    @discardableResult
+    func beginTrip(vehicleId: String, startedAt: Date,
+                   startLat: Double, startLng: Double,
+                   source: TripSource = .inflight) -> Trip {
+        let trip = Trip()
+        trip.vehicleId  = vehicleId
+        trip.startedAt  = startedAt
+        trip.startLat   = startLat
+        trip.startLng   = startLng
+        trip.source     = source
+        trip.processingStatus = .complete
+        write { realm.add(trip) }
+        return trip
+    }
+
+    /// Appends a batch of locations as TripPoints to the in-flight trip.
+    func appendPoints(to tripId: String, locations: [CLLocation]) {
+        guard !locations.isEmpty else { return }
+        let points: [TripPoint] = locations.map { loc in
+            TripPoint(tripId: tripId,
+                      latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude,
+                      altitude: loc.altitude, speedMs: loc.speed, accuracy: loc.horizontalAccuracy,
+                      recordedAt: loc.timestamp)
+        }
+        write { realm.add(points) }
+    }
+
+    /// Commits an in-flight trip on completion — sets end time, distance, address,
+    /// writes any remaining location points, and flips source from .inflight to .automatic.
+    func commitTrip(_ trip: Trip, endedAt: Date, distanceMetres: Double,
+                    locations: [CLLocation], startAddress: String, endAddress: String,
+                    visitDepartureAt: Date?, carKitName: String?,
+                    processingStatus: TripProcessingStatus) {
+        let sampled = downsample(locations, maxPoints: 500)
+        // Replace inflight TripPoints with the full downsampled set
+        write {
+            let oldPts = realm.objects(TripPoint.self).where { $0.tripId == trip.id }
+            realm.delete(oldPts)
+            let pts: [TripPoint] = sampled.map { loc in
+                TripPoint(tripId: trip.id,
+                          latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude,
+                          altitude: loc.altitude, speedMs: loc.speed, accuracy: loc.horizontalAccuracy,
+                          recordedAt: loc.timestamp)
+            }
+            realm.add(pts)
+            trip.endedAt    = endedAt
+            trip.distanceMetres = distanceMetres
+            trip.startAddress   = startAddress
+            trip.endAddress     = endAddress
+            trip.visitDepartureAt = visitDepartureAt
+            trip.carKitName     = carKitName
+            trip.processingStatus = processingStatus
+            trip.source         = .automatic
+            if let last = locations.last {
+                trip.endLat = last.coordinate.latitude
+                trip.endLng = last.coordinate.longitude
+            }
+            trip.updatedAt = Date()
+        }
+    }
+
+    /// Deletes an in-flight trip that didn't meet minimum thresholds.
+    func discardInflightTrip(_ trip: Trip) {
+        write {
+            let pts = realm.objects(TripPoint.self).where { $0.tripId == trip.id }
+            realm.delete(pts)
+            realm.delete(trip)
+        }
+    }
+
+    /// Returns any trip still in flight from a previous run (crash recovery).
+    var inflightTrip: Trip? {
+        realm.objects(Trip.self).where { $0.source == .inflight }.first
+    }
+
     // MARK: - Save Trip (called by TripRecorder)
 
     /// Persists a completed trip and its GPS points.
@@ -73,7 +152,8 @@ final class TripRepository {
         endAddress: String,
         source: TripSource = .automatic,
         visitDepartureAt: Date? = nil,
-        carKitName: String? = nil
+        carKitName: String? = nil,
+        processingStatus: TripProcessingStatus = .complete
     ) {
         let trip = Trip()
         trip.startAddress     = startAddress
@@ -85,6 +165,7 @@ final class TripRepository {
         trip.source           = source
         trip.visitDepartureAt = visitDepartureAt
         trip.carKitName       = carKitName
+        trip.processingStatus = processingStatus
 
         // Capture start/end coordinates from first/last reliable fix
         if let first = locations.first {
@@ -116,9 +197,11 @@ final class TripRepository {
                 realm.add(points)
             }
             TripLogger.shared.log(
-                "Trip saved ✅ id:\(trip.id) dist:\(String(format:"%.0f",distanceMetres))m pts:\(points.count)",
+                "Trip saved ✅ id:\(trip.id.prefix(8))… dist:\(String(format:"%.0f",distanceMetres))m pts:\(points.count)",
                 category: .trip
             )
+            // Check for adjacent trip fragments to auto-merge
+            autoMergeAdjacent(to: trip)
         } catch {
             TripLogger.shared.log("Failed to save trip: \(error)", category: .error)
         }
@@ -244,6 +327,236 @@ final class TripRepository {
         Array(realm.objects(TripPoint.self)
             .where { $0.tripId == trip.id }
             .sorted(byKeyPath: "recordedAt"))
+    }
+
+    // MARK: - Pending Trip Reprocessing
+
+    /// Trips saved while offline that still need address resolution / route snapping.
+    var pendingTrips: [Trip] {
+        Array(realm.objects(Trip.self)
+            .where { $0.processingStatus == .pending && $0.processingRetries < 3 }
+            .sorted(byKeyPath: "startedAt"))
+    }
+
+    /// Marks a pending trip as complete after successful re-processing.
+    func markTripComplete(_ trip: Trip) {
+        write {
+            trip.processingStatus = .complete
+            trip.updatedAt = Date()
+        }
+    }
+
+    /// Increments the retry counter without changing status (trip stays pending).
+    func bumpTripRetry(_ trip: Trip) {
+        write {
+            trip.processingRetries += 1
+            trip.updatedAt = Date()
+        }
+    }
+
+    /// Updates addresses and polyline for an already-saved trip (re-processing path).
+    func updateTrip(_ trip: Trip, startAddress: String, endAddress: String, locations: [CLLocation]) {
+        // Delete old TripPoints and insert updated ones
+        let sampled = downsample(locations, maxPoints: 500)
+        let points: [TripPoint] = sampled.map { loc in
+            TripPoint(tripId: trip.id,
+                      latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude,
+                      altitude: loc.altitude, speedMs: loc.speed, accuracy: loc.horizontalAccuracy,
+                      recordedAt: loc.timestamp)
+        }
+        write {
+            let oldPts = realm.objects(TripPoint.self).where { $0.tripId == trip.id }
+            realm.delete(oldPts)
+            realm.add(points)
+            trip.startAddress = startAddress
+            trip.endAddress   = endAddress
+            trip.processingStatus = .complete
+            trip.updatedAt = Date()
+            if let first = locations.first {
+                trip.startLat = first.coordinate.latitude
+                trip.startLng = first.coordinate.longitude
+            }
+            if let last = locations.last {
+                trip.endLat = last.coordinate.latitude
+                trip.endLng = last.coordinate.longitude
+            }
+        }
+    }
+
+    // MARK: - Trip Merging
+
+    /// Fetches a single trip by primary key.
+    func trip(id: String) -> Trip? {
+        realm.object(ofType: Trip.self, forPrimaryKey: id)
+    }
+
+    /// Fetches multiple trips by primary key.
+    func trips(ids: [String]) -> [Trip] {
+        Array(realm.objects(Trip.self).filter { ids.contains($0.id) })
+    }
+
+    /// Merges an array of trips into a single combined trip.
+    /// All source trips must share the same vehicleId.
+    @discardableResult
+    func mergeTrips(_ trips: [Trip]) -> Trip? {
+        guard trips.count >= 2 else {
+            TripLogger.shared.log("Merge aborted — need at least 2 trips", category: .error)
+            return nil
+        }
+        let sorted = trips.sorted { $0.startedAt < $1.startedAt }
+
+        let vehicleIds = Set(sorted.map { $0.vehicleId })
+        guard vehicleIds.count == 1, let vehicleId = vehicleIds.first else {
+            TripLogger.shared.log("Merge aborted — trips must share the same vehicleId", category: .error)
+            return nil
+        }
+
+        let merged = Trip()
+        merged.vehicleId      = vehicleId
+        merged.startedAt      = sorted.first!.startedAt
+        merged.endedAt        = sorted.last!.endedAt
+        merged.distanceMetres = sorted.reduce(0) { $0 + $1.distanceMetres }
+        merged.startAddress   = sorted.first!.startAddress
+        merged.endAddress     = sorted.last!.endAddress
+        merged.startLat       = sorted.first!.startLat
+        merged.startLng       = sorted.first!.startLng
+        merged.endLat         = sorted.last!.endLat
+        merged.endLng         = sorted.last!.endLng
+        merged.category       = .uncategorised
+        merged.source         = .merged
+
+        // Collect TripPoints from all source trips, sorted by recordedAt
+        let allPoints: [TripPoint] = sorted.flatMap { trip in
+            Array(realm.objects(TripPoint.self)
+                .where { $0.tripId == trip.id }
+                .sorted(byKeyPath: "recordedAt"))
+        }
+        .sorted { $0.recordedAt < $1.recordedAt }
+
+        // Derive start/end from the actual earliest/latest TripPoint — more accurate
+        // than source trips' stored coordinates, which may be walking-trimmed or
+        // anchor-based. Without this the merged polyline can start mid-route.
+        if let firstPoint = allPoints.first {
+            merged.startedAt  = firstPoint.recordedAt
+            merged.startLat   = firstPoint.latitude
+            merged.startLng   = firstPoint.longitude
+        }
+        if let lastPoint = allPoints.last {
+            merged.endedAt    = lastPoint.recordedAt
+            merged.endLat     = lastPoint.latitude
+            merged.endLng     = lastPoint.longitude
+        }
+
+        // Downsample to 500 points
+        let sampledLocations = downsample(allPoints.map {
+            CLLocation(coordinate: CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude),
+                       altitude: $0.altitude,
+                       horizontalAccuracy: $0.horizontalAccuracy,
+                       verticalAccuracy: -1,
+                       course: -1,
+                       speed: $0.speedMs,
+                       timestamp: $0.recordedAt)
+        }, maxPoints: 500)
+
+        let mergedPoints: [TripPoint] = sampledLocations.map { loc in
+            let pt = TripPoint()
+            pt.tripId              = merged.id
+            pt.latitude            = loc.coordinate.latitude
+            pt.longitude           = loc.coordinate.longitude
+            pt.altitude            = loc.altitude
+            pt.speedMs             = loc.speed
+            pt.horizontalAccuracy  = loc.horizontalAccuracy
+            pt.recordedAt          = loc.timestamp
+            return pt
+        }
+
+        do {
+            try realm.write {
+                realm.add(merged)
+                realm.add(mergedPoints)
+                for trip in sorted {
+                    let pts = realm.objects(TripPoint.self).where { $0.tripId == trip.id }
+                    realm.delete(pts)
+                    realm.delete(trip)
+                }
+            }
+            TripLogger.shared.log(
+                "Trips merged ✅ id:\(merged.id.prefix(8))… sources:\(sorted.count) dist:\(Int(merged.distanceMetres))m pts:\(mergedPoints.count)",
+                category: .trip
+            )
+            return merged
+        } catch {
+            TripLogger.shared.log("Merge failed: \(error)", category: .error)
+            return nil
+        }
+    }
+
+    // MARK: - Auto-Merge
+
+    /// After a trip is saved, checks for an adjacent trip fragment that should be
+    /// automatically merged. Two trips are considered adjacent when:
+    /// - Same vehicleId
+    /// - End of one is within the spatial threshold of the start of the other
+    /// - They are within 10 minutes of each other
+    ///
+    /// Micro-fragments (duration < 120s or distance < 500m) use a wider 500m spatial
+    /// window because their end coordinates are often unreliable — walking trim may
+    /// have removed the points closest to the actual parking location.
+    ///
+    /// Chains are followed: if A merges with B producing AB, we re-check AB against
+    /// C (up to 5 merges deep) so rapid-fire fragments all collapse into one trip.
+    private func autoMergeAdjacent(to trip: Trip, depth: Int = 0) {
+        guard depth < 5 else { return }
+
+        // Wider window for micro-fragments whose coordinates are less reliable
+        let isMicroFragment: Bool = {
+            let duration = (trip.endedAt ?? trip.startedAt).timeIntervalSince(trip.startedAt)
+            return duration < 120 || trip.distanceMetres < 500
+        }()
+        let spatialThreshold: Double = isMicroFragment ? 500 : 200
+        let temporalWindow: TimeInterval = 10 * 60 // 10 minutes
+
+        // Look for trips near this one's start (predecessor fragment)
+        let beforeStart = trip.startedAt.addingTimeInterval(-temporalWindow)
+        let afterStart  = trip.startedAt.addingTimeInterval(temporalWindow)
+
+        let candidates = realm.objects(Trip.self)
+            .filter { $0.vehicleId == trip.vehicleId && $0.id != trip.id }
+            .filter { ($0.startedAt >= beforeStart && $0.startedAt <= afterStart)
+                   || ($0.endedAt != nil && $0.endedAt! >= beforeStart && $0.endedAt! <= afterStart) }
+
+        // Check for a trip whose end is near our start (predecessor)
+        if let predecessor = candidates.first(where: { candidate in
+            guard let candidateEnd = candidate.endedAt, candidateEnd <= trip.startedAt else { return false }
+            let endLoc   = CLLocation(latitude: candidate.endLat, longitude: candidate.endLng)
+            let startLoc = CLLocation(latitude: trip.startLat, longitude: trip.startLng)
+            return endLoc.distance(from: startLoc) < spatialThreshold
+        }) {
+            TripLogger.shared.log(
+                "Auto-merge: found predecessor \(predecessor.id.prefix(8))… → \(trip.id.prefix(8))… (\(Int(CLLocation(latitude: predecessor.endLat, longitude: predecessor.endLng).distance(from: CLLocation(latitude: trip.startLat, longitude: trip.startLng))))m gap)",
+                category: .trip
+            )
+            if let merged = mergeTrips([predecessor, trip]) {
+                autoMergeAdjacent(to: merged, depth: depth + 1)
+            }
+            return
+        }
+
+        // Check for a trip whose start is near our end (successor)
+        if let successor = candidates.first(where: { candidate in
+            guard candidate.startedAt >= trip.endedAt ?? trip.startedAt else { return false }
+            let endLoc   = CLLocation(latitude: trip.endLat, longitude: trip.endLng)
+            let startLoc = CLLocation(latitude: candidate.startLat, longitude: candidate.startLng)
+            return endLoc.distance(from: startLoc) < spatialThreshold
+        }) {
+            TripLogger.shared.log(
+                "Auto-merge: found successor \(trip.id.prefix(8))… → \(successor.id.prefix(8))… (\(Int(CLLocation(latitude: trip.endLat, longitude: trip.endLng).distance(from: CLLocation(latitude: successor.startLat, longitude: successor.startLng))))m gap)",
+                category: .trip
+            )
+            if let merged = mergeTrips([trip, successor]) {
+                autoMergeAdjacent(to: merged, depth: depth + 1)
+            }
+        }
     }
 
     // MARK: - Private helpers
