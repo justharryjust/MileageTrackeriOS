@@ -134,26 +134,68 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
 
     // MARK: - Region Monitoring (geofence departure trigger)
 
+    /// Rolling "where I was last seen" region — re-centred after every fix during idle.
     private let regionIdentifier = "com.mileagetracker.departureRegion"
+    /// §1.C / §2.1: prefix for parking-hint geofences. Each hint gets its own region with
+    /// identifier "com.mileagetracker.parkingHint.<index>", monitored alongside the rolling one.
+    /// iOS allows 20 regions per app — we use up to 15 parking hints + 1 rolling = 16 max.
+    private let parkingHintPrefix = "com.mileagetracker.parkingHint."
 
     func startRegionMonitoring(around coordinate: CLLocationCoordinate2D, radius: CLLocationDistance = 150) {
         guard hasAlwaysAuthorization else {
             logger.log("Cannot start region monitoring — Always authorization required", category: .location)
             return
         }
-        stopRegionMonitoring()
+        // Only stop the rolling region — preserve parking-hint regions
+        stopRollingRegionOnly()
         let region = CLCircularRegion(center: coordinate, radius: radius, identifier: regionIdentifier)
         region.notifyOnExit  = true
         region.notifyOnEntry = false
         manager.startMonitoring(for: region)
-        logger.log("Started region monitoring at (\(String(format: "%.5f", coordinate.latitude)), \(String(format: "%.5f", coordinate.longitude))) radius: \(Int(radius))m", category: .location)
+        logger.log("Started rolling region at (\(String(format: "%.5f", coordinate.latitude)), \(String(format: "%.5f", coordinate.longitude))) radius: \(Int(radius))m", category: .location)
     }
 
-    func stopRegionMonitoring() {
+    /// §1.C / §2.1: monitor an arbitrary set of parking-hint coordinates as parallel
+    /// geofences. Replaces the previous set in one shot — call with [] to clear all hints
+    /// (the rolling departure region is preserved).
+    func startParkingHintRegions(_ coordinates: [CLLocationCoordinate2D], radius: CLLocationDistance = 150) {
+        guard hasAlwaysAuthorization else {
+            logger.log("Cannot start parking-hint regions — Always authorization required", category: .location)
+            return
+        }
+        // Stop existing parking-hint regions only
+        stopParkingHintRegions()
+        for (idx, coord) in coordinates.enumerated() {
+            guard CLLocationCoordinate2DIsValid(coord) else { continue }
+            let id = parkingHintPrefix + "\(idx)"
+            let region = CLCircularRegion(center: coord, radius: radius, identifier: id)
+            region.notifyOnExit  = true
+            region.notifyOnEntry = false
+            manager.startMonitoring(for: region)
+        }
+        logger.log("Started \(coordinates.count) parking-hint regions", category: .location)
+    }
+
+    private func stopRollingRegionOnly() {
         for region in manager.monitoredRegions where region.identifier == regionIdentifier {
             manager.stopMonitoring(for: region)
-            logger.log("Stopped region monitoring", category: .location)
         }
+    }
+
+    private func stopParkingHintRegions() {
+        for region in manager.monitoredRegions where region.identifier.hasPrefix(parkingHintPrefix) {
+            manager.stopMonitoring(for: region)
+        }
+    }
+
+    /// Stop ALL geofence monitoring (rolling + parking hints). Called when GPS active recording starts.
+    func stopRegionMonitoring() {
+        for region in manager.monitoredRegions
+            where region.identifier == regionIdentifier
+               || region.identifier.hasPrefix(parkingHintPrefix) {
+            manager.stopMonitoring(for: region)
+        }
+        logger.log("Stopped all region monitoring", category: .location)
     }
 
     /// Re-centers the departure region when not actively recording, so the next
@@ -185,7 +227,15 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         if let coord = currentLocation?.coordinate {
             startRegionMonitoring(around: coord)
         }
+        // §1.C: also re-arm parking-hint regions after recording ends.
+        // TripRecorder will call startParkingHintRegions() with the up-to-date LRU
+        // after each trip ends — this is a fallback for callers that don't.
+        onIdleRecentred?()
     }
+
+    /// Optional callback when entering idle (after a trip ends, etc.) — TripRecorder
+    /// uses this to re-arm parking-hint regions with the latest LRU.
+    var onIdleRecentred: (() -> Void)?
 
     // MARK: - One-Shot Location (cold-start fallback)
 
@@ -238,14 +288,15 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     }
 
     func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) {
-        guard region.identifier == regionIdentifier else { return }
+        let isRolling = region.identifier == regionIdentifier
+        let isParkingHint = region.identifier.hasPrefix(parkingHintPrefix)
+        guard isRolling || isParkingHint else { return }
+
         let departureDate = Date().addingTimeInterval(-60)
-        logger.log("Region exit detected — signalling departure at \(departureDate)", category: .location)
+        logger.log("Region exit (\(isParkingHint ? "parking hint" : "rolling")) — signalling departure at \(departureDate)", category: .location)
         lastBackgroundWakeAt = Date()
         onBackgroundWake?(departureDate)
         onVisitDeparture?(departureDate)
-        // Build an anchor location from the region center — this is where the car was parked,
-        // making it the authoritative geographic start of the trip.
         if let circular = region as? CLCircularRegion {
             let anchor = CLLocation(
                 coordinate        : circular.center,
@@ -256,12 +307,11 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
             )
             onRegionDeparture?(anchor)
         }
-        // Re-center on current location so the next trip departure is also caught.
+        // Re-centre rolling region on current location so the next trip is caught.
+        // Parking-hint regions are not re-centred — they're absolute "this is where my car gets parked" anchors.
         let recentre = currentLocation?.coordinate ?? (region as? CLCircularRegion)?.center
-        if let coord = recentre {
+        if isRolling, let coord = recentre {
             startRegionMonitoring(around: coord)
-        } else {
-            logger.log("Region exit — no current location to re-centre on", category: .location)
         }
     }
 

@@ -190,15 +190,20 @@ final class Vehicle: Object, ObjectKeyIdentifiable {
     @Persisted var isDefault: Bool                = false
     @Persisted var isArchived: Bool               = false
     @Persisted var createdAt: Date                = Date()
+    /// §4.3: per-vehicle default trip category. Work van → .business; family car → .personal.
+    /// Used as a seed by the categorisation rules engine on auto-commit.
+    @Persisted var defaultCategory: TripCategory  = .uncategorised
 
     convenience init(name: String, registration: String,
-                     type: VehicleType, fuelType: FuelType, isDefault: Bool = false) {
+                     type: VehicleType, fuelType: FuelType, isDefault: Bool = false,
+                     defaultCategory: TripCategory = .uncategorised) {
         self.init()
-        self.name         = name
-        self.registration = registration
-        self.type         = type
-        self.fuelType     = fuelType
-        self.isDefault    = isDefault
+        self.name            = name
+        self.registration    = registration
+        self.type            = type
+        self.fuelType        = fuelType
+        self.isDefault       = isDefault
+        self.defaultCategory = defaultCategory
     }
 }
 
@@ -259,6 +264,20 @@ final class Trip: Object, ObjectKeyIdentifiable {
     @Persisted var businessUsePercent: Double?    // only set when claim method is .logbook
     @Persisted var processingStatus: TripProcessingStatus = .complete
     @Persisted var processingRetries: Int         = 0
+    /// §5.1: free-text business purpose (e.g. "Met client X at SiteY"). The audit-defensibility difference
+    /// between a clean claim and a rejected one — surfaced on the "categorise as business" UI path.
+    @Persisted var purpose: String?
+    /// §5.2: tamper-evident SHA-256 hash captured at commit. Lets a user prove
+    /// to IRD/ATO their logbook wasn't backdated. Hash = SHA256(id || startedAt || endedAt || distance || polylineHash).
+    @Persisted var commitHash: String?
+    /// §5.2 companion: the exact UTC date the hash was first written. Distinct from
+    /// `createdAt` because mid-life edits don't change this field — they bust the hash on verification.
+    @Persisted var committedAt: Date?
+    /// §3.4: GPS-derived distance kept separately from claim distance. When odometer
+    /// readings are available, `distanceMetres` may equal max(gps, odometer); this preserves the raw GPS figure.
+    @Persisted var gpsDistanceMetres: Double      = 0
+    /// §3.4: odometer-derived distance when bookended by readings. nil when no readings.
+    @Persisted var odometerDistanceMetres: Double?
     @Persisted var createdAt: Date                = Date()
     @Persisted var updatedAt: Date                = Date()
 

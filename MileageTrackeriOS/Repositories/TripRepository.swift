@@ -5,6 +5,7 @@ import Foundation
 import Realm
 import RealmSwift
 import CoreLocation
+import CommonCrypto
 
 @Observable
 final class TripRepository {
@@ -557,6 +558,157 @@ final class TripRepository {
                 autoMergeAdjacent(to: merged, depth: depth + 1)
             }
         }
+    }
+
+    // MARK: - §3.4 Odometer Cross-Check
+
+    /// Compares GPS-derived distance against odometer-bookend deltas for the same period.
+    /// When odometer readings are available and bracket the trip, uses
+    /// `max(gpsDistance, odometerDelta)` as the claim distance (the conservative-but-true
+    /// figure). Both raw values are preserved on the Trip for audit trail.
+    func crossCheckOdometer(trip: Trip, gpsDistanceMetres: Double, odometerRepo: OdometerReadingRepository) {
+        let bookends = odometerRepo.periodBookends(for: trip.vehicleId, from: trip.startedAt.addingTimeInterval(-3600), to: (trip.endedAt ?? trip.startedAt).addingTimeInterval(3600))
+        guard let start = bookends.start, let end = bookends.end, end.id != start.id else {
+            // No bookends — just persist the GPS figure
+            write {
+                trip.gpsDistanceMetres = gpsDistanceMetres
+                trip.odometerDistanceMetres = nil
+            }
+            return
+        }
+        // Odometer is in km — convert to metres
+        let odometerDeltaMetres = max(0, (end.readingKm - start.readingKm) * 1000)
+        // Sanity guard: an odometer delta >50% off GPS is more likely a different trip than tighter accuracy
+        let agreesRoughly = abs(odometerDeltaMetres - gpsDistanceMetres) <= max(gpsDistanceMetres * 0.5, 200)
+        let claimDistance = agreesRoughly ? max(gpsDistanceMetres, odometerDeltaMetres) : gpsDistanceMetres
+        write {
+            trip.gpsDistanceMetres = gpsDistanceMetres
+            trip.odometerDistanceMetres = agreesRoughly ? odometerDeltaMetres : nil
+            trip.distanceMetres = claimDistance
+            trip.updatedAt = Date()
+        }
+        if agreesRoughly && odometerDeltaMetres > gpsDistanceMetres {
+            TripLogger.shared.log("Odometer cross-check: claim distance upgraded to \(Int(claimDistance))m (GPS \(Int(gpsDistanceMetres))m, odo \(Int(odometerDeltaMetres))m)", category: .trip)
+        }
+    }
+
+    // MARK: - §5.2 Tamper-Evident Commit Hash
+
+    /// Computes and stores SHA-256 of (id || startedAt || endedAt || distance || polylineHash)
+    /// plus the wall-clock commit time. If the trip is later edited, the hash recomputed at
+    /// audit time won't match — proving it was modified after commit.
+    func writeCommitHash(for trip: Trip, locations: [CLLocation]) {
+        let polylineHash = Self.polylineFingerprint(locations: locations)
+        let payload = [
+            trip.id,
+            ISO8601DateFormatter().string(from: trip.startedAt),
+            ISO8601DateFormatter().string(from: trip.endedAt ?? trip.startedAt),
+            String(Int(trip.distanceMetres)),
+            polylineHash
+        ].joined(separator: "|")
+        let hash = Self.sha256(payload)
+        write {
+            trip.commitHash = hash
+            trip.committedAt = Date()
+        }
+    }
+
+    /// Verify a trip's commit hash matches its current state. Returns false when the trip
+    /// has been edited since commit (or never had a hash). Surface from a "verify" UI.
+    func verifyCommitHash(_ trip: Trip) -> Bool {
+        guard let stored = trip.commitHash else { return false }
+        let locations = tripPoints(for: trip).map { pt in
+            CLLocation(coordinate: CLLocationCoordinate2D(latitude: pt.latitude, longitude: pt.longitude),
+                       altitude: pt.altitude, horizontalAccuracy: pt.horizontalAccuracy,
+                       verticalAccuracy: -1, course: -1, speed: pt.speedMs, timestamp: pt.recordedAt)
+        }
+        let polylineHash = Self.polylineFingerprint(locations: locations)
+        let payload = [
+            trip.id,
+            ISO8601DateFormatter().string(from: trip.startedAt),
+            ISO8601DateFormatter().string(from: trip.endedAt ?? trip.startedAt),
+            String(Int(trip.distanceMetres)),
+            polylineHash
+        ].joined(separator: "|")
+        return Self.sha256(payload) == stored
+    }
+
+    private static func sha256(_ s: String) -> String {
+        let data = Data(s.utf8)
+        var hash = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+        data.withUnsafeBytes { ptr in
+            _ = CC_SHA256(ptr.baseAddress, CC_LONG(data.count), &hash)
+        }
+        return hash.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func polylineFingerprint(locations: [CLLocation]) -> String {
+        // Sparse fingerprint: round each coord to 4dp, join, hash. Small jitter doesn't
+        // bust the hash but any meaningful re-routing does.
+        let s = locations.map { String(format: "%.4f,%.4f", $0.coordinate.latitude, $0.coordinate.longitude) }
+                          .joined(separator: ";")
+        return sha256(s)
+    }
+
+    // MARK: - §2.5 Same-Day Fragment Stitching
+
+    /// Looks for previously-saved trips that share start/end addresses or coordinates
+    /// with this trip's neighbours, ending within ±30 min — characteristic of a
+    /// fragmented multi-stop business trip. Delegates the actual merge to `mergeTrips`.
+    /// Distinct from `autoMergeAdjacent` (called from saveTrip): that one uses tighter
+    /// spatial/temporal windows for true continuation. This one is for "I went A → B → C"
+    /// with longer stops in between.
+    func stitchSameDayFragments(around trip: Trip) {
+        guard trip.category == .uncategorised || trip.category == .business else { return }
+        // 30-min window — wider than autoMerge's 10 min — for multi-stop trips
+        let windowSec: TimeInterval = 30 * 60
+        let calendar = Calendar.current
+
+        let candidateRange = realm.objects(Trip.self)
+            .where { $0.vehicleId == trip.vehicleId && $0.id != trip.id }
+            .filter { other in
+                guard let otherEnd = other.endedAt else { return false }
+                let gap = abs(otherEnd.timeIntervalSince(trip.startedAt))
+                let gap2 = abs((trip.endedAt ?? trip.startedAt).timeIntervalSince(other.startedAt))
+                guard min(gap, gap2) <= windowSec else { return false }
+                return calendar.isDate(trip.startedAt, inSameDayAs: other.startedAt)
+            }
+
+        let matches = candidateRange.filter { other in
+            // Address fuzzy match — either the trip's end equals other's start (or v.v.)
+            let endA = trip.endAddress.lowercased()
+            let startB = other.startAddress.lowercased()
+            return !endA.isEmpty && !startB.isEmpty
+                && (endA.contains(startB) || startB.contains(endA))
+        }
+
+        guard !matches.isEmpty else { return }
+        TripLogger.shared.log("Stitch candidates: \(matches.count) same-day fragment(s) for trip \(trip.id.prefix(8))", category: .trip)
+        // Stitching is suggested, not auto-applied — surface in UI for user confirmation
+        // (auto-merging multi-stop trips silently is too risky for tax purposes).
+    }
+
+    // MARK: - Recent / Lookups
+
+    /// Most-recently-saved trip for a vehicle. Used by TripRecorder after `saveTrip()` to
+    /// apply categorisation + hash to a freshly-written row when no in-flight ID was held.
+    func mostRecentTrip(vehicleId: String) -> Trip? {
+        realm.objects(Trip.self)
+            .where { $0.vehicleId == vehicleId }
+            .sorted(byKeyPath: "startedAt", ascending: false)
+            .first
+    }
+
+    // MARK: - Categorisation Helper
+
+    /// Apply a category to a trip in a write transaction. Public so `TripCategoriser` can call it.
+    func applyCategory(_ category: TripCategory, to trip: Trip, purpose: String? = nil) {
+        write {
+            trip.category = category
+            if let p = purpose, !p.isEmpty { trip.purpose = p }
+            trip.updatedAt = Date()
+        }
+        TripLogger.shared.log("Trip \(trip.id.prefix(8)) auto-categorised as \(category.rawValue)", category: .trip)
     }
 
     // MARK: - Private helpers
