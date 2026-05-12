@@ -33,6 +33,11 @@ final class AppState {
     let bluetoothManager    : BluetoothManager
     let tripRecorder        : TripRecorder
 
+    // MARK: - Schedule Gate
+    /// Gates new-trip detection by the user's per-day tracking hours.
+    /// In-progress trips are NEVER interrupted by the schedule — only NEW trip starts are blocked.
+    let scheduleManager     : TrackingScheduleManager
+
     private init() {
         // 1. Open Realm first — everything else reads from it
         realmProvider = RealmProvider.shared
@@ -55,6 +60,8 @@ final class AppState {
         liveActivityManager = LiveActivityManager()
         notificationManager = NotificationManager()
         tripRecorder        = TripRecorder.shared
+        scheduleManager     = TrackingScheduleManager()
+        scheduleManager.configure(profileRepo: profileRepo)
 
         // 6. Wire TripRecorder
         tripRecorder.configure(
@@ -66,7 +73,8 @@ final class AppState {
             tripRepo    : tripRepo,
             profileRepo : profileRepo,
             odometerRepo: odometerRepo,
-            savedAddressRepo: savedAddressRepo
+            savedAddressRepo: savedAddressRepo,
+            scheduleManager: scheduleManager
         )
 
         // §1.E: register recovery notification actions so the user can resolve
@@ -96,6 +104,7 @@ final class AppState {
         bluetoothManager.startMonitoring()
         locationManager.startSignificantLocationMonitoring()
         locationManager.startVisitMonitoring()
-        TripLogger.shared.log("Tracking started — motion, pedometer, battery, bluetooth, significant-location, and visit monitoring active", category: .system)
+        scheduleManager.startMonitoring()
+        TripLogger.shared.log("Tracking started — motion, pedometer, battery, bluetooth, significant-location, visit monitoring, and schedule gate active", category: .system)
     }
 }
