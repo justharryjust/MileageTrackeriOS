@@ -148,6 +148,14 @@ final class UserProfileRepository {
         }
     }
 
+    /// §4.3: set the default category for a vehicle. Used as a seed by the
+    /// categorisation rules engine — e.g. "Work van" → .business so trips
+    /// auto-categorise on commit without user intervention.
+    func setVehicleDefaultCategory(_ vehicle: Vehicle, _ category: TripCategory) {
+        write { vehicle.defaultCategory = category }
+        TripLogger.shared.log("Vehicle \(vehicle.name) default category set to \(category.rawValue)", category: .system)
+    }
+
 
     // MARK: - Tracking Schedule
 

@@ -41,6 +41,7 @@ private struct Harness {
         let realm    = try Realm(configuration: config)
         tripRepo     = TripRepository(realm: realm)
         profileRepo  = UserProfileRepository(realm: realm)
+        let odometerRepo = OdometerReadingRepository(realm: realm)
         profileRepo.addVehicle(name: "Test", registration: "TST001")
 
         locationManager = LocationManager()
@@ -62,7 +63,8 @@ private struct Harness {
             liveActivity  : liveActivityManager,
             notifications : notificationManager,
             tripRepo      : tripRepo,
-            profileRepo   : profileRepo
+            profileRepo   : profileRepo,
+            odometerRepo  : odometerRepo
         )
     }
 

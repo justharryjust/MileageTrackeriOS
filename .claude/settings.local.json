@@ -11,7 +11,9 @@
       "Bash(xcodebuild -project MileageTrackeriOS.xcodeproj -scheme MileageTrackerWidgetExtension -destination 'platform=iOS Simulator,name=iPhone 17' build)",
       "Bash(xcodebuild *)",
       "Bash(plutil -p /Users/harryjust/Library/Developer/Xcode/DerivedData/MileageTrackeriOS-eltodccjqpwiyldzwazmplphntfz/Build/Products/Debug-iphonesimulator/MileageTrackeriOS.app/Info.plist)",
-      "Bash(plutil -p /Users/harryjust/Library/Developer/Xcode/DerivedData/MileageTrackeriOS-eltodccjqpwiyldzwazmplphntfz/Build/Products/Debug-iphonesimulator/MileageTrackeriOS.app/PlugIns/MileageTrackerWidgetExtension.appex/Info.plist)"
+      "Bash(plutil -p /Users/harryjust/Library/Developer/Xcode/DerivedData/MileageTrackeriOS-eltodccjqpwiyldzwazmplphntfz/Build/Products/Debug-iphonesimulator/MileageTrackeriOS.app/PlugIns/MileageTrackerWidgetExtension.appex/Info.plist)",
+      "Bash(xcrun xcodebuild *)",
+      "Bash(xcrun simctl *)"
     ]
   },
   "hooks": {
