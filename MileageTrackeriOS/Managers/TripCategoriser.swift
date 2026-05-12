@@ -13,8 +13,15 @@ import Foundation
 import CoreLocation
 
 /// Reason a trip was auto-categorised — useful for debugging and surfacing in UI
-/// ("Auto-categorised because: vehicle default 'Work van'").
+/// ("Auto-categorised because: home → work commute").
 enum CategorisationRuleHit: Equatable {
+    /// Home ↔ work commute — both endpoints matched saved addresses tagged home/work.
+    /// IRD (NZ) and ATO (AU) do not allow commute to be claimed, so this is always .personal.
+    case commute(start: String, end: String)
+    /// Both endpoints matched saved addresses with the same defaultCategory.
+    case savedAddressPair(TripCategory, start: String, end: String)
+    /// Trip end matched a saved address with an explicit default category.
+    case savedEndAddress(TripCategory, label: String)
     case vehicleDefault(TripCategory)
     case sameRouteHistory(TripCategory, occurrences: Int)
     case businessAddressHistory(TripCategory, address: String)
@@ -25,12 +32,17 @@ enum CategorisationRuleHit: Equatable {
 struct TripCategoriser {
     let tripRepo: TripRepository?
     let profileRepo: UserProfileRepository?
+    let savedAddressRepo: SavedAddressRepository?
 
-    /// Maybe-construct: returns nil when either dependency is missing.
-    init?(tripRepo: TripRepository?, profileRepo: UserProfileRepository?) {
+    /// Maybe-construct: returns nil when tripRepo or profileRepo is missing.
+    /// SavedAddressRepository is optional — categoriser still works without it,
+    /// just doesn't apply commute / saved-address rules.
+    init?(tripRepo: TripRepository?, profileRepo: UserProfileRepository?,
+          savedAddressRepo: SavedAddressRepository? = nil) {
         guard let tripRepo = tripRepo, let profileRepo = profileRepo else { return nil }
         self.tripRepo = tripRepo
         self.profileRepo = profileRepo
+        self.savedAddressRepo = savedAddressRepo
     }
 
     /// Run the rules and apply the first match (if any) to the trip in-place.
@@ -41,33 +53,104 @@ struct TripCategoriser {
         guard let suggested = suggestion(for: hit) else { return }
         // Only auto-apply if trip is currently uncategorised — never overwrite an explicit user choice
         guard trip.category == .uncategorised else { return }
-        tripRepo?.applyCategory(suggested, to: trip)
+        // Preserve provenance — write the rule reason into trip.purpose if empty.
+        // Makes the auto-decision visible in exports and helps the user verify.
+        let provenance = describe(hit)
+        tripRepo?.applyCategory(suggested, to: trip, purpose: trip.purpose?.isEmpty == false ? trip.purpose : provenance)
         TripLogger.shared.log("Categoriser hit: \(hit) → \(suggested.rawValue)", category: .trip)
     }
 
     /// Run the rules but don't apply — returns the suggestion + reason for UI display.
+    /// Order matters: most-specific rules first. Saved-address rules win because they
+    /// represent an explicit user signal ("this is my office") vs heuristics.
     func evaluate(trip: Trip, vehicleDefault: TripCategory) -> CategorisationRuleHit {
-        // Rule 1: same start+end address visited 3+ times with consistent category
+        // Rule 0 (NEW, highest priority): home ↔ work commute — always .personal
+        if let hit = commuteRule(trip: trip) { return hit }
+        // Rule 1: both endpoints match saved addresses with consistent defaultCategory
+        if let hit = savedAddressPairRule(trip: trip) { return hit }
+        // Rule 2: trip end matches a saved address with explicit default category
+        if let hit = savedEndAddressRule(trip: trip) { return hit }
+        // Rule 3: same start+end address visited 3+ times with consistent category
         if let hit = sameRouteHistoryRule(trip: trip) { return hit }
-        // Rule 2: same end address with consistent business categorisation 3+ times
+        // Rule 4: same end address with consistent business categorisation 3+ times
         if let hit = businessAddressHistoryRule(trip: trip) { return hit }
-        // Rule 3: vehicle default category
+        // Rule 5: vehicle default category
         if vehicleDefault != .uncategorised {
             return .vehicleDefault(vehicleDefault)
         }
-        // Rule 4: weekday business hours → business; weekend → personal
+        // Rule 6: weekday business hours → business; weekend → personal
         if let hit = weekdayHoursRule(trip: trip) { return hit }
         return .none
     }
 
     private func suggestion(for hit: CategorisationRuleHit) -> TripCategory? {
         switch hit {
-        case .vehicleDefault(let c), .sameRouteHistory(let c, _),
-             .businessAddressHistory(let c, _), .weekdayHours(let c):
-            return c
-        case .none:
-            return nil
+        case .commute:                                            return .personal
+        case .savedAddressPair(let c, _, _):                      return c
+        case .savedEndAddress(let c, _):                          return c
+        case .vehicleDefault(let c):                              return c
+        case .sameRouteHistory(let c, _):                         return c
+        case .businessAddressHistory(let c, _):                   return c
+        case .weekdayHours(let c):                                return c
+        case .none:                                               return nil
         }
+    }
+
+    /// Human-readable provenance string — written into Trip.purpose when auto-applied.
+    /// Lets the user (and tax agent) see WHY a category was picked.
+    private func describe(_ hit: CategorisationRuleHit) -> String {
+        switch hit {
+        case .commute(let s, let e):                  return "Auto: commute (\(s) ↔ \(e)) — not claimable"
+        case .savedAddressPair(_, let s, let e):      return "Auto: matched saved addresses \(s) → \(e)"
+        case .savedEndAddress(_, let label):          return "Auto: end matched saved \"\(label)\""
+        case .vehicleDefault(let c):                  return "Auto: vehicle default \(c.rawValue)"
+        case .sameRouteHistory(_, let n):             return "Auto: matched \(n) prior trips on this route"
+        case .businessAddressHistory(_, let addr):    return "Auto: end address \"\(addr)\" categorised business previously"
+        case .weekdayHours(let c):                    return "Auto: weekday-hours rule → \(c.rawValue)"
+        case .none:                                   return ""
+        }
+    }
+
+    // MARK: - Rule 0: home ↔ work commute (NZ/AU non-claimable)
+
+    /// Matches when start AND end both correspond to saved addresses tagged
+    /// isHome/isWork (either direction). Always returns .personal because IRD/ATO
+    /// explicitly exclude commute from business mileage claims.
+    private func commuteRule(trip: Trip) -> CategorisationRuleHit? {
+        guard let repo = savedAddressRepo else { return nil }
+        let startMatch = repo.match(latitude: trip.startLat, longitude: trip.startLng)
+        let endMatch   = repo.match(latitude: trip.endLat,   longitude: trip.endLng)
+        guard let s = startMatch, let e = endMatch else { return nil }
+        let isCommute = (s.isHome && e.isWork) || (s.isWork && e.isHome)
+        guard isCommute else { return nil }
+        return .commute(start: s.label, end: e.label)
+    }
+
+    // MARK: - Rule 1: saved-address pair
+
+    /// Both endpoints match saved addresses; if both share a defaultCategory other
+    /// than .uncategorised, use it. Example: "Auckland Office" (business) → "Wellington Office" (business)
+    /// → auto-business. Skips commute case (handled by Rule 0).
+    private func savedAddressPairRule(trip: Trip) -> CategorisationRuleHit? {
+        guard let repo = savedAddressRepo else { return nil }
+        guard let s = repo.match(latitude: trip.startLat, longitude: trip.startLng),
+              let e = repo.match(latitude: trip.endLat,   longitude: trip.endLng) else { return nil }
+        // Commute would have caught this already; skip if home/work pair
+        if (s.isHome && e.isWork) || (s.isWork && e.isHome) { return nil }
+        // Need agreement on a non-uncategorised category
+        guard s.defaultCategory == e.defaultCategory, s.defaultCategory != .uncategorised else { return nil }
+        return .savedAddressPair(s.defaultCategory, start: s.label, end: e.label)
+    }
+
+    // MARK: - Rule 2: end matched a saved address
+
+    /// Single endpoint match — useful for "trip ending at my client site" auto-business.
+    /// End is more meaningful than start (the destination is where work happens).
+    private func savedEndAddressRule(trip: Trip) -> CategorisationRuleHit? {
+        guard let repo = savedAddressRepo,
+              let e = repo.match(latitude: trip.endLat, longitude: trip.endLng) else { return nil }
+        guard e.defaultCategory != .uncategorised else { return nil }
+        return .savedEndAddress(e.defaultCategory, label: e.label)
     }
 
     // MARK: - Rule 1: same start→end address history

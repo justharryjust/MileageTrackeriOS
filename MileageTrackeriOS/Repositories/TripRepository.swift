@@ -702,10 +702,13 @@ final class TripRepository {
     // MARK: - Categorisation Helper
 
     /// Apply a category to a trip in a write transaction. Public so `TripCategoriser` can call it.
+    /// `purpose` is written only when the trip has no existing purpose — never overwrites user text.
     func applyCategory(_ category: TripCategory, to trip: Trip, purpose: String? = nil) {
         write {
             trip.category = category
-            if let p = purpose, !p.isEmpty { trip.purpose = p }
+            if let p = purpose, !p.isEmpty, (trip.purpose ?? "").isEmpty {
+                trip.purpose = p
+            }
             trip.updatedAt = Date()
         }
         TripLogger.shared.log("Trip \(trip.id.prefix(8)) auto-categorised as \(category.rawValue)", category: .trip)
