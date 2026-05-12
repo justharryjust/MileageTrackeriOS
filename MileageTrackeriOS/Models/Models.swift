@@ -303,6 +303,48 @@ enum OdometerSource: String, PersistableEnum {
     case onboarding
 }
 
+// MARK: - SavedAddress
+//
+// User-defined places (Home, Office, frequent client sites) used by the
+// categorisation rules engine. Two special flags — `isHome` / `isWork` — drive
+// commute detection: any trip with start/end matched to home↔work is auto-
+// categorised .personal, since IRD/ATO do not allow commute to be claimed.
+//
+// Match radius defaults to 100m — large enough to cover a typical office
+// car park, small enough not to overlap neighbouring buildings.
+
+final class SavedAddress: Object, ObjectKeyIdentifiable {
+    @Persisted(primaryKey: true) var id: String   = UUID().uuidString
+    @Persisted var label: String                   = ""
+    @Persisted var address: String                 = ""
+    @Persisted var latitude: Double                = 0
+    @Persisted var longitude: Double               = 0
+    @Persisted var radiusMetres: Double            = 100
+    @Persisted var defaultCategory: TripCategory   = .uncategorised
+    /// Special role flags. Home + Work together drive commute auto-classification.
+    @Persisted var isHome: Bool                    = false
+    @Persisted var isWork: Bool                    = false
+    /// SF Symbol name for the row icon. Free text — keep to system symbols only.
+    @Persisted var icon: String                    = "mappin.circle.fill"
+    @Persisted var createdAt: Date                 = Date()
+
+    convenience init(label: String, address: String,
+                     latitude: Double, longitude: Double,
+                     isHome: Bool = false, isWork: Bool = false,
+                     defaultCategory: TripCategory = .uncategorised,
+                     icon: String = "mappin.circle.fill") {
+        self.init()
+        self.label           = label
+        self.address         = address
+        self.latitude        = latitude
+        self.longitude       = longitude
+        self.isHome          = isHome
+        self.isWork          = isWork
+        self.defaultCategory = defaultCategory
+        self.icon            = icon
+    }
+}
+
 // MARK: - OdometerReading
 
 final class OdometerReading: Object, ObjectKeyIdentifiable {

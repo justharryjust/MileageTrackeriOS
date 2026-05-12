@@ -10,7 +10,7 @@ final class RealmProvider {
     private(set) var realm: Realm
 
     /// Current schema version — bump this whenever the model changes and add a migration block.
-    static let schemaVersion: UInt64 = 7
+    static let schemaVersion: UInt64 = 8
 
     private init() {
         let config = Realm.Configuration(
@@ -49,6 +49,8 @@ final class RealmProvider {
                         newObject?["gpsDistanceMetres"] = existing
                     }
                 }
+                // v7 -> v8: new SavedAddress collection — no enumerate needed (empty default).
+                // Drives the commute (home↔work) auto-categorisation rule.
             },
             objectTypes: [
                 UserProfile.self,
@@ -58,6 +60,7 @@ final class RealmProvider {
                 Trip.self,
                 TripPoint.self,
                 OdometerReading.self,
+                SavedAddress.self,
             ]
         )
         Realm.Configuration.defaultConfiguration = config

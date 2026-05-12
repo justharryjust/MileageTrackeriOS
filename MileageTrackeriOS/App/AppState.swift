@@ -15,6 +15,7 @@ final class AppState {
     let profileRepo         : UserProfileRepository
     let tripRepo            : TripRepository
     let odometerRepo        : OdometerReadingRepository
+    let savedAddressRepo    : SavedAddressRepository
 
     // MARK: - Business Logic
     let mileageCalculator   : MileageCalculator
@@ -38,9 +39,10 @@ final class AppState {
         let realm     = realmProvider.realm
 
         // 2. Build repositories
-        profileRepo  = UserProfileRepository(realm: realm)
-        tripRepo     = TripRepository(realm: realm)
-        odometerRepo = OdometerReadingRepository(realm: realm)
+        profileRepo      = UserProfileRepository(realm: realm)
+        tripRepo         = TripRepository(realm: realm)
+        odometerRepo     = OdometerReadingRepository(realm: realm)
+        savedAddressRepo = SavedAddressRepository(realm: realm)
 
         // 3. Business logic
         mileageCalculator = MileageCalculator()
@@ -63,7 +65,8 @@ final class AppState {
             notifications: notificationManager,
             tripRepo    : tripRepo,
             profileRepo : profileRepo,
-            odometerRepo: odometerRepo
+            odometerRepo: odometerRepo,
+            savedAddressRepo: savedAddressRepo
         )
 
         // §1.E: register recovery notification actions so the user can resolve

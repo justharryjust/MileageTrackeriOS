@@ -36,7 +36,7 @@ private struct Harness {
         let config = Realm.Configuration(
             inMemoryIdentifier: UUID().uuidString,
             schemaVersion: RealmProvider.schemaVersion,
-            objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self]
+            objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self]
         )
         let realm    = try Realm(configuration: config)
         tripRepo     = TripRepository(realm: realm)

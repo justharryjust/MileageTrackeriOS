@@ -5,6 +5,20 @@ struct SettingsView: View {
     @State private var isSharingDebugData = false
     @State private var debugDataURL: URL?
 
+    /// Compact summary for the Places row: "Home · Work · 3 others" or "Add home & work for commute auto-tag".
+    private var placesSummary: String {
+        let saved = appState.savedAddressRepo.addresses
+        if saved.isEmpty {
+            return "Tag commutes automatically"
+        }
+        var parts: [String] = []
+        if saved.contains(where: { $0.isHome }) { parts.append("Home") }
+        if saved.contains(where: { $0.isWork }) { parts.append("Work") }
+        let others = saved.filter { !$0.isHome && !$0.isWork }.count
+        if others > 0 { parts.append("\(others) other\(others == 1 ? "" : "s")") }
+        return parts.joined(separator: " · ")
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -103,6 +117,32 @@ struct SettingsView: View {
                                     .foregroundStyle(Color.mtTextSub)
                             } else {
                                 Label("Add a vehicle", systemImage: "car.fill")
+                            }
+                        }
+                    }
+                }
+
+                Section("Places") {
+                    NavigationLink {
+                        SavedAddressesView()
+                            .environment(appState)
+                    } label: {
+                        HStack {
+                            Image(systemName: "mappin.and.ellipse")
+                                .foregroundStyle(Color.mtGreen)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Saved Places")
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundStyle(Color.mtTextPrimary)
+                                Text(placesSummary)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Color.mtTextSub)
+                            }
+                            Spacer()
+                            if appState.savedAddressRepo.addresses.count > 0 {
+                                Text("\(appState.savedAddressRepo.addresses.count)")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Color.mtTextSub)
                             }
                         }
                     }

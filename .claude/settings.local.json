@@ -13,7 +13,16 @@
       "Bash(plutil -p /Users/harryjust/Library/Developer/Xcode/DerivedData/MileageTrackeriOS-eltodccjqpwiyldzwazmplphntfz/Build/Products/Debug-iphonesimulator/MileageTrackeriOS.app/Info.plist)",
       "Bash(plutil -p /Users/harryjust/Library/Developer/Xcode/DerivedData/MileageTrackeriOS-eltodccjqpwiyldzwazmplphntfz/Build/Products/Debug-iphonesimulator/MileageTrackeriOS.app/PlugIns/MileageTrackerWidgetExtension.appex/Info.plist)",
       "Bash(xcrun xcodebuild *)",
-      "Bash(xcrun simctl *)"
+      "Bash(xcrun simctl *)",
+      "Bash(git -C /Users/harryjust/Development/MileageTracker/MileageTrackeriOS status)",
+      "Bash(git -C /Users/harryjust/Development/MileageTracker/MileageTrackeriOS log -3 --oneline)",
+      "Bash(git -C /Users/harryjust/Development/MileageTracker/MileageTrackeriOS log --oneline 95e9eb9..1ba155e)",
+      "Bash(git -C /Users/harryjust/Development/MileageTracker/MileageTrackeriOS show --stat 1ba155e)",
+      "Bash(git -C /Users/harryjust/Development/MileageTracker/MileageTrackeriOS show 1ba155e -- MileageTrackeriOS/Managers/TripRecorder.swift MileageTrackeriOS/Managers/BluetoothManager.swift)",
+      "Bash(grep -n *)",
+      "Read(//Users/harryjust/Development/MileageTracker/MileageTrackeriOS/**)",
+      "Bash(git -C /Users/harryjust/Development/MileageTracker/MileageTrackeriOS add MileageTrackeriOS/Managers/TripRecorder.swift)",
+      "Bash(git -C /Users/harryjust/Development/MileageTracker/MileageTrackeriOS commit --no-edit)"
     ]
   },
   "hooks": {
