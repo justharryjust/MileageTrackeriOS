@@ -10,7 +10,7 @@ final class RealmProvider {
     private(set) var realm: Realm
 
     /// Current schema version — bump this whenever the model changes and add a migration block.
-    static let schemaVersion: UInt64 = 6
+    static let schemaVersion: UInt64 = 7
 
     private init() {
         let config = Realm.Configuration(
@@ -27,10 +27,26 @@ final class RealmProvider {
                 //           Both are new optional/enum fields — no migration action needed
                 // v5 -> v6: added Trip.processingStatus (TripProcessingStatus, default .complete),
                 //           Trip.processingRetries (Int, default 0)
+                // v6 -> v7: §4.3 — Vehicle.defaultCategory (TripCategory, default .uncategorised)
+                //           §5.1 — Trip.purpose (optional String)
+                //           §5.2 — Trip.commitHash (optional String), Trip.committedAt (optional Date)
+                //           §3.4 — Trip.gpsDistanceMetres (Double, default = current distanceMetres),
+                //                  Trip.odometerDistanceMetres (optional Double)
                 if oldVersion < 6 {
                     migration.enumerateObjects(ofType: "Trip") { _, newObject in
                         newObject?["processingStatus"] = TripProcessingStatus.complete.rawValue
                         newObject?["processingRetries"] = 0
+                    }
+                }
+                if oldVersion < 7 {
+                    migration.enumerateObjects(ofType: "Vehicle") { _, newObject in
+                        newObject?["defaultCategory"] = TripCategory.uncategorised.rawValue
+                    }
+                    migration.enumerateObjects(ofType: "Trip") { oldObject, newObject in
+                        // Seed gpsDistanceMetres from existing distanceMetres so historic trips
+                        // preserve their as-recorded GPS figure (vs future odometer-corrected one).
+                        let existing = (oldObject?["distanceMetres"] as? Double) ?? 0
+                        newObject?["gpsDistanceMetres"] = existing
                     }
                 }
             },

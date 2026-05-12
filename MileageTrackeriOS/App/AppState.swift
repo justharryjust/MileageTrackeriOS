@@ -62,8 +62,13 @@ final class AppState {
             liveActivity: liveActivityManager,
             notifications: notificationManager,
             tripRepo    : tripRepo,
-            profileRepo : profileRepo
+            profileRepo : profileRepo,
+            odometerRepo: odometerRepo
         )
+
+        // §1.E: register recovery notification actions so the user can resolve
+        // in-flight trips via lock-screen / banner actions.
+        notificationManager.registerRecoveryActions()
 
         TripLogger.shared.log("AppState initialised — Realm ready", category: .system)
 
