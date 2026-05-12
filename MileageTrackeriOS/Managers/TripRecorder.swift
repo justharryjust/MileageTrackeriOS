@@ -69,7 +69,7 @@ private enum Heuristic {
     static let minTripDuration      : TimeInterval = 60
 
     // Pedometer
-    static let maxStepsDuringPromotion: Int = 50     // "not clearly walking" threshold
+    static let maxStepsDuringPromotion: Int = 40     // "not clearly walking" threshold
 
     // Pause limits (dynamic)
     static func pauseLimitVisitNoSignal() -> TimeInterval { 0 }
@@ -424,40 +424,59 @@ final class TripRecorder {
 
     private func shouldPromote() -> Bool {
         // Hard engine signal + primary trigger → immediate promote
-        if (suspectedReason == .carPlay || suspectedReason == .knownCarBT) && hardEngineSignal() {
-            logger.log("Promotion check: hard engine signal ✅", category: .trip)
-            return true
+        if suspectedReason == .carPlay || suspectedReason == .knownCarBT {
+            if hardEngineSignal() {
+                logger.log("Promotion check: hard engine signal ✅", category: .trip)
+                return true
+            } else {
+                logger.log("Promotion check: hard engine — reason is carPlay/knownCarBT but no hard engine signal", category: .trip)
+            }
         }
         // Sustained automotive at high confidence for 30s
         if sustainedAutomotive(window: Heuristic.automotiveSustained, confidence: .high) {
             logger.log("Promotion check: sustained automotive (high) ✅", category: .trip)
             return true
+        } else {
+            logger.log("Promotion check: sustained automotive (high) — not met", category: .trip)
         }
-        // GPS speed > 25 km/h sustained 20s with automotive in last 60s
+        // GPS speed > threshold in 20s window + automotive in last 60s
         let speedGate = recentGPSSpeedExceeded(window: 20, thresholdKmh: Heuristic.promotionSpeedKmh)
         let hasAutomotive = automotiveInLast(Heuristic.softSignalWindow)
         if speedGate && hasAutomotive {
             logger.log("Promotion check: speed gate + automotive ✅", category: .trip)
             return true
+        } else if speedGate && !hasAutomotive {
+            logger.log("Promotion check: speed gate + automotive — speed met but no automotive in window", category: .trip)
+        } else if !speedGate && hasAutomotive {
+            logger.log("Promotion check: speed gate + automotive — automotive present but speed not met", category: .trip)
+        } else {
+            logger.log("Promotion check: speed gate + automotive — neither speed nor automotive met", category: .trip)
         }
-        // GPS speed > 25 km/h sustained 20s. No pedometer check — pre-trip walking
-        // steps contaminate the window, and 25+ km/h is physically impossible on foot.
-        if speedGate {
-            logger.log("Promotion check: speed gate ✅", category: .trip)
+        // GPS speed > threshold for 2 consecutive readings in 20s window. No pedometer
+        // check — pre-trip walking steps contaminate the window, and sustained speed at
+        // this level is physically impossible on foot. Requiring 2 consecutive readings
+        // filters single-sample GPS noise spikes that briefly breach the threshold.
+        let speedGateSustained = recentGPSSpeedExceededConsecutive(window: 20, thresholdKmh: Heuristic.promotionSpeedKmh, count: 2)
+        if speedGateSustained {
+            logger.log("Promotion check: speed gate (sustained) ✅", category: .trip)
             return true
+        } else {
+            logger.log("Promotion check: speed gate (sustained) — \(speedGate ? "single reading met but not consecutive" : "no readings above \(Int(Heuristic.promotionSpeedKmh)) km/h")", category: .trip)
         }
         // Distance from suspected start > 250m. Requires "not clearly walking"
         // (< 50 steps / 30s) to avoid promoting cycling or running. Uses a generous
         // threshold because pre-trip walking steps carry into the suspected window.
         let dist = distanceFromSuspectedStart()
-        if dist > Heuristic.promoteDistanceM && pedometerStepsInWindow < Heuristic.maxStepsDuringPromotion {
+        let distMet = dist > Heuristic.promoteDistanceM
+        let stepsMet = pedometerStepsInWindow < Heuristic.maxStepsDuringPromotion
+        if distMet && stepsMet {
             let d = Int(dist)
             logger.log("Promotion check: distance gate (\(d)m) ✅", category: .trip)
             return true
+        } else {
+            let d = Int(dist)
+            logger.log("Promotion check: distance gate — \(distMet ? "\(d)m ok but" : "\(d)m < \(Int(Heuristic.promoteDistanceM))m")\(stepsMet ? "" : ", steps \(pedometerStepsInWindow) >= \(Heuristic.maxStepsDuringPromotion)")", category: .trip)
         }
-        // Log why promotion was rejected (for debugging)
-        let d = Int(dist)
-        logger.log("Promotion rejected — speed:\(speedGate) auto:\(hasAutomotive) steps:\(pedometerStepsInWindow) dist:\(d)m", category: .trip)
         return false
     }
 
@@ -970,6 +989,24 @@ final class TripRecorder {
             return buf.contains { $0.speed * 3.6 >= thresholdKmh }
         }
         return recent.contains { $0.speed * 3.6 >= thresholdKmh }
+    }
+
+    private func recentGPSSpeedExceededConsecutive(window: TimeInterval, thresholdKmh: Double, count: Int) -> Bool {
+        let cutoff = Date().addingTimeInterval(-window)
+        let locations = (collectedLocations + detectionBuffer)
+            .filter { $0.timestamp >= cutoff && $0.speed >= 0 }
+            .sorted { $0.timestamp < $1.timestamp }
+        guard locations.count >= count else { return false }
+        var consecutive = 0
+        for loc in locations {
+            if loc.speed * 3.6 >= thresholdKmh {
+                consecutive += 1
+                if consecutive >= count { return true }
+            } else {
+                consecutive = 0
+            }
+        }
+        return false
     }
 
     private func recentGPSSpeedAverage(window: TimeInterval) -> Double {

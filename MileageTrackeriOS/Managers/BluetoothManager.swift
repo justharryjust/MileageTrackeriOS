@@ -138,12 +138,13 @@ final class BluetoothManager {
     }
 
     /// Returns any output ports that represent a car-kit / hands-free audio route.
+    /// Only includes profiles that are near-universal in cars and absent from
+    /// consumer headphones. A2DP and BLE are excluded — AirPods, Beats, and other
+    /// headphones use them and would false-trigger car-kit detection.
     private func carKitPorts(in outputs: [AVAudioSessionPortDescription]) -> [AVAudioSessionPortDescription] {
         let carKitTypes: Set<AVAudioSession.Port> = [
-            .bluetoothHFP,   // Hands-Free Profile — classic phone calls in car
-            .bluetoothA2DP,  // Advanced Audio Distribution — music streaming to car
+            .bluetoothHFP,   // Hands-Free Profile — phone calls in car
             .carAudio,       // CarPlay
-            .bluetoothLE,    // BLE audio (newer headsets/kits)
         ]
         return outputs.filter { carKitTypes.contains($0.portType) }
     }
