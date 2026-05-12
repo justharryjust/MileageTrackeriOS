@@ -120,6 +120,7 @@ final class TripRecorder {
     private var profileRepo: UserProfileRepository?
     private var odometerRepo: OdometerReadingRepository?
     private var savedAddressRepo: SavedAddressRepository?
+    private weak var scheduleManager: TrackingScheduleManager?
 
     // MARK: §3.1 Full polyline snapping toggle
     /// UserDefaults key for opt-in full-polyline MKDirections snapping (§3.1).
@@ -201,7 +202,8 @@ final class TripRecorder {
                    notifications: NotificationManager,
                    tripRepo: TripRepository, profileRepo: UserProfileRepository,
                    odometerRepo: OdometerReadingRepository,
-                   savedAddressRepo: SavedAddressRepository? = nil) {
+                   savedAddressRepo: SavedAddressRepository? = nil,
+                   scheduleManager: TrackingScheduleManager? = nil) {
         self.locationManager     = location
         self.motionManager       = motion
         self.bluetoothManager    = bluetooth
@@ -211,6 +213,7 @@ final class TripRecorder {
         self.profileRepo         = profileRepo
         self.odometerRepo        = odometerRepo
         self.savedAddressRepo    = savedAddressRepo
+        self.scheduleManager     = scheduleManager
 
         location.onLocationUpdate = { [weak self] loc in
             self?.handleLocationUpdate(loc)
@@ -271,6 +274,14 @@ final class TripRecorder {
     private var isConfigured: Bool {
         locationManager != nil && motionManager != nil && bluetoothManager != nil &&
         tripRepo != nil && profileRepo != nil
+    }
+
+    /// Returns true when the user's tracking schedule currently allows new trip detection.
+    /// Falls open (true) if no schedule manager is wired — tests + early launch paths.
+    /// Only consulted for Idle → Suspected transitions; in-progress trips run regardless.
+    private func isWithinTrackingHours() -> Bool {
+        guard let scheduler = scheduleManager else { return true }
+        return scheduler.isAllowed()
     }
 
     /// §1.C / §2.1: start monitoring the top N most-frequently-used parking
@@ -497,7 +508,23 @@ final class TripRecorder {
 
     // MARK: - Suspected
 
+    /// Single choke-point for every Idle → Suspected transition. Every wake path
+    /// (CarPlay, BT, region, visit, motion, SLC) funnels through here, so a guard
+    /// at the top reliably enforces the tracking-hours schedule for new trip starts.
+    ///
+    /// In-progress trips are NEVER affected — they're in `.active`/`.pausing`/`.ending`
+    /// and never re-enter this function. `forceStartManualTrip()` also bypasses this gate.
+    /// Defence-in-depth: callers that start GPS before this fn (handleRegionDeparture,
+    /// handleCarKitConnected) also check `isWithinTrackingHours()` themselves to keep
+    /// the blue indicator off when out-of-hours.
     private func enterSuspected(reason: TripRecorderState.SuspectedReason) {
+        // Schedule gate: only block FROM .idle. If we're somehow re-entering Suspected
+        // from another state, let it through to avoid weird edge cases.
+        if case .idle = state, !isWithinTrackingHours() {
+            logger.log("Trip start blocked — outside tracking hours (reason was \(reason))", category: .trip)
+            return
+        }
+
         suspectedAt = Date()
         suspectedReason = reason
         detectionBuffer.removeAll()
@@ -1362,6 +1389,11 @@ final class TripRecorder {
             logger.log("Region departure anchor stored (already \(label(state)))", category: .trip)
             return
         }
+        // Schedule gate — bail BEFORE starting GPS so the blue indicator never flashes outside hours.
+        guard isWithinTrackingHours() else {
+            logger.log("Region departure outside tracking hours — anchor stored but GPS not started", category: .trip)
+            return
+        }
         logger.log("Region departure anchor stored — starting GPS", category: .trip)
         locationManager?.startHighAccuracyUpdates()
         enterSuspected(reason: .geofenceExit)
@@ -1384,6 +1416,11 @@ final class TripRecorder {
 
         switch state {
         case .idle:
+            // Schedule gate — bail BEFORE starting GPS so the blue indicator never flashes outside hours.
+            guard isWithinTrackingHours() else {
+                logger.log("Car kit connected outside tracking hours — GPS not started", category: .trip)
+                return
+            }
             carKitConnectExpiry = Date().addingTimeInterval(600)
             logger.log("Car kit connected (\"\(event.deviceName)\") — pre-armed, starting GPS", category: .trip)
             locationManager?.startHighAccuracyUpdates()

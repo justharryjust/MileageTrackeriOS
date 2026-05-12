@@ -104,6 +104,12 @@ private struct StatCard: View {
 private struct PermissionWarnings: View {
     @Environment(AppState.self) private var appState
 
+    /// Only show the schedule hint when tracking is idle — never distract from an active trip.
+    private var isIdle: Bool {
+        if case .idle = appState.tripRecorder.state { return true }
+        return false
+    }
+
     var body: some View {
         VStack(spacing: MTSpacing.sm) {
             if !appState.locationManager.hasAlwaysAuthorization {
@@ -126,7 +132,38 @@ private struct PermissionWarnings: View {
                     onAction: nil
                 )
             }
+            if isIdle && !appState.scheduleManager.isCurrentlyAllowed {
+                InfoBanner(
+                    icon: "clock.badge.xmark",
+                    message: "Outside tracking hours. Auto-detection is paused — tap Start Trip to record manually."
+                )
+            }
         }
+    }
+}
+
+/// Info-style banner — calmer than WarningBanner. Used for expected paused-state hints.
+private struct InfoBanner: View {
+    let icon: String
+    let message: String
+
+    var body: some View {
+        HStack(spacing: MTSpacing.sm) {
+            Image(systemName: icon)
+                .foregroundStyle(Color.mtTextSub)
+            Text(message)
+                .font(.system(size: 13))
+                .foregroundStyle(Color.mtTextSub)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+        }
+        .padding(MTSpacing.md)
+        .background(Color.mtSurface)
+        .clipShape(RoundedRectangle(cornerRadius: MTRadius.sm))
+        .overlay(
+            RoundedRectangle(cornerRadius: MTRadius.sm)
+                .strokeBorder(Color.mtBorder, lineWidth: 1)
+        )
     }
 }
 
