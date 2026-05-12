@@ -119,6 +119,7 @@ final class TripRecorder {
     private var tripRepo: TripRepository?
     private var profileRepo: UserProfileRepository?
     private var odometerRepo: OdometerReadingRepository?
+    private var savedAddressRepo: SavedAddressRepository?
 
     // MARK: §3.1 Full polyline snapping toggle
     /// UserDefaults key for opt-in full-polyline MKDirections snapping (§3.1).
@@ -199,7 +200,8 @@ final class TripRecorder {
                    liveActivity: LiveActivityManager,
                    notifications: NotificationManager,
                    tripRepo: TripRepository, profileRepo: UserProfileRepository,
-                   odometerRepo: OdometerReadingRepository) {
+                   odometerRepo: OdometerReadingRepository,
+                   savedAddressRepo: SavedAddressRepository? = nil) {
         self.locationManager     = location
         self.motionManager       = motion
         self.bluetoothManager    = bluetooth
@@ -208,6 +210,7 @@ final class TripRecorder {
         self.tripRepo            = tripRepo
         self.profileRepo         = profileRepo
         self.odometerRepo        = odometerRepo
+        self.savedAddressRepo    = savedAddressRepo
 
         location.onLocationUpdate = { [weak self] loc in
             self?.handleLocationUpdate(loc)
@@ -927,7 +930,8 @@ final class TripRecorder {
     private func applyTripCategorisationAndHash(trip: Trip, vehicleDefault: TripCategory, locations: [CLLocation]) {
         let categoriser = TripCategoriser(
             tripRepo: tripRepo,
-            profileRepo: profileRepo
+            profileRepo: profileRepo,
+            savedAddressRepo: savedAddressRepo
         )
         categoriser?.categorise(trip: trip, vehicleDefault: vehicleDefault)
         if let odometerRepo = odometerRepo {
