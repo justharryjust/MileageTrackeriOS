@@ -1,0 +1,1 @@
+Load the scoping agent prompt from .claude/agents/scoping-agent.md and execute the scoping workflow on the provided issue. If no issue URL is provided, ask for one. Follow the scoping agent's process: research, read codebase, draft acceptance criteria, post as issue comment, move item from Backlog to Refined and Researched.

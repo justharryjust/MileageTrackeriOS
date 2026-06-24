@@ -1,0 +1,1 @@
+Load the developer agent prompt from .claude/agents/developer-agent.md and implement the provided ticket. If no issue URL is provided, ask for one. Follow the developer agent's process: read ticket and ACs, plan approach, create feature branch, implement, write tests, build with xcodebuild, open a PR, move card to In Review. Do NOT merge — only QA can merge.

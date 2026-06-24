@@ -28,10 +28,13 @@
   "hooks": {
     "Stop": [
       {
-        "matcher": "git diff --name-only -- '*/*.swift' | grep -q .",
-        "run": "git diff --name-only -- '*/*.swift' | while IFS= read -r file; do dir=$(dirname \"$file\"); echo \"  • $file → check $dir/CLAUDE.md\"; done",
-        "message": "Swift files changed. Review the CLAUDE.md files listed above and update them if the changes affect architecture, invariants, or API surface so future sessions have accurate context.",
-        "description": "Remind to update CLAUDE.md after Swift file changes"
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git diff --name-only -- '*/*.swift' | grep -q . && git diff --name-only -- '*/*.swift' | while IFS= read -r file; do dir=$(dirname \"$file\"); echo \"  • $file → check $dir/CLAUDE.md\"; done"
+          }
+        ]
       }
     ]
   }
