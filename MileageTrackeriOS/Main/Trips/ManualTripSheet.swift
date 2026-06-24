@@ -275,7 +275,7 @@ struct ManualTripSheet: View {
             return (stop.coordinate.latitude, stop.coordinate.longitude)
         }
 
-        appState.tripRepo.saveManualTrip(
+        let trip = appState.tripRepo.saveManualTrip(
             vehicleId: vehicleId, startedAt: startedAt, endedAt: endedAt,
             distanceMetres: dist,
             startAddress: start.fullAddress, endAddress: end.fullAddress,
@@ -285,6 +285,20 @@ struct ManualTripSheet: View {
             category: .business,
             notes: notes.isEmpty ? nil : notes
         )
+
+        // Compute and store dollar value for the manually-saved trip
+        if let trip {
+            let profile = appState.profileRepo.profile
+            let fuelType = appState.profileRepo.defaultVehicle?.fuelType ?? .petrol
+            let cumulativeKm = appState.tripRepo.cumulativeBusinessKm(before: trip)
+            let value = appState.mileageCalculator.dollarValue(
+                for: trip,
+                profile: profile,
+                fuelType: fuelType,
+                cumulativeKm: cumulativeKm
+            )
+            appState.tripRepo.storeDollarValue(value, for: trip)
+        }
 
         isSaving = false
         dismiss()
