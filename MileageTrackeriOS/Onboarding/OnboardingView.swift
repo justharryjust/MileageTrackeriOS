@@ -18,9 +18,7 @@ enum OnboardingStep: Int, CaseIterable {
 
 @Observable
 final class OnboardingViewModel {
-    var regionCode: String = {
-        Locale.current.region?.identifier ?? "NZ"
-    }()
+    var regionCode: String = ""
 
     var jurisdiction: Jurisdiction {
         switch regionCode {
@@ -47,6 +45,8 @@ final class OnboardingViewModel {
     var isVehicleValid: Bool {
         !vehicleRegistration.trimmingCharacters(in: .whitespaces).isEmpty
     }
+
+    var isRegionValid: Bool { !regionCode.isEmpty }
 
     func advance() {
         guard let next = OnboardingStep(rawValue: currentStep.rawValue + 1) else { return }
