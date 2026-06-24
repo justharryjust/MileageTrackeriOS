@@ -23,7 +23,10 @@ struct JurisdictionStep: View {
                         name: option.name,
                         isSelected: vm.regionCode == option.code
                             || (option.code == "--" && !["NZ", "AU"].contains(vm.regionCode)),
-                        onTap: { vm.regionCode = option.code }
+                        onTap: {
+                            vm.regionCode = option.code
+                            vm.hasTappedRegion = true
+                        }
                     )
                 }
             }
@@ -32,6 +35,8 @@ struct JurisdictionStep: View {
 
             Button("Continue") { vm.advance() }
                 .buttonStyle(MTPrimaryButtonStyle())
+                .disabled(!vm.isJurisdictionValid)
+                .opacity(vm.isJurisdictionValid ? 1 : 0.5)
         }
     }
 }

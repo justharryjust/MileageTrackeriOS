@@ -44,6 +44,12 @@ final class OnboardingViewModel {
 
     var isCompleted: Bool = false
 
+    var hasTappedRegion: Bool = false
+
+    var isJurisdictionValid: Bool {
+        hasTappedRegion
+    }
+
     var isVehicleValid: Bool {
         !vehicleRegistration.trimmingCharacters(in: .whitespaces).isEmpty
     }
