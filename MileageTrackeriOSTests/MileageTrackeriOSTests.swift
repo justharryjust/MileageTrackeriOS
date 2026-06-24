@@ -687,3 +687,59 @@ struct TaxYearTests {
         #expect(period.start == d)
     }
 }
+
+
+
+// MARK: - ═══════════════════════════════════════════════
+// MARK:   Suite 10 — Onboarding Region Validation
+// MARK: ═══════════════════════════════════════════════
+
+@Suite("Onboarding Region Validation")
+struct OnboardingRegionValidationTests {
+
+    @Test("isJurisdictionValid is false when no region has been tapped")
+    func validationFalseInitially() throws {
+        let vm = OnboardingViewModel()
+        #expect(vm.isJurisdictionValid == false)
+        #expect(vm.hasTappedRegion == false)
+    }
+
+    @Test("isJurisdictionValid becomes true after tapping a region")
+    func validationTrueAfterTap() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "AU"
+        vm.hasTappedRegion = true
+        #expect(vm.isJurisdictionValid == true)
+        #expect(vm.hasTappedRegion == true)
+    }
+
+    @Test("isJurisdictionValid remains true when switching to a different region")
+    func validationPersistsAfterSwitch() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "NZ"
+        vm.hasTappedRegion = true
+        vm.regionCode = "AU"
+        #expect(vm.isJurisdictionValid == true)
+        #expect(vm.regionCode == "AU")
+    }
+
+    @Test("hasTappedRegion persists when navigating back (ViewModel is shared)")
+    func flagPersistsAcrossNavigation() throws {
+        let vm = OnboardingViewModel()
+        // Simulate: user taps a region, advances, then goes back
+        vm.regionCode = "NZ"
+        vm.hasTappedRegion = true
+        vm.advance()
+        vm.goBack()
+        #expect(vm.hasTappedRegion == true)
+        #expect(vm.isJurisdictionValid == true)
+    }
+
+    @Test("isJurisdictionValid remains false when only regionCode has default value but no tap")
+    func defaultRegionCodeDoesNotEnable() throws {
+        let vm = OnboardingViewModel()
+        // regionCode defaults to the device locale, but hasTappedRegion is false
+        #expect(vm.regionCode.isEmpty == false || vm.regionCode == "NZ")
+        #expect(vm.isJurisdictionValid == false)
+    }
+}
