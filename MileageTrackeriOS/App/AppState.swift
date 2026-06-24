@@ -16,6 +16,7 @@ final class AppState {
     let tripRepo            : TripRepository
     let odometerRepo        : OdometerReadingRepository
     let savedAddressRepo    : SavedAddressRepository
+    let logbookPeriodRepo   : LogbookPeriodRepository
 
     // MARK: - Business Logic
     let mileageCalculator   : MileageCalculator
@@ -34,9 +35,11 @@ final class AppState {
     let tripRecorder        : TripRecorder
 
     // MARK: - Schedule Gate
-    /// Gates new-trip detection by the user's per-day tracking hours.
-    /// In-progress trips are NEVER interrupted by the schedule — only NEW trip starts are blocked.
     let scheduleManager     : TrackingScheduleManager
+
+    /// Alert flag: when true, the UI should show a pre-permission dialog
+    /// offering to upgrade from provisional to full notification authorization.
+    var showFullAuthAlert = false
 
     private init() {
         // 1. Open Realm first — everything else reads from it
@@ -48,6 +51,19 @@ final class AppState {
         tripRepo         = TripRepository(realm: realm)
         odometerRepo     = OdometerReadingRepository(realm: realm)
         savedAddressRepo = SavedAddressRepository(realm: realm)
+        logbookPeriodRepo = LogbookPeriodRepository(realm: realm)
+
+        // 2a. Wire logbook period lifecycle to claim method changes
+        profileRepo.onClaimMethodChange = { [weak self] newMethod, jurisdiction, vehicleId in
+            guard let self, let vehicleId else { return }
+            if newMethod == .logbook {
+                if self.logbookPeriodRepo.activePeriod(for: vehicleId) == nil {
+                    self.logbookPeriodRepo.createPeriod(vehicleId: vehicleId, jurisdiction: jurisdiction)
+                }
+            } else {
+                self.logbookPeriodRepo.abandonPeriods(for: vehicleId)
+            }
+        }
 
         // 3. Business logic
         mileageCalculator = MileageCalculator()
@@ -74,14 +90,15 @@ final class AppState {
             profileRepo : profileRepo,
             odometerRepo: odometerRepo,
             savedAddressRepo: savedAddressRepo,
-            scheduleManager: scheduleManager
+            scheduleManager: scheduleManager,
+            mileageCalculator: mileageCalculator
         )
 
         // §1.E: register recovery notification actions so the user can resolve
         // in-flight trips via lock-screen / banner actions.
         notificationManager.registerRecoveryActions()
 
-        TripLogger.shared.log("AppState initialised — Realm ready", category: .system)
+        TripLogger.shared.log("AppState initialised -- Realm ready", category: .system)
 
         // If onboarding is already complete, start tracking immediately
         if profileRepo.hasCompletedOnboarding {
@@ -93,7 +110,29 @@ final class AppState {
             forName: UIApplication.willEnterForegroundNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            self?.tripRecorder.reprocessPendingTrips()
+            guard let self else { return }
+            self.tripRecorder.reprocessPendingTrips()
+            // Refresh weekly summary with fresh data when app foregrounds
+            self.notificationManager.refreshWeeklySummary(
+                tripRepo: self.tripRepo,
+                mileageCalculator: self.mileageCalculator,
+                profileRepo: self.profileRepo
+            )
+        }
+
+        // Wire trip completion callback for full auth prompt and weekly summary refresh
+        tripRecorder.onTripCompleted = { [weak self] in
+            guard let self else { return }
+            // Check if we should prompt for full notification authorization
+            if NotificationManager.incrementAndCheckFullAuthPrompt() {
+                self.showFullAuthAlert = true
+            }
+            // Refresh weekly summary after each trip save
+            self.notificationManager.refreshWeeklySummary(
+                tripRepo: self.tripRepo,
+                mileageCalculator: self.mileageCalculator,
+                profileRepo: self.profileRepo
+            )
         }
     }
 
@@ -105,6 +144,9 @@ final class AppState {
         locationManager.startSignificantLocationMonitoring()
         locationManager.startVisitMonitoring()
         scheduleManager.startMonitoring()
-        TripLogger.shared.log("Tracking started — motion, pedometer, battery, bluetooth, significant-location, visit monitoring, and schedule gate active", category: .system)
+        // Request provisional notification permission (silent -- no system prompt).
+        // Safe to call even if already determined; the system ignores repeat requests.
+        notificationManager.requestPermission()
+        TripLogger.shared.log("Tracking started -- motion, pedometer, battery, bluetooth, significant-location, visit monitoring, and schedule gate active", category: .system)
     }
 }
