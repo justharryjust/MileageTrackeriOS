@@ -1,0 +1,30 @@
+name: Scoping Agent
+
+on:
+  issues:
+    types: [opened, labeled]
+  project_v2_item:
+    types: [created, edited]
+  workflow_dispatch:
+    inputs:
+      issue_url:
+        description: 'Issue URL to scope'
+        required: true
+
+jobs:
+  scope:
+    if: |
+      (github.event.issue && contains(github.event.issue.labels.*.name, 'backlog')) ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run Scoping Agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_URL: ${{ github.event.issue.html_url || inputs.issue_url }}
+        run: node .github/scripts/run-agent.js scoping
