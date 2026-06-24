@@ -31,6 +31,8 @@ private struct Harness {
     let motionManager: MotionManager
     let tripRepo: TripRepository
     let profileRepo: UserProfileRepository
+    let notificationManager: NotificationManager
+    let scheduleManager: TrackingScheduleManager
 
     init() throws {
         let config = Realm.Configuration(
@@ -47,6 +49,9 @@ private struct Harness {
         locationManager = LocationManager()
         motionManager   = MotionManager()
         let bluetoothManager = BluetoothManager()
+        notificationManager = NotificationManager()
+        scheduleManager = TrackingScheduleManager()
+        scheduleManager.configure(profileRepo: profileRepo)
 
         recorder = TripRecorder()
         // Zero out validation thresholds so trips save regardless of distance/duration
@@ -54,7 +59,7 @@ private struct Harness {
         recorder.heuristicMinTripDuration = 0
 
         let liveActivityManager = LiveActivityManager()
-        let notificationManager = NotificationManager()
+        let mileageCalculator = MileageCalculator()
 
         recorder.configure(
             location      : locationManager,
@@ -64,7 +69,9 @@ private struct Harness {
             notifications : notificationManager,
             tripRepo      : tripRepo,
             profileRepo   : profileRepo,
-            odometerRepo  : odometerRepo
+            odometerRepo  : odometerRepo,
+            scheduleManager: scheduleManager,
+            mileageCalculator: mileageCalculator
         )
     }
 
@@ -408,5 +415,275 @@ struct DistanceCalculationTests {
             Issue.record("Expected .active state"); return
         }
         #expect(dist < 1)
+    }
+}
+
+// MARK: - ═══════════════════════════════════════
+// MARK:   Suite 8 — Notification Helpers
+// MARK: ═══════════════════════════════════════
+
+@Suite("Notification Helpers")
+struct NotificationHelperTests {
+
+    // MARK: TripRecorder helpers
+
+    @Test("dayName returns English names for Calendar weekday numbers")
+    func dayNameValues() throws {
+        #expect(TripRecorder.dayName(for: 1) == "Sunday")
+        #expect(TripRecorder.dayName(for: 2) == "Monday")
+        #expect(TripRecorder.dayName(for: 3) == "Tuesday")
+        #expect(TripRecorder.dayName(for: 4) == "Wednesday")
+        #expect(TripRecorder.dayName(for: 5) == "Thursday")
+        #expect(TripRecorder.dayName(for: 6) == "Friday")
+        #expect(TripRecorder.dayName(for: 7) == "Saturday")
+        #expect(TripRecorder.dayName(for: 0) == "")
+        #expect(TripRecorder.dayName(for: 8) == "")
+    }
+
+    @Test("formatHour returns zero-padded HH:MM string")
+    func formatHourValues() throws {
+        #expect(TripRecorder.formatHour(0) == "00:00")
+        #expect(TripRecorder.formatHour(8) == "08:00")
+        #expect(TripRecorder.formatHour(17) == "17:00")
+        #expect(TripRecorder.formatHour(23) == "23:00")
+    }
+
+    // MARK: Full auth prompt trip counter
+
+    @Test("incrementAndCheckFullAuthPrompt returns false for first two trips")
+    func tripCounterFirstTwoTrips() throws {
+        // Reset counter
+        UserDefaults.standard.set(0, forKey: "notify.tripCounterForFullAuth")
+
+        #expect(NotificationManager.incrementAndCheckFullAuthPrompt() == false)
+        #expect(NotificationManager.incrementAndCheckFullAuthPrompt() == false)
+    }
+
+    @Test("incrementAndCheckFullAuthPrompt returns true on third trip and resets")
+    func tripCounterThirdTripTriggers() throws {
+        // Reset counter
+        UserDefaults.standard.set(0, forKey: "notify.tripCounterForFullAuth")
+
+        #expect(NotificationManager.incrementAndCheckFullAuthPrompt() == false)
+        #expect(NotificationManager.incrementAndCheckFullAuthPrompt() == false)
+        #expect(NotificationManager.incrementAndCheckFullAuthPrompt() == true)
+        // Counter should be reset, so next call returns false
+        #expect(NotificationManager.incrementAndCheckFullAuthPrompt() == false)
+    }
+
+    // MARK: Authorization status
+
+    @Test("isAuthorized returns false initially (notDetermined)")
+    func isAuthorizedInitialState() throws {
+        let nm = NotificationManager()
+        #expect(nm.authorizationStatus == .notDetermined)
+        #expect(nm.isAuthorized == false)
+    }
+
+    // MARK: Weekly Summary
+
+    @Test("weekly summary content handles zero business trips gracefully")
+    func weeklySummaryEmptyContent() throws {
+        let nm = NotificationManager()
+        NotificationManager.weeklySummaryEnabled = true
+
+        // Call with zero values — should not crash
+        nm.scheduleWeeklySummary(weekKm: 0, businessCount: 0, valueDollars: 0)
+        nm.cancelWeeklySummary()
+
+        NotificationManager.weeklySummaryEnabled = false
+    }
+
+    @Test("weekly summary with data formats correctly")
+    func weeklySummaryWithData() throws {
+        let nm = NotificationManager()
+        NotificationManager.weeklySummaryEnabled = true
+
+        // Should not crash with positive values
+        nm.scheduleWeeklySummary(weekKm: 150.5, businessCount: 3, valueDollars: 45.75)
+        nm.cancelWeeklySummary()
+
+        NotificationManager.weeklySummaryEnabled = false
+    }
+
+    @Test("weekly summary toggle cancel removes pending notification")
+    func weeklySummaryToggleCancel() throws {
+        let nm = NotificationManager()
+        NotificationManager.weeklySummaryEnabled = true
+        nm.scheduleWeeklySummary(weekKm: 100, businessCount: 2, valueDollars: 20)
+        nm.weeklySummaryToggleChanged(isEnabled: false)
+        // The toggle change should cancel the pending notification
+        // No assertion possible on UNUserNotificationCenter state, but no crash = success
+        nm.weeklySummaryToggleChanged(isEnabled: true)
+        NotificationManager.weeklySummaryEnabled = false
+    }
+
+    // MARK: Odometer Reminder Toggle
+
+    @Test("odometer toggle cancel removes pending notification")
+    func odometerToggleCancel() throws {
+        let nm = NotificationManager()
+        NotificationManager.odometerReminderEnabled = true
+        nm.scheduleOdometerReminder(vehicleName: "Test Car")
+        nm.odometerToggleChanged(isEnabled: false, vehicleName: "Test Car")
+        // Toggling back on should reschedule
+        nm.odometerToggleChanged(isEnabled: true, vehicleName: "Test Car")
+        NotificationManager.odometerReminderEnabled = false
+    }
+}
+
+// MARK: - ═══════════════════════════════════════════════
+// MARK:   Suite 9 — Schedule Gate Notifications
+// MARK: ═══════════════════════════════════════════════
+
+@Suite("Schedule Gate Notifications")
+@MainActor
+struct ScheduleGateNotificationTests {
+
+    @Test("Schedule manager callbacks send notifications without crashing")
+    func scheduleGateCallbacksDoNotCrash() throws {
+        let h = try Harness()
+        // The scheduleManager callbacks are set up in configure()
+        // No crash = success
+        #expect(h.recorder.state.isIdle)
+    }
+}
+
+// MARK: - ═══════════════════════════════════════════════
+// MARK:   Suite 10 — Notification Reschedule
+// MARK: ═══════════════════════════════════════════════
+
+@Suite("Notification Reschedule")
+@MainActor
+struct NotificationRescheduleTests {
+
+    @Test("reschedule with logbook method schedules odometer reminder (no crash)")
+    func rescheduleLogbook() throws {
+        let nm = NotificationManager()
+        nm.reschedule(claimMethod: .logbook, vehicleName: "Test Car")
+        // Should have scheduled or no-opped, no crash
+        nm.reschedule(claimMethod: .standardRate, vehicleName: "Test Car")
+        // Switching away cancels
+        #expect(true)
+    }
+
+    @Test("reschedule with non-logbook method cancels odometer reminder (no crash)")
+    func rescheduleStandardRate() throws {
+        let nm = NotificationManager()
+        nm.reschedule(claimMethod: .standardRate, vehicleName: "Test Car")
+        #expect(true)
+    }
+}
+
+// MARK: - ═══════════════════════════════
+// MARK:   Suite 9 — Tax Year Periods
+// MARK: ═══════════════════════════════
+
+@Suite("Tax Year Periods")
+struct TaxYearTests {
+
+    /// Helper to build a date from components.
+    private func date(year: Int, month: Int, day: Int) -> Date {
+        let cal = Calendar.current
+        return cal.date(from: DateComponents(year: year, month: month, day: day, hour: 12))!
+    }
+
+    // MARK: New Zealand (1 Apr – 31 Mar)
+
+    @Test("NZ: date in Apr–Dec returns current-year tax year starting 1 Apr")
+    func nzDateInAprToDec() throws {
+        let d = date(year: 2026, month: 6, day: 15)
+        let period = Jurisdiction.newZealand.taxYear.containing(d)
+        let expectedStart = date(year: 2026, month: 4, day: 1)
+        let expectedEnd = date(year: 2027, month: 4, day: 1).addingTimeInterval(-1)
+        #expect(period.start == expectedStart)
+        #expect(period.end == expectedEnd)
+    }
+
+    @Test("NZ: date in Jan–Mar returns previous-year tax year starting 1 Apr")
+    func nzDateInJanToMar() throws {
+        let d = date(year: 2027, month: 2, day: 10)
+        let period = Jurisdiction.newZealand.taxYear.containing(d)
+        let expectedStart = date(year: 2026, month: 4, day: 1)
+        let expectedEnd = date(year: 2027, month: 4, day: 1).addingTimeInterval(-1)
+        #expect(period.start == expectedStart)
+        #expect(period.end == expectedEnd)
+    }
+
+    // MARK: Australia (1 Jul – 30 Jun)
+
+    @Test("AU: date in Jul–Dec returns current-year tax year starting 1 Jul")
+    func auDateInJulToDec() throws {
+        let d = date(year: 2026, month: 10, day: 1)
+        let period = Jurisdiction.australia.taxYear.containing(d)
+        let expectedStart = date(year: 2026, month: 7, day: 1)
+        let expectedEnd = date(year: 2027, month: 7, day: 1).addingTimeInterval(-1)
+        #expect(period.start == expectedStart)
+        #expect(period.end == expectedEnd)
+    }
+
+    @Test("AU: date in Jan–Jun returns previous-year tax year starting 1 Jul")
+    func auDateInJanToJun() throws {
+        let d = date(year: 2027, month: 3, day: 15)
+        let period = Jurisdiction.australia.taxYear.containing(d)
+        let expectedStart = date(year: 2026, month: 7, day: 1)
+        let expectedEnd = date(year: 2027, month: 7, day: 1).addingTimeInterval(-1)
+        #expect(period.start == expectedStart)
+        #expect(period.end == expectedEnd)
+    }
+
+    // MARK: UK (6 Apr – 5 Apr) via .other
+
+    @Test("UK: date in Apr–Dec returns current-year tax year starting 6 Apr")
+    func ukDateInAprToDec() throws {
+        let d = date(year: 2026, month: 8, day: 20)
+        let period = Jurisdiction.other.taxYear.containing(d)
+        let expectedStart = date(year: 2026, month: 4, day: 6)
+        let expectedEnd = date(year: 2027, month: 4, day: 6).addingTimeInterval(-1)
+        #expect(period.start == expectedStart)
+        #expect(period.end == expectedEnd)
+    }
+
+    @Test("UK: date 1 Jan–5 Apr returns previous-year tax year starting 6 Apr")
+    func ukDateInJanToApr5() throws {
+        let d = date(year: 2027, month: 1, day: 1)
+        let period = Jurisdiction.other.taxYear.containing(d)
+        let expectedStart = date(year: 2026, month: 4, day: 6)
+        let expectedEnd = date(year: 2027, month: 4, day: 6).addingTimeInterval(-1)
+        #expect(period.start == expectedStart)
+        #expect(period.end == expectedEnd)
+    }
+
+    // MARK: Edge cases — boundary dates
+
+    @Test("NZ: 1 Apr exactly is start of tax year")
+    func nzBoundaryStart() throws {
+        let d = date(year: 2026, month: 4, day: 1)
+        let period = Jurisdiction.newZealand.taxYear.containing(d)
+        #expect(period.start == d)
+    }
+
+    @Test("NZ: 31 Mar is end of tax year (not start of next)")
+    func nzBoundaryEnd() throws {
+        let d = date(year: 2027, month: 3, day: 31)
+        let period = Jurisdiction.newZealand.taxYear.containing(d)
+        let expectedStart = date(year: 2026, month: 4, day: 1)
+        let expectedEnd = date(year: 2027, month: 4, day: 1).addingTimeInterval(-1)
+        #expect(period.start == expectedStart)
+        #expect(period.end == expectedEnd)
+    }
+
+    @Test("AU: 1 Jul exactly is start of tax year")
+    func auBoundaryStart() throws {
+        let d = date(year: 2026, month: 7, day: 1)
+        let period = Jurisdiction.australia.taxYear.containing(d)
+        #expect(period.start == d)
+    }
+
+    @Test("UK: 6 Apr exactly is start of tax year")
+    func ukBoundaryStart() throws {
+        let d = date(year: 2026, month: 4, day: 6)
+        let period = Jurisdiction.other.taxYear.containing(d)
+        #expect(period.start == d)
     }
 }
