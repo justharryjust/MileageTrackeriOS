@@ -116,8 +116,8 @@ struct OnboardingView: View {
 
     private var topBar: some View {
         HStack(spacing: MTSpacing.md) {
-            // Back button — hidden on first step
-            if vm.currentStep != .intro {
+            // Back button — hidden on first step and completion screen
+            if vm.currentStep != .intro && vm.currentStep != .welcome {
                 Button { vm.goBack() } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 16, weight: .semibold))
