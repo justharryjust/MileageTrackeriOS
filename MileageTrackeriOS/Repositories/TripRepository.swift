@@ -212,6 +212,8 @@ final class TripRepository {
 
     /// Persists a trip created by the user without GPS tracking.
     /// Creates TripPoints for start, optional stops, and end so the map renders a polyline.
+    /// Returns the saved Trip for further processing (e.g. dollar value computation).
+    @discardableResult
     func saveManualTrip(
         vehicleId     : String,
         startedAt     : Date,
@@ -268,6 +270,22 @@ final class TripRepository {
             "Manual trip saved ✅ id:\(trip.id.prefix(8)) \(startAddress) → \(endAddress) \(String(format:"%.0f",distanceMetres))m pts:\(points.count)",
             category: .trip
         )
+        return trip
+    }
+
+    // MARK: - Dollar Value
+
+    /// Stores a computed dollar value on a trip (snapshot at time of finalisation).
+    func storeDollarValue(_ value: Double, for trip: Trip) {
+        write { trip.dollarValue = value; trip.updatedAt = Date() }
+    }
+
+    /// Sum of distance (in km) for all business-category trips that started before `trip`.
+    /// Used to determine the correct rate tier for dollar value computation.
+    func cumulativeBusinessKm(before trip: Trip) -> Double {
+        allTrips
+            .filter { $0.category == .business && $0.startedAt < trip.startedAt && $0.id != trip.id }
+            .reduce(0) { $0 + ($1.distanceMetres / 1000) }
     }
 
     // MARK: - Categorise
@@ -385,6 +403,11 @@ final class TripRepository {
     }
 
     // MARK: - Trip Merging
+
+    /// Returns all trips for a given vehicleId.
+    func trips(for vehicleId: String) -> [Trip] {
+        Array(realm.objects(Trip.self).where { $0.vehicleId == vehicleId })
+    }
 
     /// Fetches a single trip by primary key.
     func trip(id: String) -> Trip? {
