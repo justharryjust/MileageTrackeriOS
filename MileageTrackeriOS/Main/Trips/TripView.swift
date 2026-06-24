@@ -142,6 +142,16 @@ struct TripDetailView: View {
                             systemImage: showActualPath ? "road.lanes" : "point.topleft.down.to.point.bottomright.curvepath.fill"
                         )
                     }
+
+                    Divider()
+
+                    Button(role: .destructive) {
+                        guard !trip.isInvalidated else { return }
+                        appState.tripRepo.deleteTrip(trip)
+                        dismiss()
+                    } label: {
+                        Label("Delete Trip", systemImage: "trash")
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .fontWeight(.semibold)
