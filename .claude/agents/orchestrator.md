@@ -134,6 +134,7 @@ First move the item to In Progress yourself, then spawn:
 Agent(
   description: "Dev: <title>",
   subagent_type: "general-purpose",
+  isolation: "worktree",
   run_in_background: true,
   prompt: "Read .claude/agents/developer-agent.md and follow it exactly.
 
@@ -157,6 +158,7 @@ Ticket: <url>
 Agent(
   description: "QA: <PR title>",
   subagent_type: "general-purpose",
+  isolation: "worktree",
   run_in_background: true,
   prompt: "Read .claude/agents/qa-agent.md and follow it exactly.
 
