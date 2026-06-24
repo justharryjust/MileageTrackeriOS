@@ -70,8 +70,19 @@ Parse each item: extract `id`, `status` (Status field name), `title`, `url`, `nu
 
 - Read previous state from `.claude/project-state.json`
 - After dispatching, write new state to `.claude/project-state.json`
-- State format: array of `{id, status, title, url, type, number}` objects
-- This prevents dispatching the same item twice
+- State format: array of `{id, status, title, url, type, number, dispatched}` objects
+- `dispatched` is the timestamp (ISO string) of when you last spawned an agent for this item in its current status
+
+### Idempotency Rule — UPDATED
+
+Dispatching is guarded by TWO conditions. Dispatch an agent for an item when:
+
+1. **Backlog → Scoping**: Item status is "Backlog" AND (`dispatched` is absent OR `dispatched` is older than 10 minutes ago). This means: if an item sits in Backlog for more than 10 minutes after a failed/disconnected dispatch, retry it.
+2. **Ready/In Progress → Developer**: Status changed TO "In Progress" (not already there). This is a one-shot transition — once the dev agent is spawned, don't re-trigger unless QA sends it back.
+3. **In Progress → QA**: A PR is opened on an item with status "In Progress" or "In Review" AND this specific PR hasn't been dispatched yet (track PR URL in `dispatched`).
+4. **QA → Done/back**: Status changed TO "Done" or BACK to "In Progress" — no agent dispatch, just record the state change.
+
+**Key difference from before**: Backlog items are NOT "fire and forget." If an item is still in Backlog and hasn't been successfully scoped, KEEP RETRYING every ~10 minutes.
 
 ## How to Dispatch — Spawn Sub-Agents
 
