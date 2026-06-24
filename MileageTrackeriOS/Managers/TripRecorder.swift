@@ -191,6 +191,9 @@ final class TripRecorder {
     var heuristicMinTripDistance: Double   = Heuristic.minTripDistanceM
     var heuristicMinTripDuration: TimeInterval = Heuristic.minTripDuration
 
+    /// Fired after a trip is successfully saved and committed.
+    var onTripCompleted: (() -> Void)?
+
     private let logger = TripLogger.shared
 
     init() {}
@@ -258,6 +261,28 @@ final class TripRecorder {
         bluetooth.onCarKitDisconnected = { [weak self] event in
             self?.handleCarKitDisconnected(event)
         }
+
+        // Wire schedule gate notifications
+        scheduleManager?.onBecameAllowed = { [weak self] in
+            guard let self, let profileRepo, let notificationManager else { return }
+            let now = Date()
+            let cal = Calendar.current
+            let weekday = cal.component(.weekday, from: now)
+            let dayName = Self.dayName(for: weekday)
+            notificationManager.sendTrackingResumedNotification(dayName: dayName)
+        }
+        scheduleManager?.onBecameDisallowed = { [weak self] in
+            guard let self, let profileRepo, let notificationManager else { return }
+            let now = Date()
+            let cal = Calendar.current
+            let weekday = cal.component(.weekday, from: now)
+            let dayName = Self.dayName(for: weekday)
+            if let day = profileRepo.schedule(for: weekday) {
+                let timeRange = "\(Self.formatHour(day.startHour))-\(Self.formatHour(day.endHour))"
+                notificationManager.sendScheduleGateBlockedNotification(dayName: dayName, timeRange: timeRange)
+            }
+        }
+
         // §1.D: hydrate persisted learning state from disk
         let snapshot = learnedStore.load()
         knownCarBTUIDs    = snapshot.knownCarBTUIDs
@@ -951,7 +976,12 @@ final class TripRecorder {
                 }
             }
             logger.log("Trip saved ✅ dist:\(Int(distance))m pts:\(filled.count) status:\(status.rawValue)", category: .trip)
+                    let completion = self.onTripCompleted
+            completion?()
         }
+    }
+
+    /// Applies the categorisation
     }
 
     /// Applies the categorisation rules engine (§4.1) and writes a tamper-evident
@@ -1763,5 +1793,26 @@ final class TripRecorder {
             group.cancelAll()
             return first ?? nil
         }
+    }
+
+    // MARK: - Schedule gate notification helpers
+
+    /// English day name for the given Calendar weekday (1=Sunday…7=Saturday).
+    static func dayName(for weekday: Int) -> String {
+        switch weekday {
+        case 1:  return "Sunday"
+        case 2:  return "Monday"
+        case 3:  return "Tuesday"
+        case 4:  return "Wednesday"
+        case 5:  return "Thursday"
+        case 6:  return "Friday"
+        case 7:  return "Saturday"
+        default: return ""
+        }
+    }
+
+    /// Format an hour (0-23) as HH:MM.
+    static func formatHour(_ hour: Int) -> String {
+        String(format: "%02d:00", hour)
     }
 }

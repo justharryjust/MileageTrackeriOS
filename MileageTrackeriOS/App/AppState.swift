@@ -42,7 +42,7 @@ final class AppState {
     var showFullAuthAlert = false
 
     private init() {
-        // 1. Open Realm first — everything else reads from it
+        // 1. Open Realm first -- everything else reads from it
         realmProvider = RealmProvider.shared
         let realm     = realmProvider.realm
 

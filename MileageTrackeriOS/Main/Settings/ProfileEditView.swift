@@ -135,6 +135,10 @@ struct ProfileEditView: View {
         if claimMethod == .customRate {
             repo.setCustomRateThresholds(customRateTiers)
         }
+
+        // Reschedule notifications based on updated claim method and vehicle
+        let vehicleName = repo.defaultVehicle?.name ?? ""
+        appState.notificationManager.reschedule(claimMethod: claimMethod, vehicleName: vehicleName)
     }
 
     private func removeTier(at idx: Int) {
