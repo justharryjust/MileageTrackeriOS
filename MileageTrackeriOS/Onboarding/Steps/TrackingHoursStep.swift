@@ -30,7 +30,7 @@ struct TrackingHoursStep: View {
                     }
 
                     // Day rows — compact
-                    VStack(spacing: 2) {
+                    VStack(spacing: MTSpacing.sm) {
                         ForEach(sortedSchedule, id: \.wrappedValue.weekday) { binding in
                             CompactDayRow(snapshot: binding)
                         }
@@ -82,16 +82,16 @@ private struct CompactDayRow: View {
     private let hours = Array(0..<24)
 
     var body: some View {
-        HStack(spacing: MTSpacing.xs) {
+        HStack(spacing: MTSpacing.sm) {
             // Day name + toggle
             Toggle(isOn: $snapshot.isEnabled) {
                 Text(snapshot.shortName)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(snapshot.isEnabled ? Color.mtTextPrimary : Color.mtTextSub)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .toggleStyle(.switch)
             .tint(Color.mtGreen)
-            .frame(width: 100, alignment: .leading)
 
             if snapshot.isEnabled {
                 Spacer()
@@ -122,7 +122,7 @@ private struct CompactDayRow: View {
             }
         }
         .padding(.horizontal, MTSpacing.sm)
-        .padding(.vertical, 6)
+        .padding(.vertical, 10)
         .background(snapshot.isEnabled ? Color.mtSurface : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: MTRadius.sm))
         .onChange(of: snapshot.startHour) { _, new in
