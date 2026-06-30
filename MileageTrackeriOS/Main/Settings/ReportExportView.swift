@@ -19,7 +19,8 @@ struct ReportExportView: View {
         trips.filter { trip in
             let inRange = trip.startedAt >= startDate && trip.startedAt <= endDate
             let matchesVehicle = selectedVehicleId.isEmpty || trip.vehicleId == selectedVehicleId
-            return inRange && matchesVehicle
+            let isBusiness = trip.category == .business
+            return inRange && matchesVehicle && isBusiness
         }
         .sorted { $0.startedAt < $1.startedAt }
     }
@@ -28,8 +29,16 @@ struct ReportExportView: View {
         filteredTrips.reduce(0) { $0 + ($1.distanceMetres / 1000) }
     }
 
+    /// Cumulative business km from tax-year start to the report's start date.
+    private var baseCumulativeKm: Double {
+        let taxYearStart = profile.jurisdiction.taxYear.containing(startDate).start
+        return appState.tripRepo.allTrips
+            .filter { $0.category == .business && $0.startedAt >= taxYearStart && $0.startedAt < startDate }
+            .reduce(0) { $0 + ($1.distanceMetres / 1000) }
+    }
+
     private var totalValue: Double {
-        var cumKm = 0.0
+        var cumKm = baseCumulativeKm
         return filteredTrips.reduce(0) { total, trip in
             cumKm += trip.distanceMetres / 1000
             return total + appState.mileageCalculator.dollarValue(for: trip, profile: profile, cumulativeKm: cumKm)
@@ -138,7 +147,8 @@ struct ReportExportView: View {
                         trips: filteredTrips,
                         calculator: appState.mileageCalculator,
                         profile: profile,
-                        dateRange: (startDate, endDate)
+                        dateRange: (startDate, endDate),
+                        baseCumulativeKm: baseCumulativeKm
                     )
                     exportURL = url
                     isExporting = true
@@ -180,5 +190,3 @@ struct ReportExportView: View {
         ]
     }
 }
-
-
