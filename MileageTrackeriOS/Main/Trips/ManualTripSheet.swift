@@ -287,18 +287,17 @@ struct ManualTripSheet: View {
         )
 
         // Compute and store dollar value for the manually-saved trip
-        if let trip {
-            let profile = appState.profileRepo.profile
-            let fuelType = appState.profileRepo.defaultVehicle?.fuelType ?? .petrol
-            let cumulativeKm = appState.tripRepo.cumulativeBusinessKm(before: trip)
-            let value = appState.mileageCalculator.dollarValue(
-                for: trip,
-                profile: profile,
-                fuelType: fuelType,
-                cumulativeKm: cumulativeKm
-            )
-            appState.tripRepo.storeDollarValue(value, for: trip)
-        }
+        // trip is already non-optional — use it directly
+        let profile = appState.profileRepo.profile
+        let fuelType = appState.profileRepo.defaultVehicle?.fuelType ?? .petrol
+        let cumulativeKm = appState.tripRepo.cumulativeBusinessKm(before: trip)
+        let value = appState.mileageCalculator.dollarValue(
+            for: trip,
+            profile: profile,
+            fuelType: fuelType,
+            cumulativeKm: cumulativeKm
+        )
+        appState.tripRepo.storeDollarValue(value, for: trip)
 
         isSaving = false
         dismiss()

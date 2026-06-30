@@ -35,7 +35,11 @@ final class AppState {
 
     // MARK: - Schedule Gate
     let scheduleManager     : TrackingScheduleManager
-    
+
+    /// Alert flag: when true, the UI should show a pre-permission dialog
+    /// offering to upgrade from provisional to full notification authorization.
+    var showFullAuthAlert = false
+
     // MARK: - Subscription
     let subscriptionManager : SubscriptionManager
 
@@ -99,7 +103,29 @@ final class AppState {
             forName: UIApplication.willEnterForegroundNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            self?.tripRecorder.reprocessPendingTrips()
+            guard let self else { return }
+            self.tripRecorder.reprocessPendingTrips()
+            // Refresh weekly summary with fresh data when app foregrounds
+            self.notificationManager.refreshWeeklySummary(
+                tripRepo: self.tripRepo,
+                mileageCalculator: self.mileageCalculator,
+                profileRepo: self.profileRepo
+            )
+        }
+
+        // Wire trip completion callback for full auth prompt and weekly summary refresh
+        tripRecorder.onTripCompleted = { [weak self] in
+            guard let self else { return }
+            // Check if we should prompt for full notification authorization
+            if NotificationManager.incrementAndCheckFullAuthPrompt() {
+                self.showFullAuthAlert = true
+            }
+            // Refresh weekly summary after each trip save
+            self.notificationManager.refreshWeeklySummary(
+                tripRepo: self.tripRepo,
+                mileageCalculator: self.mileageCalculator,
+                profileRepo: self.profileRepo
+            )
         }
     }
 
@@ -111,6 +137,9 @@ final class AppState {
         locationManager.startSignificantLocationMonitoring()
         locationManager.startVisitMonitoring()
         scheduleManager.startMonitoring()
+        // Request provisional notification permission (silent -- no system prompt).
+        // Safe to call even if already determined; the system ignores repeat requests.
+        notificationManager.requestPermission()
         TripLogger.shared.log("Tracking started -- motion, pedometer, battery, bluetooth, significant-location, visit monitoring, and schedule gate active", category: .system)
     }
 }

@@ -264,7 +264,7 @@ final class TripRecorder {
 
         // Wire schedule gate notifications
         scheduleManager?.onBecameAllowed = { [weak self] in
-            guard let self, let profileRepo, let notificationManager else { return }
+            guard let self, let notificationManager else { return }
             let now = Date()
             let cal = Calendar.current
             let weekday = cal.component(.weekday, from: now)
@@ -272,7 +272,7 @@ final class TripRecorder {
             notificationManager.sendTrackingResumedNotification(dayName: dayName)
         }
         scheduleManager?.onBecameDisallowed = { [weak self] in
-            guard let self, let profileRepo, let notificationManager else { return }
+            guard let self, let notificationManager else { return }
             let now = Date()
             let cal = Calendar.current
             let weekday = cal.component(.weekday, from: now)
