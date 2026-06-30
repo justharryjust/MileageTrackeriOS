@@ -24,6 +24,7 @@ struct ManualTripSheet: View {
     @State private var resolvedDistanceM: Double?
     @State private var isCalculating    = false
     @State private var routeError: String?
+    @State private var routeWarning: String?
     @State private var hasApproximateDistance = false
 
     // MARK: Search sheet
@@ -59,6 +60,10 @@ struct ManualTripSheet: View {
                     detailsSection
                     if let err = routeError {
                         Text(err).font(.caption).foregroundStyle(Color.mtRecording)
+                            .padding(.horizontal, MTSpacing.md)
+                    }
+                    if let warn = routeWarning {
+                        Text(warn).font(.caption).foregroundStyle(.orange)
                             .padding(.horizontal, MTSpacing.md)
                     }
                     if let err = saveError {
@@ -215,6 +220,7 @@ struct ManualTripSheet: View {
 
     private func resolve(_ completion: MKLocalSearchCompletion, for target: SearchTarget) async {
         routeError = nil
+        routeWarning = nil
         do {
             let result = try await searcher.resolve(completion)
             switch target {
@@ -236,6 +242,7 @@ struct ManualTripSheet: View {
 
         isCalculating     = true
         routeError        = nil
+        routeWarning      = nil
         hasApproximateDistance = false
         resolvedDistanceM = nil
 
@@ -260,7 +267,7 @@ struct ManualTripSheet: View {
         }
 
         if hasApproximateDistance {
-            routeError = "Driving route unavailable for some segments — distance is approximate and will be refined later."
+            routeWarning = "Driving route unavailable for some segments — distance is approximate and will be refined later."
         }
 
         resolvedDistanceM = total > 0 ? total : nil

@@ -121,6 +121,7 @@ final class TripRecorder {
     private var odometerRepo: OdometerReadingRepository?
     private var savedAddressRepo: SavedAddressRepository?
     private weak var scheduleManager: TrackingScheduleManager?
+    private var mileageCalculator: MileageCalculator?
 
     // MARK: §3.1 Full polyline snapping toggle
     /// UserDefaults key for opt-in full-polyline MKDirections snapping (§3.1).
@@ -203,7 +204,8 @@ final class TripRecorder {
                    tripRepo: TripRepository, profileRepo: UserProfileRepository,
                    odometerRepo: OdometerReadingRepository,
                    savedAddressRepo: SavedAddressRepository? = nil,
-                   scheduleManager: TrackingScheduleManager? = nil) {
+                   scheduleManager: TrackingScheduleManager? = nil,
+                   mileageCalculator: MileageCalculator? = nil) {
         self.locationManager     = location
         self.motionManager       = motion
         self.bluetoothManager    = bluetooth
@@ -214,6 +216,7 @@ final class TripRecorder {
         self.odometerRepo        = odometerRepo
         self.savedAddressRepo    = savedAddressRepo
         self.scheduleManager     = scheduleManager
+        self.mileageCalculator   = mileageCalculator
 
         location.onLocationUpdate = { [weak self] loc in
             self?.handleLocationUpdate(loc)
@@ -1714,6 +1717,19 @@ final class TripRecorder {
         tripRepo.updateTrip(trip, startAddress: startAddr, endAddress: endAddr, locations: snappedLocations)
         // Override the distance with the true driving distance from route data
         tripRepo.storeDistance(totalDistance, for: trip)
+
+        // Recalculate dollar value using the corrected road-snapped distance
+        if let profile = profileRepo?.profile {
+            let fuelType = profileRepo?.defaultVehicle?.fuelType ?? .petrol
+            let cumulativeKm = tripRepo.cumulativeBusinessKm(before: trip)
+            let value = mileageCalculator?.dollarValue(
+                for: trip,
+                profile: profile,
+                fuelType: fuelType,
+                cumulativeKm: cumulativeKm
+            ) ?? 0
+            tripRepo.storeDollarValue(value, for: trip)
+        }
 
         logger.log("Manual trip reprocessed ✅ id:\(trip.id.prefix(8)) dist:\(Int(totalDistance))m pts:\(snappedLocations.count)", category: .trip)
     }
