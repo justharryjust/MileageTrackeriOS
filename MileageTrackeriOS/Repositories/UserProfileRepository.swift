@@ -277,6 +277,17 @@ final class UserProfileRepository {
         }
         TripLogger.shared.log("Tracking schedule populated with defaults", category: .system)
     }
+    // MARK: - Subscription Support
+
+    func setSubscriptionStatus(_ status: String) {
+        write { self.profile.subscriptionStatus = status }
+    }
+
+    var trialStartedAt: Date? {
+        get { profile.trialStartedAt }
+        set { write { self.profile.trialStartedAt = newValue } }
+    }
+
     // MARK: - Private
 
 

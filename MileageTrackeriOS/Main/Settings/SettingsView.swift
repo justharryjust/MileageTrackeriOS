@@ -22,6 +22,11 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                // MARK: Subscription
+                Section {
+                    subscriptionRow
+                }
+
                 Section("Tracking") {
                     NavigationLink {
                         TrackingHoursView()
@@ -227,6 +232,71 @@ struct SettingsView: View {
                     ShareSheet(items: [url])
                 }
             }
+            .sheet(isPresented: $showPaywall) {
+                PaywallView()
+                    .environment(appState)
+            }
+        }
+    }
+
+    // MARK: - Subscription Row
+
+    @State private var showPaywall = false
+
+    private var subscriptionRow: some View {
+        let state = appState.subscriptionManager.subscriptionState
+        return Button {
+            showPaywall = true
+        } label: {
+            HStack {
+                Image(systemName: state.status.icon)
+                    .foregroundStyle(subscriptionIconColor(state.status))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Mileage Tracker Pro")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(Color.mtTextPrimary)
+                    Text(subscriptionStatusText(state))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.mtTextSub)
+                }
+                Spacer()
+                if state.status != .active {
+                    Text("Upgrade")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.mtGreen)
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color.mtGreen)
+                }
+            }
+        }
+    }
+
+    private func subscriptionIconColor(_ status: MTSubscriptionStatus) -> Color {
+        switch status {
+        case .trial: return .purple
+        case .active: return .mtGreen
+        case .gracePeriod: return .mtWarning
+        case .expired: return .red
+        }
+    }
+
+    private func subscriptionStatusText(_ state: MTSubscriptionState) -> String {
+        switch state.status {
+        case .trial:
+            if let days = state.daysRemainingInTrial {
+                return "Free trial · \(days) day\(days == 1 ? "" : "s") remaining"
+            }
+            return "Free trial"
+        case .active:
+            return "Active"
+        case .gracePeriod:
+            if let days = state.daysRemainingInGrace {
+                return "Grace period · \(days) day\(days == 1 ? "" : "s") remaining"
+            }
+            return "Grace period"
+        case .expired:
+            return "Expired · Subscribe to regain access"
         }
     }
 }

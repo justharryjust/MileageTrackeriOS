@@ -82,7 +82,58 @@ struct TripDetailView: View {
         }
     }
 
+    @State private var showPaywallForTrip = false
+
+    private var isTripAccessible: Bool {
+        !trip.isInvalidated && appState.subscriptionManager.isTripAccessible(trip)
+    }
+
     private var mainContent: some View {
+        Group {
+            if isTripAccessible {
+                tripMapContent
+            } else {
+                lockedTripView
+            }
+        }
+    }
+
+    private var lockedTripView: some View {
+        VStack(spacing: MTSpacing.lg) {
+            Spacer()
+
+            Image(systemName: "lock.fill")
+                .font(.system(size: 48))
+                .foregroundStyle(Color.mtTextSub)
+
+            VStack(spacing: MTSpacing.sm) {
+                Text("Trip Locked")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(Color.mtTextPrimary)
+                Text("This trip was recorded outside your active subscription period. Subscribe to view and manage this trip.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.mtTextSub)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, MTSpacing.lg)
+            }
+
+            Button("Subscribe to Unlock") {
+                showPaywallForTrip = true
+            }
+            .buttonStyle(MTPrimaryButtonStyle())
+            .padding(.horizontal, MTSpacing.xl)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.mtBackground)
+        .sheet(isPresented: $showPaywallForTrip) {
+            PaywallView()
+                .environment(appState)
+        }
+    }
+
+    private var tripMapContent: some View {
         Map(position: $position) {
             if showActualPath {
                 if actualCoordinates.count > 1 {
@@ -118,20 +169,22 @@ struct TripDetailView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Button {
-                        guard !trip.isInvalidated else { return }
-                        appState.tripRepo.categorise(trip, as: .business)
-                    } label: {
-                        Label("Mark as Business", systemImage: "briefcase.fill")
-                    }
-                    Button {
-                        guard !trip.isInvalidated else { return }
-                        appState.tripRepo.categorise(trip, as: .personal)
-                    } label: {
-                        Label("Mark as Personal", systemImage: "person.fill")
-                    }
+                    if appState.subscriptionManager.isTripAccessible(trip) {
+                        Button {
+                            guard !trip.isInvalidated else { return }
+                            appState.tripRepo.categorise(trip, as: .business)
+                        } label: {
+                            Label("Mark as Business", systemImage: "briefcase.fill")
+                        }
+                        Button {
+                            guard !trip.isInvalidated else { return }
+                            appState.tripRepo.categorise(trip, as: .personal)
+                        } label: {
+                            Label("Mark as Personal", systemImage: "person.fill")
+                        }
 
-                    Divider()
+                        Divider()
+                    }
 
                     Button {
                         showActualPath.toggle()

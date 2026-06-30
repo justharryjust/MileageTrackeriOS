@@ -11,6 +11,9 @@ struct ReportExportView: View {
     @State private var selectedVehicleId: String = ""
     @State private var isExporting = false
     @State private var exportURL: URL?
+    @State private var showPaywallForExport = false
+
+    private var subscriptionManager: SubscriptionManager { appState.subscriptionManager }
 
     private var profile: UserProfile { appState.profileRepo.profile }
     private var trips: [Trip] { appState.tripRepo.allTrips }
@@ -144,15 +147,12 @@ struct ReportExportView: View {
             // MARK: Export
             Section {
                 Button {
-                    let url = appState.reportGenerator.exportCSV(
-                        trips: filteredTrips,
-                        calculator: appState.mileageCalculator,
-                        profile: profile,
-                        dateRange: (startDate, endDate),
-                        baseCumulativeKm: baseCumulativeKm
-                    )
-                    exportURL = url
-                    isExporting = true
+                    if subscriptionManager.subscriptionState.status.allowsAccess
+                        || subscriptionManager.areAllTripsAccessible(filteredTrips) {
+                        performExport()
+                    } else {
+                        showPaywallForExport = true
+                    }
                 } label: {
                     Label("Export CSV Report", systemImage: "doc.text.fill")
                         .frame(maxWidth: .infinity)
@@ -167,6 +167,10 @@ struct ReportExportView: View {
             if let url = exportURL {
                 ShareSheet(items: [url])
             }
+        }
+        .sheet(isPresented: $showPaywallForExport) {
+            PaywallView()
+                .environment(appState)
         }
         .onAppear {
             selectedVehicleId = appState.profileRepo.defaultVehicle?.id ?? ""
@@ -189,5 +193,17 @@ struct ReportExportView: View {
                 Date()
             )}),
         ]
+    }
+
+    private func performExport() {
+        let url = appState.reportGenerator.exportCSV(
+            trips: filteredTrips,
+            calculator: appState.mileageCalculator,
+            profile: profile,
+            dateRange: (startDate, endDate),
+            baseCumulativeKm: baseCumulativeKm
+        )
+        exportURL = url
+        isExporting = true
     }
 }

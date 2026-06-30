@@ -383,50 +383,53 @@ final class DaySchedule: EmbeddedObject {
     }
 }
 
-
-// MARK: - Subscription
+// MARK: - Subscription Types (Realm-backed for period-gating)
+// MARK: - Subscription Types (Realm-backed for period-gating)
 
 enum MTSubscriptionStatus: String, PersistableEnum {
-    case trial = "trial"; case active = "active"; case gracePeriod = "gracePeriod"; case expired = "expired"
+    case trial = "trial"
+    case active = "active"
+    case gracePeriod = "gracePeriod"
+    case expired = "expired"
+
     var displayName: String {
         switch self {
-        case .trial: return "Free Trial"; case .active: return "Active"
-        case .gracePeriod: return "Grace Period"; case .expired: return "Expired"
+        case .trial: return "Free Trial"
+        case .active: return "Active"
+        case .gracePeriod: return "Grace Period"
+        case .expired: return "Expired"
         }
     }
+
     var icon: String {
         switch self {
-        case .trial: return "clock.fill"; case .active: return "checkmark.circle.fill"
-        case .gracePeriod: return "hourglass"; case .expired: return "lock.fill"
+        case .trial: return "clock.fill"
+        case .active: return "checkmark.circle.fill"
+        case .gracePeriod: return "hourglass"
+        case .expired: return "lock.fill"
         }
     }
+
     var allowsAccess: Bool {
         switch self { case .trial, .active, .gracePeriod: return true; case .expired: return false }
     }
 }
 
 enum MTSubscriptionPlan: String, PersistableEnum {
-    case trial = "trial"; case monthly = "monthly"; case annual = "annual"
+    case trial = "trial"
+    case monthly = "monthly"
+    case annual = "annual"
 }
 
 final class MTSubscriptionPeriod: Object, ObjectKeyIdentifiable {
     @Persisted(primaryKey: true) var id: String = UUID().uuidString
-    @Persisted var startedAt: Date = Date(); @Persisted var endedAt: Date?
-    @Persisted var plan: MTSubscriptionPlan = .monthly; @Persisted var isActive: Bool = true
-    func contains(_ date: Date) -> Bool { date >= startedAt && (endedAt == nil || date <= endedAt!) }
-}
 
-struct MTSubscriptionState {
-    let status: MTSubscriptionStatus; let trialEndsAt: Date?; let graceEndsAt: Date?
-    let activePeriods: [MTSubscriptionPeriod]
-    var daysRemainingInTrial: Int? {
-        guard let end = trialEndsAt else { return nil }
-        return max(0, Calendar.current.dateComponents([.day], from: Date(), to: end).day ?? 0)
-    }
-    var daysRemainingInGrace: Int? {
-        guard let end = graceEndsAt else { return nil }
-        return max(0, Calendar.current.dateComponents([.day], from: Date(), to: end).day ?? 0)
-    }
+    @Persisted var startedAt: Date = Date()
+    @Persisted var endedAt: Date?
+    @Persisted var plan: MTSubscriptionPlan = .monthly
+    @Persisted var isActive: Bool = true
+
+    func contains(_ date: Date) -> Bool { date >= startedAt && (endedAt == nil || date <= endedAt!) }
 }
 
 // MARK: - UserProfile (singleton row — id always "singleton")
