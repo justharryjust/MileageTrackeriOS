@@ -4,6 +4,7 @@
 
 import Foundation
 import RealmSwift
+import StoreKit
 import UIKit
 
 @Observable
@@ -16,6 +17,7 @@ final class AppState {
     let tripRepo            : TripRepository
     let odometerRepo        : OdometerReadingRepository
     let savedAddressRepo    : SavedAddressRepository
+    let logbookPeriodRepo   : LogbookPeriodRepository
 
     // MARK: - Business Logic
     let mileageCalculator   : MileageCalculator
@@ -36,10 +38,6 @@ final class AppState {
     // MARK: - Schedule Gate
     let scheduleManager     : TrackingScheduleManager
 
-    /// Alert flag: when true, the UI should show a pre-permission dialog
-    /// offering to upgrade from provisional to full notification authorization.
-    var showFullAuthAlert = false
-
     // MARK: - Subscription
     let subscriptionManager : SubscriptionManager
 
@@ -53,6 +51,7 @@ final class AppState {
         tripRepo         = TripRepository(realm: realm)
         odometerRepo     = OdometerReadingRepository(realm: realm)
         savedAddressRepo = SavedAddressRepository(realm: realm)
+        logbookPeriodRepo = LogbookPeriodRepository(realm: realm)
 
         // 3. Business logic
         mileageCalculator = MileageCalculator()
@@ -70,7 +69,32 @@ final class AppState {
 
         // 5. Subscription manager
         subscriptionManager = SubscriptionManager()
-        subscriptionManager.configure(profileRepo: profileRepo)
+        subscriptionManager.configure(profileRepo: profileRepo, realm: realm)
+
+        // 2a. Wire notification manager to logbook period repo
+        logbookPeriodRepo.notificationManager = notificationManager
+
+        // 2b. Wire logbook period lifecycle to claim method changes
+        profileRepo.onClaimMethodChange = { [weak self] newMethod, jurisdiction, vehicleId in
+            guard let self, let vehicleId else { return }
+            if newMethod == .logbook {
+                if self.logbookPeriodRepo.activePeriod(for: vehicleId) == nil {
+                    self.logbookPeriodRepo.createPeriod(vehicleId: vehicleId, jurisdiction: jurisdiction)
+                }
+            } else {
+                self.logbookPeriodRepo.abandonPeriods(for: vehicleId)
+            }
+        }
+
+        // AC14: jurisdiction change mid-logbook-period
+        profileRepo.onJurisdictionChange = { [weak self] newJurisdiction, vehicleId in
+            guard let self, let vehicleId else { return }
+            self.logbookPeriodRepo.abandonPeriods(for: vehicleId)
+            self.logbookPeriodRepo.createPeriod(vehicleId: vehicleId, jurisdiction: newJurisdiction)
+        }
+
+        // AC6: auto-complete expired periods on launch
+        logbookPeriodRepo.autoCompleteExpiredPeriods(jurisdiction: profileRepo.jurisdiction, calculator: mileageCalculator)
 
         // 6. Wire TripRecorder
         tripRecorder.configure(
@@ -95,6 +119,10 @@ final class AppState {
 
         // If onboarding is already complete, start tracking immediately
         if profileRepo.hasCompletedOnboarding {
+            if profileRepo.trialStartedAt == nil {
+                profileRepo.trialStartedAt = Date()
+                TripLogger.shared.log("Trial start date set for existing user", category: .system)
+            }
             startTracking()
         }
 
@@ -105,26 +133,9 @@ final class AppState {
         ) { [weak self] _ in
             guard let self else { return }
             self.tripRecorder.reprocessPendingTrips()
-            // Refresh weekly summary with fresh data when app foregrounds
-            self.notificationManager.refreshWeeklySummary(
-                tripRepo: self.tripRepo,
-                mileageCalculator: self.mileageCalculator,
-                profileRepo: self.profileRepo
-            )
-        }
-
-        // Wire trip completion callback for full auth prompt and weekly summary refresh
-        tripRecorder.onTripCompleted = { [weak self] in
-            guard let self else { return }
-            // Check if we should prompt for full notification authorization
-            if NotificationManager.incrementAndCheckFullAuthPrompt() {
-                self.showFullAuthAlert = true
-            }
-            // Refresh weekly summary after each trip save
-            self.notificationManager.refreshWeeklySummary(
-                tripRepo: self.tripRepo,
-                mileageCalculator: self.mileageCalculator,
-                profileRepo: self.profileRepo
+            self.logbookPeriodRepo.autoCompleteExpiredPeriods(
+                jurisdiction: self.profileRepo.jurisdiction,
+                calculator: self.mileageCalculator
             )
         }
     }
@@ -137,9 +148,6 @@ final class AppState {
         locationManager.startSignificantLocationMonitoring()
         locationManager.startVisitMonitoring()
         scheduleManager.startMonitoring()
-        // Request provisional notification permission (silent -- no system prompt).
-        // Safe to call even if already determined; the system ignores repeat requests.
-        notificationManager.requestPermission()
         TripLogger.shared.log("Tracking started -- motion, pedometer, battery, bluetooth, significant-location, visit monitoring, and schedule gate active", category: .system)
     }
 }

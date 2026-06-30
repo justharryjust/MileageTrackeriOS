@@ -1,6 +1,7 @@
 // ReportExportView — Date-range picker, trip preview, and CSV export for mileage expense reports.
 
 import SwiftUI
+import StoreKit
 
 struct ReportExportView: View {
     @Environment(AppState.self) private var appState
@@ -10,6 +11,9 @@ struct ReportExportView: View {
     @State private var selectedVehicleId: String = ""
     @State private var isExporting = false
     @State private var exportURL: URL?
+    @State private var showPaywallForExport = false
+
+    private var subscriptionManager: SubscriptionManager { appState.subscriptionManager }
 
     private var profile: UserProfile { appState.profileRepo.profile }
     private var trips: [Trip] { appState.tripRepo.allTrips }
@@ -19,7 +23,8 @@ struct ReportExportView: View {
         trips.filter { trip in
             let inRange = trip.startedAt >= startDate && trip.startedAt <= endDate
             let matchesVehicle = selectedVehicleId.isEmpty || trip.vehicleId == selectedVehicleId
-            return inRange && matchesVehicle
+            let isBusiness = trip.category == .business
+            return inRange && matchesVehicle && isBusiness
         }
         .sorted { $0.startedAt < $1.startedAt }
     }
@@ -28,8 +33,16 @@ struct ReportExportView: View {
         filteredTrips.reduce(0) { $0 + ($1.distanceMetres / 1000) }
     }
 
+    /// Cumulative business km from tax-year start to the report's start date.
+    private var baseCumulativeKm: Double {
+        let taxYearStart = profile.jurisdiction.taxYear.containing(startDate).start
+        return appState.tripRepo.allTrips
+            .filter { $0.category == .business && $0.startedAt >= taxYearStart && $0.startedAt < startDate }
+            .reduce(0) { $0 + ($1.distanceMetres / 1000) }
+    }
+
     private var totalValue: Double {
-        var cumKm = 0.0
+        var cumKm = baseCumulativeKm
         return filteredTrips.reduce(0) { total, trip in
             cumKm += trip.distanceMetres / 1000
             return total + appState.mileageCalculator.dollarValue(for: trip, profile: profile, cumulativeKm: cumKm)
@@ -139,14 +152,12 @@ struct ReportExportView: View {
             // MARK: Export
             Section {
                 Button {
-                    let url = appState.reportGenerator.exportCSV(
-                        trips: filteredTrips,
-                        calculator: appState.mileageCalculator,
-                        profile: profile,
-                        dateRange: (startDate, endDate)
-                    )
-                    exportURL = url
-                    isExporting = true
+                    if subscriptionManager.subscriptionState.status.allowsAccess
+                        || subscriptionManager.areAllTripsAccessible(filteredTrips) {
+                        performExport()
+                    } else {
+                        showPaywallForExport = true
+                    }
                 } label: {
                     Label("Export CSV Report", systemImage: "doc.text.fill")
                         .frame(maxWidth: .infinity)
@@ -161,6 +172,10 @@ struct ReportExportView: View {
             if let url = exportURL {
                 ShareSheet(items: [url])
             }
+        }
+        .sheet(isPresented: $showPaywallForExport) {
+            PaywallView()
+                .environment(appState)
         }
         .onAppear {
             let ty = profile.jurisdiction.taxYear.containing(Date())
@@ -187,6 +202,16 @@ struct ReportExportView: View {
             )}),
         ]
     }
+
+    private func performExport() {
+        let url = appState.reportGenerator.exportCSV(
+            trips: filteredTrips,
+            calculator: appState.mileageCalculator,
+            profile: profile,
+            dateRange: (startDate, endDate),
+            baseCumulativeKm: baseCumulativeKm
+        )
+        exportURL = url
+        isExporting = true
+    }
 }
-
-

@@ -21,6 +21,8 @@ struct MileageTrackeriOSApp: App {
 
 struct RootView: View {
     @Environment(AppState.self) private var appState
+    @AppStorage("hasSeenPaywall") private var hasSeenPaywall = false
+    @State private var showPaywall = false
 
     var body: some View {
         // Access profileRepo directly so @Observable tracking picks up
@@ -28,13 +30,20 @@ struct RootView: View {
         @Bindable var repo = appState.profileRepo
         if repo.hasCompletedOnboarding {
             MainTabView()
-                .alert("Get the most out of MileageTracker", isPresented: Bindable(appState).showFullAuthAlert) {
-                    Button("Continue") {
-                        appState.notificationManager.requestFullAuthorization()
+                .fullScreenCover(isPresented: $showPaywall) {
+                    PaywallView()
+                        .environment(appState)
+                        .onDisappear {
+                            hasSeenPaywall = true
+                        }
+                }
+                .onAppear {
+                    let status = appState.subscriptionManager.subscriptionState.status
+                    if !hasSeenPaywall || status == .expired || status == .gracePeriod {
+                        if status != .active {
+                            showPaywall = true
+                        }
                     }
-                    Button("Not Now", role: .cancel) {}
-                } message: {
-                    Text("Enable banners and sound for trip alerts so you never miss a recording.")
                 }
         } else {
             OnboardingView()

@@ -10,7 +10,7 @@ final class RealmProvider {
     private(set) var realm: Realm
 
     /// Current schema version — bump this whenever the model changes and add a migration block.
-    static let schemaVersion: UInt64 = 8
+    static let schemaVersion: UInt64 = 9
 
     private init() {
         let config = Realm.Configuration(
@@ -51,6 +51,7 @@ final class RealmProvider {
                 }
                 // v7 -> v8: new SavedAddress collection — no enumerate needed (empty default).
                 // Drives the commute (home↔work) auto-categorisation rule.
+                // v8 -> v9: added MTSubscriptionPeriod table — new table, no migration action needed.
             },
             objectTypes: [
                 UserProfile.self,
@@ -61,6 +62,8 @@ final class RealmProvider {
                 TripPoint.self,
                 OdometerReading.self,
                 SavedAddress.self,
+                LogbookPeriod.self,
+                MTSubscriptionPeriod.self,
             ]
         )
         Realm.Configuration.defaultConfiguration = config

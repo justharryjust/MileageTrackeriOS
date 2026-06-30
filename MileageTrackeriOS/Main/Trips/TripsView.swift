@@ -9,6 +9,10 @@ struct TripsView: View {
     @State private var isSelecting = false
     @State private var selectedIds: Set<String> = []
     @State private var showMergeConfirmation = false
+    @State private var showPaywall = false
+    @State private var lockedTrip: Trip?
+
+    private var subscriptionManager: SubscriptionManager { appState.subscriptionManager }
 
     enum TripFilter: String, CaseIterable {
         case all           = "All"
@@ -62,22 +66,29 @@ struct TripsView: View {
                                     .listRowBackground(Color.mtBackground)
                                     .listRowInsets(EdgeInsets(top: 6, leading: MTSpacing.md, bottom: 6, trailing: MTSpacing.md))
                                 } else {
-                                    TripRow(trip: trip)
+                                    TripRow(trip: trip, onLockedTrip: { trip in
+                                        lockedTrip = trip
+                                        showPaywall = true
+                                    })
                                         .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                            Button {
-                                                appState.tripRepo.categorise(trip, as: .business)
-                                            } label: {
-                                                Label("Business", systemImage: "briefcase.fill")
+                                            if appState.subscriptionManager.isTripAccessible(trip) {
+                                                Button {
+                                                    appState.tripRepo.categorise(trip, as: .business)
+                                                } label: {
+                                                    Label("Business", systemImage: "briefcase.fill")
+                                                }
+                                                .tint(Color.mtGreen)
                                             }
-                                            .tint(Color.mtGreen)
                                         }
                                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                            Button {
-                                                appState.tripRepo.categorise(trip, as: .personal)
-                                            } label: {
-                                                Label("Personal", systemImage: "person.fill")
+                                            if appState.subscriptionManager.isTripAccessible(trip) {
+                                                Button {
+                                                    appState.tripRepo.categorise(trip, as: .personal)
+                                                } label: {
+                                                    Label("Personal", systemImage: "person.fill")
+                                                }
+                                                .tint(.blue)
                                             }
-                                            .tint(.blue)
                                         }
                                         .listRowBackground(Color.mtBackground)
                                         .listRowInsets(EdgeInsets(top: 6, leading: MTSpacing.md, bottom: 6, trailing: MTSpacing.md))
@@ -156,6 +167,10 @@ struct TripsView: View {
                 ManualTripSheet()
                     .environment(appState)
             }
+            .sheet(isPresented: $showPaywall) {
+                PaywallView()
+                    .environment(appState)
+            }
         }
     }
 
@@ -183,27 +198,47 @@ struct TripsView: View {
 private struct TripRow: View {
     @Environment(AppState.self) private var appState
     let trip: Trip
+    let onLockedTrip: ((Trip) -> Void)?
+
+    private var isAccessible: Bool { appState.subscriptionManager.isTripAccessible(trip) }
 
     var body: some View {
-        NavigationLink(destination: TripDetailView(trip: trip)) {
-            TripRowContent(trip: trip)
-        }
-        .contextMenu {
-            Button {
-                appState.tripRepo.categorise(trip, as: .business)
-            } label: {
-                Label("Mark as Business", systemImage: "briefcase.fill")
-            }
-            Button {
-                appState.tripRepo.categorise(trip, as: .personal)
-            } label: {
-                Label("Mark as Personal", systemImage: "person.fill")
-            }
-            Divider()
-            Button(role: .destructive) {
-                appState.tripRepo.deleteTrip(trip)
-            } label: {
-                Label("Delete Trip", systemImage: "trash")
+        Group {
+            if isAccessible {
+                NavigationLink(destination: TripDetailView(trip: trip)) {
+                    TripRowContent(trip: trip)
+                }
+                .contextMenu {
+                    Button {
+                        appState.tripRepo.categorise(trip, as: .business)
+                    } label: {
+                        Label("Mark as Business", systemImage: "briefcase.fill")
+                    }
+                    Button {
+                        appState.tripRepo.categorise(trip, as: .personal)
+                    } label: {
+                        Label("Mark as Personal", systemImage: "person.fill")
+                    }
+                    Divider()
+                    Button(role: .destructive) {
+                        appState.tripRepo.deleteTrip(trip)
+                    } label: {
+                        Label("Delete Trip", systemImage: "trash")
+                    }
+                }
+            } else {
+                Button {
+                    onLockedTrip?(trip)
+                } label: {
+                    TripRowContent(trip: trip)
+                        .overlay(alignment: .trailing) {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.mtTextSub)
+                                .padding(.trailing, 4)
+                        }
+                }
+                .buttonStyle(.plain)
             }
         }
     }

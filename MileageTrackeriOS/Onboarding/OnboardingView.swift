@@ -73,6 +73,11 @@ final class OnboardingViewModel {
         repo.applySchedule(trackingSchedule)
         repo.hasCompletedOnboarding = true
 
+        if repo.trialStartedAt == nil {
+            repo.trialStartedAt = Date()
+            TripLogger.shared.log("Trial started at \(Date())", category: .system)
+        }
+
         // Save initial odometer reading if logbook method was chosen
         if claimMethod == .logbook, let km = Double(initialOdometerKm), km > 0,
            let vehicleId = repo.defaultVehicle?.id {
