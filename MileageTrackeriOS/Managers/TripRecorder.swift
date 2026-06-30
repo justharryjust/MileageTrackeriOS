@@ -981,9 +981,6 @@ final class TripRecorder {
         }
     }
 
-    /// Applies the categorisation
-    }
-
     /// Applies the categorisation rules engine (§4.1) and writes a tamper-evident
     /// commit hash (§5.2) to a freshly-saved trip. Also runs the odometer
     /// cross-check (§3.4) and same-day stitching pass (§2.5).

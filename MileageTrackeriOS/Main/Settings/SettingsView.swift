@@ -86,33 +86,6 @@ struct SettingsView: View {
                 }
 
                 Section("Profile") {
-                    if appState.profileRepo.claimMethod == .logbook {
-                        NavigationLink {
-                            LogbookPeriodView()
-                                .environment(appState)
-                        } label: {
-                            HStack {
-                                Image(systemName: "book.closed.fill")
-                                    .foregroundStyle(Color.mtGreen)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Logbook Period")
-                                        .font(.system(size: 15, weight: .medium))
-                                        .foregroundStyle(Color.mtTextPrimary)
-                                    if let v = appState.profileRepo.defaultVehicle,
-                                       let p = appState.logbookPeriodRepo.activePeriod(for: v.id) {
-                                        Text("\(p.daysRemaining) of \(p.totalDays) days remaining")
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(Color.mtTextSub)
-                                    } else {
-                                        Text("No active period")
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(Color.mtTextSub)
-                                    }
-                                }
-                                Spacer()
-                            }
-                        }
-                    }
 
                     NavigationLink {
                         ProfileEditView()

@@ -16,7 +16,6 @@ final class AppState {
     let tripRepo            : TripRepository
     let odometerRepo        : OdometerReadingRepository
     let savedAddressRepo    : SavedAddressRepository
-    let logbookPeriodRepo   : LogbookPeriodRepository
 
     // MARK: - Business Logic
     let mileageCalculator   : MileageCalculator
@@ -51,17 +50,11 @@ final class AppState {
         tripRepo         = TripRepository(realm: realm)
         odometerRepo     = OdometerReadingRepository(realm: realm)
         savedAddressRepo = SavedAddressRepository(realm: realm)
-        logbookPeriodRepo = LogbookPeriodRepository(realm: realm)
 
-        // 2a. Wire logbook period lifecycle to claim method changes
-        profileRepo.onClaimMethodChange = { [weak self] newMethod, jurisdiction, vehicleId in
             guard let self, let vehicleId else { return }
             if newMethod == .logbook {
-                if self.logbookPeriodRepo.activePeriod(for: vehicleId) == nil {
-                    self.logbookPeriodRepo.createPeriod(vehicleId: vehicleId, jurisdiction: jurisdiction)
                 }
             } else {
-                self.logbookPeriodRepo.abandonPeriods(for: vehicleId)
             }
         }
 

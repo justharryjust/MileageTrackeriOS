@@ -2,6 +2,7 @@
 // for odometer reminders, weekly summaries, and trip-detected alerts.
 
 import Foundation
+import UIKit
 import UserNotifications
 
 @Observable
