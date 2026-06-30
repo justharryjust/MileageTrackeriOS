@@ -290,13 +290,6 @@ final class UserProfileRepository {
 
     // MARK: - Private
 
-
-    func setSubscriptionStatus(_ status: String) { write { self.profile.subscriptionStatus = status } }
-    var trialStartedAt: Date? {
-        get { profile.trialStartedAt }
-        set { write { self.profile.trialStartedAt = newValue } }
-    }
-
     private func write(_ block: () -> Void) {
         do {
             try realm.write(block)
