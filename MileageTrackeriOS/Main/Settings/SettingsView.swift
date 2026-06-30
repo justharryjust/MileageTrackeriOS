@@ -168,7 +168,7 @@ struct SettingsView: View {
 
                 Section("Reporting") {
                     NavigationLink {
-                        ReportExportView()
+                        ReportExportView(startDate: Date().addingTimeInterval(-30 * 24 * 3600), endDate: Date())
                             .environment(appState)
                     } label: {
                         Label("Mileage Report", systemImage: "doc.text.fill")
