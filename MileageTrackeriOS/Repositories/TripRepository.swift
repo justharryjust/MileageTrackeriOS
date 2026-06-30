@@ -220,7 +220,7 @@ final class TripRepository {
     func saveManualTrip(
         vehicleId          : String,
         startedAt          : Date,
-        endedAt            : Date,
+        endedAt            : Date?,
         distanceMetres     : Double,
         startAddress       : String,
         endAddress         : String,
@@ -252,9 +252,10 @@ final class TripRepository {
 
         if let snapped = snappedCoordinates, !snapped.isEmpty {
             // Road-snapped points: downsample to 500 and apply interpolated timestamps
+            let snappedEnd = endedAt ?? Date()
             let snappedLocations = snapped.enumerated().map { (i, coord) in
                 let fraction = Double(i) / Double(max(snapped.count - 1, 1))
-                let ts = startedAt.addingTimeInterval(endedAt.timeIntervalSince(startedAt) * fraction)
+                let ts = startedAt.addingTimeInterval(snappedEnd.timeIntervalSince(startedAt) * fraction)
                 return CLLocation(
                     coordinate: coord,
                     altitude: 0,
@@ -286,18 +287,34 @@ final class TripRepository {
                 TripPoint(tripId: trip.id, latitude: startLat, longitude: startLng,
                           altitude: 0, speedMs: -1, accuracy: -1, recordedAt: startedAt)
             ]
-            let stopInterval = endedAt.timeIntervalSince(startedAt) / Double(stops.count + 1)
-            for (i, stop) in stops.enumerated() {
-                points.append(TripPoint(
-                    tripId: trip.id, latitude: stop.lat, longitude: stop.lng,
-                    altitude: 0, speedMs: -1, accuracy: -1,
-                    recordedAt: startedAt.addingTimeInterval(stopInterval * Double(i + 1))
-                ))
+            // Intermediate stops — space evenly when endedAt is known, otherwise use 60s gaps
+            if let end = endedAt {
+                let stopInterval = end.timeIntervalSince(startedAt) / Double(stops.count + 1)
+                for (i, stop) in stops.enumerated() {
+                    points.append(TripPoint(
+                        tripId: trip.id, latitude: stop.lat, longitude: stop.lng,
+                        altitude: 0, speedMs: -1, accuracy: -1,
+                        recordedAt: startedAt.addingTimeInterval(stopInterval * Double(i + 1))
+                    ))
+                }
+                points.append(
+                    TripPoint(tripId: trip.id, latitude: endLat, longitude: endLng,
+                              altitude: 0, speedMs: -1, accuracy: -1, recordedAt: end)
+                )
+            } else {
+                let stopInterval: TimeInterval = 60 // 60s between stops when no end time
+                for (i, stop) in stops.enumerated() {
+                    points.append(TripPoint(
+                        tripId: trip.id, latitude: stop.lat, longitude: stop.lng,
+                        altitude: 0, speedMs: -1, accuracy: -1,
+                        recordedAt: startedAt.addingTimeInterval(stopInterval * Double(i + 1))
+                    ))
+                }
+                points.append(
+                    TripPoint(tripId: trip.id, latitude: endLat, longitude: endLng,
+                              altitude: 0, speedMs: -1, accuracy: -1, recordedAt: startedAt)
+                )
             }
-            points.append(
-                TripPoint(tripId: trip.id, latitude: endLat, longitude: endLng,
-                          altitude: 0, speedMs: -1, accuracy: -1, recordedAt: endedAt)
-            )
             write {
                 realm.add(trip)
                 realm.add(points)
@@ -311,7 +328,7 @@ final class TripRepository {
         return trip
     }
 
-    // MARK: - Categorise
+    // MARK: - Categorise    // MARK: - Categorise
 
     func categorise(_ trip: Trip, as category: TripCategory) {
         write {

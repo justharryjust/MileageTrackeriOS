@@ -688,7 +688,7 @@ struct TaxYearTests {
     }
 }
 
-// MARK: - ═══════════════════════════════════════════════════
+
 // MARK:   Suite 12 — DrivingDistanceResult + Haversine
 // MARK: ═══════════════════════════════════════════════════
 
@@ -754,12 +754,7 @@ struct DrivingDistanceResultTests {
 struct ManualTripRepoTests {
 
     private func makeRealm() throws -> Realm {
-        let config = Realm.Configuration(
-            inMemoryIdentifier: UUID().uuidString,
-            schemaVersion: RealmProvider.schemaVersion,
-            objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self]
-        )
-        return try Realm(configuration: config)
+
     }
 
     @Test("Save with processingStatus = .pending sets status on trip")
@@ -921,5 +916,312 @@ struct ManualTripRepoTests {
 
         repo.storeDistance(12_500, for: trip)
         #expect(trip.distanceMetres == 12_500)
+
+// MARK:   Suite 11 — Onboarding Region Validation
+// MARK: ═══════════════════════════════════════════════
+
+@Suite("Onboarding Region Validation")
+@MainActor
+struct OnboardingRegionValidationTests {
+
+    @Test("isRegionValid is false when regionCode is empty")
+    func emptyRegionIsInvalid() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = ""
+        #expect(vm.isRegionValid == false)
     }
+
+    @Test("isRegionValid is true when regionCode is NZ")
+    func nzRegionIsValid() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "NZ"
+        #expect(vm.isRegionValid == true)
+    }
+
+    @Test("isRegionValid is true when regionCode is AU")
+    func auRegionIsValid() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "AU"
+        #expect(vm.isRegionValid == true)
+    }
+
+    @Test("isRegionValid is true when regionCode is Other (--)")
+    func otherRegionIsValid() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "--"
+        #expect(vm.isRegionValid == true)
+    }
+
+    @Test("jurisdiction is .newZealand when regionCode is NZ")
+    func nzJurisdiction() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "NZ"
+        #expect(vm.jurisdiction == .newZealand)
+    }
+
+    @Test("jurisdiction is .australia when regionCode is AU")
+    func auJurisdiction() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "AU"
+        #expect(vm.jurisdiction == .australia)
+    }
+
+    @Test("jurisdiction is .other when regionCode is empty")
+    func emptyJurisdictionIsOther() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = ""
+        #expect(vm.jurisdiction == .other)
+    }
+
+    @Test("jurisdiction is .other when regionCode is -- (explicit Other)")
+    func explicitOtherJurisdiction() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "--"
+        #expect(vm.jurisdiction == .other)
+}
+
+// MARK: - ═══════════════════════════════
+
+// MARK:   Suite 12 — Trip Repository Deletion
+// MARK: ═══════════════════════════════
+
+@Suite("Trip Repository Delete")
+@MainActor
+struct TripRepositoryDeleteTests {
+
+    /// Helper to build a date from components.
+    private func date(year: Int, month: Int, day: Int, hour: Int = 12) -> Date {
+        let cal = Calendar.current
+        return cal.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
+    }
+
+    /// Query trips directly from Realm to avoid observer-notification timing dependency.
+    private func savedTrips(in repo: TripRepository) -> [Trip] {
+        Array(repo.testRealm.objects(Trip.self).sorted(byKeyPath: "startedAt"))
+    }
+
+    /// Query TripPoints directly from Realm for the given trip ID.
+    private func pointsForTripId(in repo: TripRepository, tripId: String) -> [TripPoint] {
+        Array(repo.testRealm.objects(TripPoint.self).where { $0.tripId == tripId })
+    }
+
+    @Test("deleteTrip removes the trip from the repository")
+    func deleteTripRemovesTrip() throws {
+        let repo = TripRepository(realm: realm)
+
+        let startDate = date(year: 2026, month: 6, day: 15, hour: 9)
+        let endDate = date(year: 2026, month: 6, day: 15, hour: 10)
+
+        repo.saveManualTrip(
+            vehicleId: "test-vehicle-1",
+            startedAt: startDate,
+            endedAt: endDate,
+            distanceMetres: 10_000,
+            startAddress: "Start St",
+            endAddress: "End Ave",
+            startLat: -36.85,
+            startLng: 174.76,
+            endLat: -36.95,
+            endLng: 174.86
+        )
+
+        #expect(savedTrips(in: repo).count == 1, "Trip should exist before deletion")
+
+        let trip = savedTrips(in: repo).first!
+        repo.deleteTrip(trip)
+
+        #expect(savedTrips(in: repo).isEmpty, "Trip should be removed after deletion")
+    }
+
+    @Test("deleteTrip removes associated TripPoints")
+    func deleteTripRemovesPoints() throws {
+        let config = Realm.Configuration(
+            inMemoryIdentifier: UUID().uuidString,
+            schemaVersion: RealmProvider.schemaVersion,
+            objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self]
+        )
+        let realm = try Realm(configuration: config)
+        let repo = TripRepository(realm: realm)
+
+        let startDate = date(year: 2026, month: 6, day: 15, hour: 14)
+        let endDate = date(year: 2026, month: 6, day: 15, hour: 15)
+
+        repo.saveManualTrip(
+            vehicleId: "test-vehicle-2",
+            startedAt: startDate,
+            endedAt: endDate,
+            distanceMetres: 5_000,
+            startAddress: "Alpha Rd",
+            endAddress: "Beta Blvd",
+            startLat: -36.85,
+            startLng: 174.76,
+            endLat: -36.90,
+            endLng: 174.80
+        )
+
+        let trip = savedTrips(in: repo).first!
+        let tripId = trip.id
+
+        // Verify points exist before deletion
+        let pointsBefore = pointsForTripId(in: repo, tripId: tripId)
+        #expect(!pointsBefore.isEmpty, "TripPoints should exist before deletion")
+
+        repo.deleteTrip(trip)
+
+        // Verify points are gone after deletion
+        let pointsAfter = pointsForTripId(in: repo, tripId: tripId)
+        #expect(pointsAfter.isEmpty, "TripPoints should be removed after deletion")
+    }
+
+    @Test("deleting one trip does not affect other trips")
+    func deleteTripIsolated() throws {
+        let config = Realm.Configuration(
+            inMemoryIdentifier: UUID().uuidString,
+            schemaVersion: RealmProvider.schemaVersion,
+            objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self]
+        )
+        let realm = try Realm(configuration: config)
+        let repo = TripRepository(realm: realm)
+
+        let startDate1 = date(year: 2026, month: 6, day: 15, hour: 8)
+        let endDate1 = date(year: 2026, month: 6, day: 15, hour: 9)
+
+        repo.saveManualTrip(
+            vehicleId: "test-vehicle-4",
+            startedAt: startDate1,
+            endedAt: endDate1,
+            distanceMetres: 5_000,
+            startAddress: "P St",
+            endAddress: "Q Ave",
+            startLat: -36.85,
+            startLng: 174.76,
+            endLat: -36.88,
+            endLng: 174.79,
+            category: .business
+        )
+
+        let startDate2 = date(year: 2026, month: 6, day: 15, hour: 10)
+        let endDate2 = date(year: 2026, month: 6, day: 15, hour: 11)
+
+        repo.saveManualTrip(
+            vehicleId: "test-vehicle-5",
+            startedAt: startDate2,
+            endedAt: endDate2,
+            distanceMetres: 8_000,
+            startAddress: "R St",
+            endAddress: "S Blvd",
+            startLat: -36.86,
+            startLng: 174.77,
+            endLat: -36.90,
+            endLng: 174.82,
+            category: .personal
+        )
+
+        #expect(savedTrips(in: repo).count == 2, "Two trips should exist")
+
+        let trips = savedTrips(in: repo)
+        let firstTrip = trips.first!
+        repo.deleteTrip(firstTrip)
+
+        let remaining = savedTrips(in: repo)
+        #expect(remaining.count == 1, "Only one trip should remain")
+        #expect(remaining.first?.id != firstTrip.id, "Remaining trip should not be the deleted one")
+    }
+}
+    }
+}
+
+// MARK: - ═══════════════════════════════════════════
+
+// MARK:   Suite 9 — Onboarding Navigation
+// MARK: ═══════════════════════════════════════════
+
+@Suite("Onboarding Navigation")
+@MainActor
+struct OnboardingNavigationTests {
+
+    @Test("ViewModel starts at .intro by default")
+    func startsAtIntro() {
+        let vm = OnboardingViewModel()
+        #expect(vm.currentStep == .intro)
+    }
+
+    @Test("advance increments currentStep forward")
+    func advanceMovesForward() {
+        let vm = OnboardingViewModel()
+        vm.advance()
+        #expect(vm.currentStep == .jurisdiction)
+        vm.advance()
+        #expect(vm.currentStep == .vehicleAndUnit)
+    }
+
+    @Test("goBack decrements currentStep")
+    func goBackMovesBack() {
+        let vm = OnboardingViewModel()
+        vm.advance()  // .jurisdiction
+        vm.advance()  // .vehicleAndUnit
+        #expect(vm.currentStep == .vehicleAndUnit)
+
+        vm.goBack()
+        #expect(vm.currentStep == .jurisdiction)
+    }
+
+    @Test("goBack does not go past .intro")
+    func goBackStopsAtIntro() {
+        let vm = OnboardingViewModel()
+        #expect(vm.currentStep == .intro)
+        vm.goBack()
+        #expect(vm.currentStep == .intro)
+    }
+
+    @Test("advance does not go past .welcome")
+    func advanceStopsAtWelcome() {
+        let vm = OnboardingViewModel()
+        for _ in 0..<OnboardingStep.allCases.count {
+            vm.advance()
+        }
+        #expect(vm.currentStep == .welcome)
+        vm.advance()
+        #expect(vm.currentStep == .welcome)
+    }
+
+    @Test("isVehicleValid is false when registration is empty")
+    func vehicleInvalidWithoutRegistration() {
+        let vm = OnboardingViewModel()
+        vm.vehicleRegistration = ""
+        #expect(vm.isVehicleValid == false)
+    }
+
+    @Test("isVehicleValid is false when registration is whitespace only")
+    func vehicleInvalidWithWhitespaceOnly() {
+        let vm = OnboardingViewModel()
+        vm.vehicleRegistration = "   "
+        #expect(vm.isVehicleValid == false)
+    }
+
+    @Test("isVehicleValid is true when registration is non-empty")
+    func vehicleValidWithRegistration() {
+        let vm = OnboardingViewModel()
+        vm.vehicleRegistration = "ABC123"
+        #expect(vm.isVehicleValid == true)
+    }
+
+    @Test("Advancing from intro reaches vehicleAndUnit in exactly 2 steps")
+    func pathFromIntroToVehicle() {
+        let vm = OnboardingViewModel()
+        vm.advance()
+        vm.advance()
+        #expect(vm.currentStep == .vehicleAndUnit)
+    }
+
+    @Test("goBack from vehicleAndUnit returns to jurisdiction (the previous step)")
+    func backFromVehicleToJurisdiction() {
+        let vm = OnboardingViewModel()
+        vm.advance()  // .jurisdiction
+        vm.advance()  // .vehicleAndUnit
+        #expect(vm.currentStep == .vehicleAndUnit)
+
+        vm.goBack()
+        #expect(vm.currentStep == .jurisdiction)
+
 }
