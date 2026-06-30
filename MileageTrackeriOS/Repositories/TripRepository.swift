@@ -404,6 +404,11 @@ final class TripRepository {
 
     // MARK: - Trip Merging
 
+    /// Returns all trips for a given vehicleId.
+    func trips(for vehicleId: String) -> [Trip] {
+        Array(realm.objects(Trip.self).where { $0.vehicleId == vehicleId })
+    }
+
     /// Fetches a single trip by primary key.
     func trip(id: String) -> Trip? {
         realm.object(ofType: Trip.self, forPrimaryKey: id)

@@ -27,6 +27,22 @@ enum Jurisdiction: String, CaseIterable, PersistableEnum {
         case .other:      return "🌍"
         }
     }
+
+    var logbookPeriodDays: Int {
+        switch self {
+        case .newZealand: return 90
+        case .australia:  return 84
+        case .other:      return 90
+        }
+    }
+
+    var logbookValidityYears: Int {
+        switch self {
+        case .newZealand: return 3
+        case .australia:  return 5
+        case .other:      return 3
+        }
+    }
 }
 
 struct MileageRates {
@@ -355,6 +371,45 @@ final class OdometerReading: Object, ObjectKeyIdentifiable {
     @Persisted var tripId: String?
     @Persisted var notes: String?
     @Persisted var source: OdometerSource        = .manual
+}
+
+
+// MARK: - Logbook Period
+
+enum LogbookPeriodStatus: String, PersistableEnum {
+    case active
+    case complete
+    case abandoned
+}
+
+final class LogbookPeriod: Object, ObjectKeyIdentifiable {
+    @Persisted(primaryKey: true) var id: String = UUID().uuidString
+    @Persisted var vehicleId: String = ""
+    @Persisted var startedAt: Date = Date()
+    @Persisted var endedAt: Date?
+    @Persisted var completedAt: Date?
+    @Persisted var status: LogbookPeriodStatus = .active
+    @Persisted var businessUsePercent: Double?
+    @Persisted var odometerStartKm: Double?
+    @Persisted var odometerEndKm: Double?
+    @Persisted var totalOdometerKm: Double?
+    @Persisted var validUntil: Date?
+
+    var durationDays: Int {
+        guard let end = endedAt else { return 0 }
+        return Calendar.current.dateComponents([.day], from: startedAt, to: end).day ?? 0
+    }
+
+    var daysRemaining: Int {
+        guard let end = endedAt else { return 0 }
+        let remaining = Calendar.current.dateComponents([.day], from: Date(), to: end).day ?? 0
+        return max(0, remaining)
+    }
+
+    var totalDays: Int {
+        guard let end = endedAt else { return 0 }
+        return Calendar.current.dateComponents([.day], from: startedAt, to: end).day ?? 0
+    }
 }
 
 // MARK: - Collection safe subscript

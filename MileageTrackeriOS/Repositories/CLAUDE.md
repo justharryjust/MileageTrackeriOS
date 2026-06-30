@@ -47,6 +47,7 @@ v3 → v4  UserProfile.customRateThresholds (List<RateThreshold>) — empty list
 | `deleteTrip(_:)` | Swipe-to-delete | Also deletes associated `TripPoint` rows |
 | `purgeOldPersonalTrips()` | Background task | Deletes personal trips with `endedAt` > 7 days ago |
 | `tripPoints(for:)` | `TripDetailView` map | Returns sorted `TripPoint` array for polyline rendering |
+| `trips(for:)` | `UserProfileRepository.deleteVehicle` | Returns all trips for a given vehicleId |
 
 ---
 
@@ -64,8 +65,19 @@ v3 → v4  UserProfile.customRateThresholds (List<RateThreshold>) — empty list
 |--------|-------|
 | `addVehicle(name:registration:type:fuelType:)` | First vehicle is auto-set as default |
 | `setDefaultVehicle(_:)` | Clears `isDefault` on all others |
+| `updateVehicle(_:name:registration:type:fuelType:)` | Edits vehicle details in-place |
 | `archiveVehicle(_:)` | Sets `isArchived = true`; excluded from `vehicles` collection |
+| `unarchiveVehicle(_:)` | Sets `isArchived = false`; reappears in `vehicles` |
+| `setVehicleDefaultCategory(_:_:)` | Sets per-vehicle trip categorisation seed (§4.3) |
+| `deleteVehicle(_:tripRepo:)` | Permanently deletes vehicle + cascades to trips, TripPoints, and odometer readings. Promotes next vehicle by createdAt if deleted vehicle was default |
 | `defaultVehicle` | First vehicle with `isDefault`, fallback to `vehicles.first` |
+
+### Observed collections
+
+| Property | Content |
+|----------|---------|
+| `vehicles` | Non-archived vehicles, sorted by createdAt |
+| `allVehicles` | All vehicles including archived, sorted by createdAt |
 
 ### Tracking schedule
 
