@@ -15,8 +15,9 @@ struct ManualTripSheet: View {
     @State private var stops:      [AddressResult] = []
     @State private var endResult:  AddressResult?
     @State private var tripDate:   Date = Date()
-    @State private var startTime:  Date = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? Date()
-    @State private var endTime:    Date = Calendar.current.date(bySettingHour: 9, minute: 30, second: 0, of: Date()) ?? Date()
+    @State private var startTime:  Date?
+    @State private var endTime:    Date?
+    @State private var showTimes:  Bool = false
     @State private var notes:      String = ""
 
     // MARK: Resolution state
@@ -41,6 +42,14 @@ struct ManualTripSheet: View {
     // MARK: Save state
     @State private var isSaving  = false
     @State private var saveError: String?
+
+    /// Defaults for time pickers when toggling "Add times" on.
+    private var defaultStartTime: Date {
+        Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: tripDate) ?? tripDate
+    }
+    private var defaultEndTime: Date {
+        defaultStartTime.addingTimeInterval(1800) // 30 min after start
+    }
 
     private var allResolved: Bool {
         startResult != nil && endResult != nil && !stops.contains(where: { $0.title.isEmpty })
@@ -171,14 +180,33 @@ struct ManualTripSheet: View {
             DatePicker("Date", selection: $tripDate, displayedComponents: .date)
                 .font(.system(size: 15)).padding(MTSpacing.md)
             Divider().padding(.leading, MTSpacing.md)
-            DatePicker("Departed", selection: $startTime, displayedComponents: .hourAndMinute)
+
+            Toggle(isOn: $showTimes) {
+                Label("Add times", systemImage: "clock")
+                    .font(.system(size: 15))
+            }
+            .padding(MTSpacing.md)
+
+            if showTimes {
+                Divider().padding(.leading, MTSpacing.md)
+                DatePicker("Departed", selection: Binding(
+                    get: { startTime ?? defaultStartTime },
+                    set: { startTime = $0 }
+                ), displayedComponents: .hourAndMinute)
                 .font(.system(size: 15)).padding(MTSpacing.md)
                 .onChange(of: startTime) { _, new in
-                    if endTime <= new { endTime = new.addingTimeInterval(60) }
+                    if let new = new, let end = endTime, end <= new {
+                        endTime = new.addingTimeInterval(60)
+                    }
                 }
-            Divider().padding(.leading, MTSpacing.md)
-            DatePicker("Arrived", selection: $endTime, displayedComponents: .hourAndMinute)
+                Divider().padding(.leading, MTSpacing.md)
+                DatePicker("Arrived", selection: Binding(
+                    get: { endTime ?? defaultEndTime },
+                    set: { endTime = $0 }
+                ), displayedComponents: .hourAndMinute)
                 .font(.system(size: 15)).padding(MTSpacing.md)
+            }
+
             Divider().padding(.leading, MTSpacing.md)
             HStack(alignment: .top) {
                 Label("Notes", systemImage: "note.text")
@@ -259,14 +287,25 @@ struct ManualTripSheet: View {
         saveError = nil
 
         let cal = Calendar.current
-        let startedAt = cal.date(
-            bySettingHour: cal.component(.hour, from: startTime),
-            minute: cal.component(.minute, from: startTime), second: 0, of: tripDate
-        ) ?? tripDate
-        let endedAt = cal.date(
-            bySettingHour: cal.component(.hour, from: endTime),
-            minute: cal.component(.minute, from: endTime), second: 0, of: tripDate
-        ) ?? tripDate
+        let startedAt: Date
+        let endedAt: Date?
+        // If showTimes is off, ignore any stored startTime/endTime values
+        if showTimes, let st = startTime {
+            startedAt = cal.date(
+                bySettingHour: cal.component(.hour, from: st),
+                minute: cal.component(.minute, from: st), second: 0, of: tripDate
+            ) ?? tripDate
+        } else {
+            startedAt = cal.date(bySettingHour: 9, minute: 0, second: 0, of: tripDate) ?? tripDate
+        }
+        if showTimes, let et = endTime {
+            endedAt = cal.date(
+                bySettingHour: cal.component(.hour, from: et),
+                minute: cal.component(.minute, from: et), second: 0, of: tripDate
+            ) ?? tripDate
+        } else {
+            endedAt = nil
+        }
 
         let vehicleId = appState.profileRepo.defaultVehicle?.id ?? ""
 
