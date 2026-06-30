@@ -110,6 +110,8 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		DE6308B82FAB750A0051D2A5 /* MileageTrackerWidget */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = MileageTrackerWidget;
 			sourceTree = "<group>";
 		};
@@ -123,11 +125,15 @@
 		};
 		DEA8834C2F9758D6008FC71A /* MileageTrackeriOSTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = MileageTrackeriOSTests;
 			sourceTree = "<group>";
 		};
 		DEA883562F9758D6008FC71A /* MileageTrackeriOSUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = MileageTrackeriOSUITests;
 			sourceTree = "<group>";
 		};

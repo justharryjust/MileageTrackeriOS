@@ -38,7 +38,7 @@ private struct Harness {
         let config = Realm.Configuration(
             inMemoryIdentifier: UUID().uuidString,
             schemaVersion: RealmProvider.schemaVersion,
-            objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self]
+            objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self, LogbookPeriod.self]
         )
         let realm    = try Realm(configuration: config)
         tripRepo     = TripRepository(realm: realm)
@@ -431,7 +431,7 @@ struct DollarValuePersistenceTests {
         let config = Realm.Configuration(
             inMemoryIdentifier: UUID().uuidString,
             schemaVersion: RealmProvider.schemaVersion,
-            objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self]
+            objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self, LogbookPeriod.self]
         )
         let realm = try Realm(configuration: config)
         let tripRepo = TripRepository(realm: realm)
@@ -1261,7 +1261,7 @@ struct TripRepositoryDeleteTests {
         let config = Realm.Configuration(
             inMemoryIdentifier: UUID().uuidString,
             schemaVersion: RealmProvider.schemaVersion,
-            objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self]
+            objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self, LogbookPeriod.self]
         )
         let realm = try Realm(configuration: config)
         let repo = TripRepository(realm: realm)
@@ -1301,7 +1301,7 @@ struct TripRepositoryDeleteTests {
         let config = Realm.Configuration(
             inMemoryIdentifier: UUID().uuidString,
             schemaVersion: RealmProvider.schemaVersion,
-            objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self]
+            objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self, LogbookPeriod.self]
         )
         let realm = try Realm(configuration: config)
         let repo = TripRepository(realm: realm)
@@ -1468,7 +1468,7 @@ struct ReportExportTests {
             let config = Realm.Configuration(
                 inMemoryIdentifier: UUID().uuidString,
                 schemaVersion: RealmProvider.schemaVersion,
-                objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self]
+                objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self, LogbookPeriod.self]
             )
             realm = try Realm(configuration: config)
             calculator = MileageCalculator()
