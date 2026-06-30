@@ -18,9 +18,7 @@ enum OnboardingStep: Int, CaseIterable {
 
 @Observable
 final class OnboardingViewModel {
-    var regionCode: String = {
-        Locale.current.region?.identifier ?? "NZ"
-    }()
+    var regionCode: String = ""
 
     var jurisdiction: Jurisdiction {
         switch regionCode {
@@ -47,6 +45,8 @@ final class OnboardingViewModel {
     var isVehicleValid: Bool {
         !vehicleRegistration.trimmingCharacters(in: .whitespaces).isEmpty
     }
+
+    var isRegionValid: Bool { !regionCode.isEmpty }
 
     func advance() {
         guard let next = OnboardingStep(rawValue: currentStep.rawValue + 1) else { return }
@@ -116,15 +116,17 @@ struct OnboardingView: View {
 
     private var topBar: some View {
         HStack(spacing: MTSpacing.md) {
-            // Back button — hidden on first step
-            if vm.currentStep != .intro {
+            // Back button — hidden on first step and completion screen. Minimum 44pt tap target (Apple HIG).
+            if vm.currentStep != .intro && vm.currentStep != .welcome {
                 Button { vm.goBack() } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(Color.mtTextSub)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
             } else {
-                Color.clear.frame(width: 24)
+                Color.clear.frame(width: 44)
             }
 
             // Progress dots
@@ -142,9 +144,9 @@ struct OnboardingView: View {
             .frame(maxWidth: .infinity)
 
             // Spacer to balance the back button
-            Color.clear.frame(width: 24)
+            Color.clear.frame(width: 44)
         }
-        .frame(height: 32)
+        .frame(height: 44)
     }
 
     // MARK: - Step Content

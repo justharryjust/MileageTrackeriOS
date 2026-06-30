@@ -34,7 +34,12 @@ Full-screen `Map` with a floating `TripInfoCard` at the bottom.
 
 **Annotations:** green start pin (`location.fill`) + red end pin (`flag.checkered`). End pin hidden when `startLat == endLat && startLng == endLng`.
 
-**Category menu:** Mark as Business / Mark as Personal + path-toggle button.
+**More menu** (ellipsis icon, top-right):
+- Mark as Business / Mark as Personal
+- Divider
+- Show Road Route / Show Actual Path (toggle)
+- Divider
+- Delete Trip (destructive, calls `deleteTrip(_:)` then `dismiss()`)
 
 **TripInfoCard:** route addresses, distance, duration, date, category (colour-coded).
 

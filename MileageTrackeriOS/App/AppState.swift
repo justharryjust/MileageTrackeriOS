@@ -74,7 +74,8 @@ final class AppState {
             profileRepo : profileRepo,
             odometerRepo: odometerRepo,
             savedAddressRepo: savedAddressRepo,
-            scheduleManager: scheduleManager
+            scheduleManager: scheduleManager,
+            mileageCalculator: mileageCalculator
         )
 
         // §1.E: register recovery notification actions so the user can resolve

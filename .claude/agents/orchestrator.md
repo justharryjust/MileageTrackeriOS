@@ -134,17 +134,19 @@ First move the item to In Progress yourself, then spawn:
 Agent(
   description: "Dev: <title>",
   subagent_type: "general-purpose",
+  isolation: "worktree",
   run_in_background: true,
   prompt: "Read .claude/agents/developer-agent.md and follow it exactly.
 
 Ticket: <url>
 
-1. Read the issue and its ACs
-2. Plan approach, create branch feature/<kebab-name>
-3. Implement changes (edit existing files, follow codebase patterns)
-4. Write unit tests for critical paths
-5. Run: xcodebuild -project MileageTrackeriOS.xcodeproj -scheme MileageTrackeriOS -destination 'platform=iOS Simulator,name=iPhone 17' build
-6. Open a PR with description linking the issue
+1. Read README.md for canonical build commands
+2. Read the issue and its ACs
+3. Plan approach, create branch feature/<kebab-name>
+4. Implement changes (edit existing files, follow codebase patterns)
+5. Write unit tests for critical paths
+6. Build using the exact command from README.md
+7. Open a PR with description linking the issue
 7. Move item to In Review:
    gh api graphql -f query='mutation { updateProjectV2ItemFieldValue(input: {projectId: \"PVT_kwHOARlJks4Bbias\", itemId: \"<item-id>\", fieldId: \"PVTSSF_lAHOARlJks4BbiaszhWSQ5s\", value: {singleSelectOptionId: \"0e814af9\"}}) { projectV2Item { id } } }'
 8. Report done. NEVER merge — only QA merges."
@@ -157,19 +159,22 @@ Ticket: <url>
 Agent(
   description: "QA: <PR title>",
   subagent_type: "general-purpose",
+  isolation: "worktree",
   run_in_background: true,
   prompt: "Read .claude/agents/qa-agent.md and follow it exactly.
 
 PR: <pr-url>
 
-1. Fetch PR diff
-2. Read linked issue and its ACs
-3. Code review: bugs, regressions, edge cases, security
-4. Build: xcodebuild ... build
-5. Test: xcodebuild ... test
-6. If Mobile MCP available: boot simulator, install app, verify ACs
-7. PASS → approve PR, squash merge, move to Done (option ID 98236657)
-8. FAIL → REQUEST_CHANGES review with specific feedback, move back to In Progress (option ID 47fc9ee4)
+1. Read README.md for canonical build/test commands
+2. Fetch PR diff
+3. Read linked issue and its ACs
+4. Code review: bugs, regressions, edge cases, security
+5. UX review: consistency, clarity, error states, HIG compliance
+6. Build using the exact command from README.md
+7. Run tests using the exact command from README.md
+8. If Mobile MCP available: boot simulator, install app, verify ACs
+9. PASS → approve PR, squash merge, move to Done (option ID 98236657)
+10. FAIL → REQUEST_CHANGES review with specific feedback, move back to In Progress (option ID 47fc9ee4)
 Only you can merge. Guard this."
 )
 ```

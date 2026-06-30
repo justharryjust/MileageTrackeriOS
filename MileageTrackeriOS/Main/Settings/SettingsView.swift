@@ -150,7 +150,8 @@ struct SettingsView: View {
 
                 Section("Reporting") {
                     NavigationLink {
-                        ReportExportView()
+                        let period = appState.profileRepo.jurisdiction.taxYear.containing(Date())
+                        ReportExportView(startDate: period.start, endDate: period.end)
                             .environment(appState)
                     } label: {
                         Label("Mileage Report", systemImage: "doc.text.fill")
