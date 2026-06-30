@@ -228,7 +228,7 @@ final class TripRepository {
         stops         : [(lat: Double, lng: Double)] = [],
         category      : TripCategory = .business,
         notes         : String? = nil
-    ) {
+    ) -> Trip {
         let trip = Trip()
         trip.vehicleId      = vehicleId
         trip.startedAt      = startedAt
