@@ -688,7 +688,235 @@ struct TaxYearTests {
     }
 }
 
-// MARK: - ═══════════════════════════════════════════════
+
+// MARK:   Suite 12 — DrivingDistanceResult + Haversine
+// MARK: ═══════════════════════════════════════════════════
+
+@Suite("Driving Distance Result")
+struct DrivingDistanceResultTests {
+
+    @Test("Driving case carries expected distance")
+    func drivingResult() {
+        let r = DrivingDistanceResult.driving(distanceMetres: 5_000)
+        guard case .driving(let d) = r else { Issue.record("Expected .driving"); return }
+        #expect(d == 5_000)
+    }
+
+    @Test("Approximate case carries expected distance")
+    func approximateResult() {
+        let r = DrivingDistanceResult.approximate(distanceMetres: 5_000)
+        guard case .approximate(let d) = r else { Issue.record("Expected .approximate"); return }
+        #expect(d == 5_000)
+    }
+
+    @Test("NoRoute case has no associated value")
+    func noRouteResult() {
+        let r = DrivingDistanceResult.noRoute
+        guard case .noRoute = r else { Issue.record("Expected .noRoute"); return }
+    }
+
+    @Test("Haversine distance matches expected value between two known coordinates")
+    func haversineDistance() {
+        let searcher = AddressSearcher()
+        // Auckland CBD to Britomart (~500m)
+        let a = CLLocationCoordinate2D(latitude: -36.8485, longitude: 174.7633)
+        let b = CLLocationCoordinate2D(latitude: -36.8445, longitude: 174.7673)
+        let dist = searcher.haversine(a, b)
+        // Should be roughly 500m
+        #expect(dist > 200)
+        #expect(dist < 800)
+    }
+
+    @Test("Haversine distance is zero for identical coordinates")
+    func haversineIdentical() {
+        let searcher = AddressSearcher()
+        let a = CLLocationCoordinate2D(latitude: -36.8485, longitude: 174.7633)
+        let dist = searcher.haversine(a, a)
+        #expect(dist == 0)
+    }
+
+    @Test("DrivingDistanceResult equatability")
+    func drivingDistanceResultEquatable() {
+        #expect(DrivingDistanceResult.driving(distanceMetres: 100) == .driving(distanceMetres: 100))
+        #expect(DrivingDistanceResult.approximate(distanceMetres: 100) == .approximate(distanceMetres: 100))
+        #expect(DrivingDistanceResult.driving(distanceMetres: 100) != .driving(distanceMetres: 200))
+        #expect(DrivingDistanceResult.driving(distanceMetres: 100) != .approximate(distanceMetres: 100))
+        #expect(DrivingDistanceResult.noRoute == .noRoute)
+    }
+}
+
+// MARK: - ════════════════════════════════════════════════════════
+// MARK:   Suite 13 — Manual Trip Repository Save
+// MARK: ════════════════════════════════════════════════════════
+
+@Suite("Manual Trip Repository Save")
+@MainActor
+struct ManualTripRepoTests {
+
+    private func makeRealm() throws -> Realm {
+
+    }
+
+    @Test("Save with processingStatus = .pending sets status on trip")
+    func saveWithPendingStatus() throws {
+        let realm = try makeRealm()
+        let repo = TripRepository(realm: realm)
+
+        repo.saveManualTrip(
+            vehicleId: "v1",
+            startedAt: Date().addingTimeInterval(-3600),
+            endedAt: Date(),
+            distanceMetres: 10_000,
+            startAddress: "Start", endAddress: "End",
+            startLat: -36.85, startLng: 174.76,
+            endLat: -36.86, endLng: 174.77,
+            processingStatus: .pending
+        )
+
+        let saved = realm.objects(Trip.self).first
+        #expect(saved != nil)
+        #expect(saved?.processingStatus == .pending)
+        #expect(saved?.source == .manual)
+    }
+
+    @Test("Save with default status is .complete")
+    func saveWithDefaultStatus() throws {
+        let realm = try makeRealm()
+        let repo = TripRepository(realm: realm)
+
+        repo.saveManualTrip(
+            vehicleId: "v1",
+            startedAt: Date().addingTimeInterval(-3600),
+            endedAt: Date(),
+            distanceMetres: 10_000,
+            startAddress: "Start", endAddress: "End",
+            startLat: -36.85, startLng: 174.76,
+            endLat: -36.86, endLng: 174.77
+        )
+
+        let saved = realm.objects(Trip.self).first
+        #expect(saved?.processingStatus == .complete)
+    }
+
+    @Test("Save with snappedCoordinates creates TripPoints from snapped coords")
+    func saveWithSnappedCoords() throws {
+        let realm = try makeRealm()
+        let repo = TripRepository(realm: realm)
+
+        let snapped: [CLLocationCoordinate2D] = [
+            CLLocationCoordinate2D(latitude: -36.848, longitude: 174.763),
+            CLLocationCoordinate2D(latitude: -36.846, longitude: 174.765),
+            CLLocationCoordinate2D(latitude: -36.844, longitude: 174.767),
+            CLLocationCoordinate2D(latitude: -36.842, longitude: 174.769),
+        ]
+
+        let trip = repo.saveManualTrip(
+            vehicleId: "v1",
+            startedAt: Date().addingTimeInterval(-3600),
+            endedAt: Date(),
+            distanceMetres: 500,
+            startAddress: "A", endAddress: "B",
+            startLat: -36.848, startLng: 174.763,
+            endLat: -36.842, endLng: 174.769,
+            snappedCoordinates: snapped
+        )
+
+        let pts = repo.tripPoints(for: trip)
+        #expect(pts.count == snapped.count)
+        // Verify points are road-snapped (accuracy = 5)
+        #expect(pts.allSatisfy { $0.horizontalAccuracy == 5 })
+    }
+
+    @Test("Trip returns from saveManualTrip for dollar value computation")
+    func saveManualTripReturnsTrip() throws {
+        let realm = try makeRealm()
+        let repo = TripRepository(realm: realm)
+
+        let trip = repo.saveManualTrip(
+            vehicleId: "v1",
+            startedAt: Date().addingTimeInterval(-3600),
+            endedAt: Date(),
+            distanceMetres: 10_000,
+            startAddress: "Start", endAddress: "End",
+            startLat: -36.85, startLng: 174.76,
+            endLat: -36.86, endLng: 174.77
+        )
+
+        #expect(trip.id.isEmpty == false)
+        #expect(trip.distanceMetres == 10_000)
+    }
+
+    @Test("Cumulative business km is 0 when no prior trips exist")
+    func cumulativeKmEmpty() throws {
+        let realm = try makeRealm()
+        let repo = TripRepository(realm: realm)
+        let trip = Trip()
+        trip.startedAt = Date()
+        #expect(repo.cumulativeBusinessKm(before: trip) == 0)
+    }
+
+    @Test("Cumulative business km sums prior business trips correctly")
+    func cumulativeKmSumsPrior() throws {
+        let realm = try makeRealm()
+        let repo = TripRepository(realm: realm)
+
+        let prior1 = Trip()
+        prior1.startedAt = Date().addingTimeInterval(-3600)
+        prior1.category = .business
+        prior1.distanceMetres = 10_000
+
+        let prior2 = Trip()
+        prior2.startedAt = Date().addingTimeInterval(-1800)
+        prior2.category = .business
+        prior2.distanceMetres = 5_000
+
+        try realm.write {
+            realm.add(prior1)
+            realm.add(prior2)
+        }
+
+        let trip = Trip()
+        trip.startedAt = Date()
+        #expect(repo.cumulativeBusinessKm(before: trip) == 15.0)
+    }
+
+    @Test("Store dollar value persists on trip")
+    func storeDollarValue() throws {
+        let realm = try makeRealm()
+        let repo = TripRepository(realm: realm)
+
+        let trip = repo.saveManualTrip(
+            vehicleId: "v1",
+            startedAt: Date().addingTimeInterval(-3600),
+            endedAt: Date(),
+            distanceMetres: 10_000,
+            startAddress: "Start", endAddress: "End",
+            startLat: -36.85, startLng: 174.76,
+            endLat: -36.86, endLng: 174.77
+        )
+
+        repo.storeDollarValue(42.50, for: trip)
+        #expect(trip.dollarValue == 42.50)
+    }
+
+    @Test("Store distance overwrites distance on trip")
+    func storeDistance() throws {
+        let realm = try makeRealm()
+        let repo = TripRepository(realm: realm)
+
+        let trip = repo.saveManualTrip(
+            vehicleId: "v1",
+            startedAt: Date().addingTimeInterval(-3600),
+            endedAt: Date(),
+            distanceMetres: 10_000,
+            startAddress: "Start", endAddress: "End",
+            startLat: -36.85, startLng: 174.76,
+            endLat: -36.86, endLng: 174.77
+        )
+
+        repo.storeDistance(12_500, for: trip)
+        #expect(trip.distanceMetres == 12_500)
+
 // MARK:   Suite 11 — Onboarding Region Validation
 // MARK: ═══════════════════════════════════════════════
 
@@ -753,6 +981,7 @@ struct OnboardingRegionValidationTests {
 }
 
 // MARK: - ═══════════════════════════════
+
 // MARK:   Suite 12 — Trip Repository Deletion
 // MARK: ═══════════════════════════════
 
@@ -778,12 +1007,6 @@ struct TripRepositoryDeleteTests {
 
     @Test("deleteTrip removes the trip from the repository")
     func deleteTripRemovesTrip() throws {
-        let config = Realm.Configuration(
-            inMemoryIdentifier: UUID().uuidString,
-            schemaVersion: RealmProvider.schemaVersion,
-            objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self]
-        )
-        let realm = try Realm(configuration: config)
         let repo = TripRepository(realm: realm)
 
         let startDate = date(year: 2026, month: 6, day: 15, hour: 9)
@@ -909,6 +1132,7 @@ struct TripRepositoryDeleteTests {
 }
 
 // MARK: - ═══════════════════════════════════════════
+
 // MARK:   Suite 9 — Onboarding Navigation
 // MARK: ═══════════════════════════════════════════
 
@@ -999,5 +1223,5 @@ struct OnboardingNavigationTests {
 
         vm.goBack()
         #expect(vm.currentStep == .jurisdiction)
-    }
+
 }

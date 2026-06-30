@@ -25,6 +25,8 @@ struct ManualTripSheet: View {
     @State private var resolvedDistanceM: Double?
     @State private var isCalculating    = false
     @State private var routeError: String?
+    @State private var routeWarning: String?
+    @State private var hasApproximateDistance = false
 
     // MARK: Search sheet
     @State private var searchTarget: SearchTarget?
@@ -67,6 +69,10 @@ struct ManualTripSheet: View {
                     detailsSection
                     if let err = routeError {
                         Text(err).font(.caption).foregroundStyle(Color.mtRecording)
+                            .padding(.horizontal, MTSpacing.md)
+                    }
+                    if let warn = routeWarning {
+                        Text(warn).font(.caption).foregroundStyle(.orange)
                             .padding(.horizontal, MTSpacing.md)
                     }
                     if let err = saveError {
@@ -242,6 +248,7 @@ struct ManualTripSheet: View {
 
     private func resolve(_ completion: MKLocalSearchCompletion, for target: SearchTarget) async {
         routeError = nil
+        routeWarning = nil
         do {
             let result = try await searcher.resolve(completion)
             switch target {
@@ -263,6 +270,8 @@ struct ManualTripSheet: View {
 
         isCalculating     = true
         routeError        = nil
+        routeWarning      = nil
+        hasApproximateDistance = false
         resolvedDistanceM = nil
 
         // Chain directions through all stops
@@ -271,10 +280,24 @@ struct ManualTripSheet: View {
         let waypoints = stops + [end]
         for wp in waypoints {
             let leg = await searcher.drivingDistance(from: prev, to: wp)
-            if leg == 0 { routeError = "Could not calculate a driving route."; break }
-            total += leg
+            switch leg {
+            case .driving(let d):
+                total += d
+            case .approximate(let d):
+                total += d
+                hasApproximateDistance = true
+            case .noRoute:
+                routeError = "Could not calculate a driving route between stops."
+                isCalculating = false
+                return
+            }
             prev = wp
         }
+
+        if hasApproximateDistance {
+            routeWarning = "Driving route unavailable for some segments — distance is approximate and will be refined later."
+        }
+
         resolvedDistanceM = total > 0 ? total : nil
         isCalculating     = false
     }
@@ -314,7 +337,15 @@ struct ManualTripSheet: View {
             return (stop.coordinate.latitude, stop.coordinate.longitude)
         }
 
-        appState.tripRepo.saveManualTrip(
+        // Attempt to fetch road-snapped coordinates for all legs
+        let snappedCoords = await fetchSnappedRouteCoords()
+
+        // When we couldn't get snapped coordinates and had approximate distance,
+        // mark the trip as pending so background reprocessing retries later.
+        let needsReprocess = snappedCoords == nil && hasApproximateDistance
+        let processingStatus: TripProcessingStatus = needsReprocess ? .pending : .complete
+
+        let trip = appState.tripRepo.saveManualTrip(
             vehicleId: vehicleId, startedAt: startedAt, endedAt: endedAt,
             distanceMetres: dist,
             startAddress: start.fullAddress, endAddress: end.fullAddress,
@@ -322,11 +353,51 @@ struct ManualTripSheet: View {
             endLat: end.coordinate.latitude, endLng: end.coordinate.longitude,
             stops: stopCoords,
             category: .business,
-            notes: notes.isEmpty ? nil : notes
+            notes: notes.isEmpty ? nil : notes,
+            processingStatus: processingStatus,
+            snappedCoordinates: snappedCoords
         )
+
+        // Compute and store dollar value for the manually-saved trip
+        let profile = appState.profileRepo.profile
+        let fuelType = appState.profileRepo.defaultVehicle?.fuelType ?? .petrol
+        let cumulativeKm = appState.tripRepo.cumulativeBusinessKm(before: trip)
+        let value = appState.mileageCalculator.dollarValue(
+            for: trip,
+            profile: profile,
+            fuelType: fuelType,
+            cumulativeKm: cumulativeKm
+        )
+        appState.tripRepo.storeDollarValue(value, for: trip)
 
         isSaving = false
         dismiss()
+    }
+
+    // MARK: - Road-Snapped Route
+
+    /// Fetches road-snapped polyline coordinates for each leg between start, stops, and end.
+    /// Returns a combined array of coordinates through all waypoints, or nil if any leg fails.
+    private func fetchSnappedRouteCoords() async -> [CLLocationCoordinate2D]? {
+        guard let start = startResult, let end = endResult else { return nil }
+
+        let waypoints: [AddressResult] = [start] + stops.filter { !$0.title.isEmpty } + [end]
+        var combined: [CLLocationCoordinate2D] = []
+
+        for i in 0..<(waypoints.count - 1) {
+            guard let legCoords = await searcher.snappedCoordinates(from: waypoints[i], to: waypoints[i + 1]),
+                  !legCoords.isEmpty else {
+                return nil
+            }
+            // Drop duplicate junction point between legs
+            if combined.isEmpty {
+                combined = legCoords
+            } else {
+                combined.append(contentsOf: legCoords.dropFirst())
+            }
+        }
+
+        return combined.isEmpty ? nil : combined
     }
 
     private func formatDistance(_ metres: Double) -> String {
