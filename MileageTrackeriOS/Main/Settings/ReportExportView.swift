@@ -49,14 +49,9 @@ struct ReportExportView: View {
         }
     }
 
-    init() {
-        let cal = Calendar.current
-        let now = Date()
-        // Default to current tax year
-        let taxYear = Jurisdiction.newZealand.taxYear  // overridden in onAppear
-        let ty = taxYear.containing(now)
-        _startDate = State(initialValue: ty.start)
-        _endDate = State(initialValue: ty.end)
+    init(startDate: Date, endDate: Date) {
+        _startDate = State(initialValue: startDate)
+        _endDate = State(initialValue: endDate)
     }
 
     var body: some View {
@@ -164,6 +159,30 @@ struct ReportExportView: View {
                 }
                 .buttonStyle(MTPrimaryButtonStyle())
                 .disabled(filteredTrips.isEmpty)
+
+                Button {
+                    if subscriptionManager.subscriptionState.status.allowsAccess
+                        || subscriptionManager.areAllTripsAccessible(filteredTrips) {
+                        let url = appState.reportGenerator.exportPDF(
+                            trips: filteredTrips,
+                            calculator: appState.mileageCalculator,
+                            profile: profile,
+                            vehicles: vehicles,
+                            dateRange: (startDate, endDate),
+                            baseCumulativeKm: baseCumulativeKm
+                        )
+                        exportURL = url
+                        isExporting = true
+                    } else {
+                        showPaywallForExport = true
+                    }
+                } label: {
+                    Label("Export PDF Logbook", systemImage: "doc.richtext.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(MTPrimaryButtonStyle())
+                .tint(Color.mtGreen)
+                .disabled(filteredTrips.isEmpty)
             }
         }
         .navigationTitle("Mileage Report")
@@ -178,9 +197,6 @@ struct ReportExportView: View {
                 .environment(appState)
         }
         .onAppear {
-            let ty = profile.jurisdiction.taxYear.containing(Date())
-            startDate = ty.start
-            endDate = ty.end
             selectedVehicleId = appState.profileRepo.defaultVehicle?.id ?? ""
         }
     }

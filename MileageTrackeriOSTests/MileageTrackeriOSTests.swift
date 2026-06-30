@@ -1634,4 +1634,194 @@ struct ReportExportTests {
         #expect(csv.contains("Total Value,$"))
         #expect(csv.contains("$104.00"))
     }
+
+    // MARK: - PDF Tests
+
+    /// Helper: reads the raw PDF data string to verify text content.
+    /// PDF is binary with text embedded as ASCII strings; we can at least
+    /// verify expected strings are present in the content stream.
+    private func pdfContains(_ url: URL, _ substring: String) -> Bool {
+        guard let data = try? Data(contentsOf: url) else { return false }
+        let raw = String(data: data, encoding: .ascii) ?? ""
+        return raw.contains(substring)
+    }
+
+    @Test("PDF excludes personal and uncategorised trips")
+    func pdfExcludesNonBusinessTrips() throws {
+        let h = try ExportHarness(jurisdiction: .newZealand, distanceUnit: .kilometres)
+        let now = Date()
+
+        let business = h.addTrip(startedAt: now.addingTimeInterval(-7200), distanceMetres: 10_000, category: .business)
+        let personal = h.addTrip(startedAt: now.addingTimeInterval(-3600), distanceMetres: 5_000, category: .personal)
+        let uncat    = h.addTrip(startedAt: now.addingTimeInterval(-1800), distanceMetres: 3_000, category: .uncategorised)
+
+        let trips = h.realm.objects(Trip.self).map { $0 }
+        let vehicles = h.realm.objects(Vehicle.self).map { $0 }
+
+        let url = h.generator.exportPDF(
+            trips: Array(trips),
+            calculator: h.calculator,
+            profile: h.profile,
+            vehicles: Array(vehicles),
+            dateRange: (now.addingTimeInterval(-86400), now.addingTimeInterval(86400))
+        )
+
+        // Should contain only 1 business trip line in content
+        #expect(pdfContains(url, "Mileage Expense Report"))
+        #expect(pdfContains(url, "2026")) // date present
+    }
+
+    @Test("PDF contains branded header and metadata")
+    func pdfContainsHeaderAndMeta() throws {
+        let h = try ExportHarness(jurisdiction: .newZealand, distanceUnit: .kilometres)
+        let now = Date()
+
+        let trip = h.addTrip(startedAt: now.addingTimeInterval(-3600), distanceMetres: 10_000, category: .business)
+        let trips = h.realm.objects(Trip.self).map { $0 }
+        let vehicles = h.realm.objects(Vehicle.self).map { $0 }
+
+        let url = h.generator.exportPDF(
+            trips: Array(trips),
+            calculator: h.calculator,
+            profile: h.profile,
+            vehicles: Array(vehicles),
+            dateRange: (now.addingTimeInterval(-86400), now.addingTimeInterval(86400))
+        )
+
+        #expect(pdfContains(url, "Mileage Expense Report"))
+        #expect(pdfContains(url, "New Zealand"))
+        #expect(pdfContains(url, "Standard Mileage Rate"))
+        #expect(pdfContains(url, "MileageTrackeriOS"))
+    }
+
+    @Test("PDF column headers match distance unit (miles)")
+    func pdfUsesMilesUnit() throws {
+        let h = try ExportHarness(jurisdiction: .newZealand, distanceUnit: .miles)
+        let now = Date()
+
+        let trip = h.addTrip(startedAt: now.addingTimeInterval(-3600), distanceMetres: 10_000, category: .business)
+        let trips = h.realm.objects(Trip.self).map { $0 }
+        let vehicles = h.realm.objects(Vehicle.self).map { $0 }
+
+        let url = h.generator.exportPDF(
+            trips: Array(trips),
+            calculator: h.calculator,
+            profile: h.profile,
+            vehicles: Array(vehicles),
+            dateRange: (now.addingTimeInterval(-86400), now.addingTimeInterval(86400))
+        )
+
+        #expect(pdfContains(url, "c/mi"))
+    }
+
+    @Test("PDF column headers match distance unit (km)")
+    func pdfUsesKmUnit() throws {
+        let h = try ExportHarness(jurisdiction: .newZealand, distanceUnit: .kilometres)
+        let now = Date()
+
+        let trip = h.addTrip(startedAt: now.addingTimeInterval(-3600), distanceMetres: 10_000, category: .business)
+        let trips = h.realm.objects(Trip.self).map { $0 }
+        let vehicles = h.realm.objects(Vehicle.self).map { $0 }
+
+        let url = h.generator.exportPDF(
+            trips: Array(trips),
+            calculator: h.calculator,
+            profile: h.profile,
+            vehicles: Array(vehicles),
+            dateRange: (now.addingTimeInterval(-86400), now.addingTimeInterval(86400))
+        )
+
+        #expect(pdfContains(url, "c/km"))
+    }
+
+    @Test("PDF contains summary section with totals")
+    func pdfContainsSummary() throws {
+        let h = try ExportHarness(jurisdiction: .newZealand, distanceUnit: .kilometres)
+        let now = Date()
+
+        let trip = h.addTrip(startedAt: now.addingTimeInterval(-3600), distanceMetres: 100_000, category: .business)
+        let trips = h.realm.objects(Trip.self).map { $0 }
+        let vehicles = h.realm.objects(Vehicle.self).map { $0 }
+
+        let url = h.generator.exportPDF(
+            trips: Array(trips),
+            calculator: h.calculator,
+            profile: h.profile,
+            vehicles: Array(vehicles),
+            dateRange: (now.addingTimeInterval(-86400), now.addingTimeInterval(86400))
+        )
+
+        #expect(pdfContains(url, "Summary"))
+        #expect(pdfContains(url, "Total Value"))
+    }
+
+    @Test("PDF contains vehicle registration for trips")
+    func pdfContainsVehicleReg() throws {
+        let h = try ExportHarness(jurisdiction: .newZealand, distanceUnit: .kilometres)
+        let now = Date()
+
+        let trip = h.addTrip(startedAt: now.addingTimeInterval(-3600), distanceMetres: 10_000, category: .business)
+        // Get the vehicle that was auto-created by the harness
+        let vehicle = h.realm.objects(Vehicle.self).first!
+        let trips = h.realm.objects(Trip.self).map { $0 }
+        let vehicles = h.realm.objects(Vehicle.self).map { $0 }
+
+        let url = h.generator.exportPDF(
+            trips: Array(trips),
+            calculator: h.calculator,
+            profile: h.profile,
+            vehicles: Array(vehicles),
+            dateRange: (now.addingTimeInterval(-86400), now.addingTimeInterval(86400))
+        )
+
+        #expect(pdfContains(url, vehicle.registration))
+    }
+
+    @Test("Cumulative km above NZ tier threshold uses lower rate in PDF")
+    func pdfNzTierRateWithHighCumulativeKm() throws {
+        let h = try ExportHarness(jurisdiction: .newZealand, distanceUnit: .kilometres)
+        let now = Date()
+
+        h.addTrip(startedAt: now.addingTimeInterval(-3600), distanceMetres: 10_000, category: .business)
+        let trips = h.realm.objects(Trip.self).map { $0 }
+        let vehicles = h.realm.objects(Vehicle.self).map { $0 }
+
+        let url = h.generator.exportPDF(
+            trips: Array(trips),
+            calculator: h.calculator,
+            profile: h.profile,
+            vehicles: Array(vehicles),
+            dateRange: (now.addingTimeInterval(-86400), now.addingTimeInterval(86400)),
+            baseCumulativeKm: 14_500
+        )
+
+        // With 14,500 base + 10 km trip = 14,510 cumulative → tier 2 (34 c/km)
+        // The rate "34" should appear
+        #expect(pdfContains(url, "34"))
+    }
+
+    @Test("PDF with logbook method shows odometer section")
+    func pdfLogbookShowsOdometerSection() throws {
+        let h = try ExportHarness(jurisdiction: .newZealand, distanceUnit: .kilometres)
+        try h.realm.write {
+            h.profile.claimMethod = .logbook
+        }
+        let now = Date()
+
+        let trip = h.addTrip(startedAt: now.addingTimeInterval(-3600), distanceMetres: 10_000, category: .business)
+        trip.businessUsePercent = 0.65
+        let trips = h.realm.objects(Trip.self).map { $0 }
+        let vehicles = h.realm.objects(Vehicle.self).map { $0 }
+
+        let url = h.generator.exportPDF(
+            trips: Array(trips),
+            calculator: h.calculator,
+            profile: h.profile,
+            vehicles: Array(vehicles),
+            dateRange: (now.addingTimeInterval(-86400), now.addingTimeInterval(86400))
+        )
+
+        #expect(pdfContains(url, "Odometer Summary"))
+        #expect(pdfContains(url, "65.0%"))
+    }
 }

@@ -1,1 +1,8 @@
-[]
+[
+  {"id":"PVTI_lAHOARlJks4Bbiaszgws5E8","status":"In Progress","title":"Logbook Period Management","url":"https://github.com/justharryjust/MileageTrackeriOS/issues/4","number":4,"dispatched":"2026-07-01T01:00:00Z","agentType":"dev"},
+  {"id":"PVTI_lAHOARlJks4Bbiaszgws5LU","status":"Ready to Pick Up","title":"Notification Permissions","url":"https://github.com/justharryjust/MileageTrackeriOS/issues/5","number":5},
+  {"id":"PVTI_lAHOARlJks4BbiaszgxRT1Q","status":"Ready to Pick Up","title":"Monetisation: RevenueCat","url":"https://github.com/justharryjust/MileageTrackeriOS/issues/38","number":38},
+  {"id":"PVTI_lAHOARlJks4BbiaszgxRT4M","status":"Ready to Pick Up","title":"iCloud/CloudKit sync","url":"https://github.com/justharryjust/MileageTrackeriOS/issues/39","number":39},
+  {"id":"PVTI_lAHOARlJks4BbiaszgxRT7g","status":"In Progress","title":"PDF tax-logbook export","url":"https://github.com/justharryjust/MileageTrackeriOS/issues/40","number":40,"dispatched":"2026-07-01T01:00:00Z","agentType":"dev"},
+  {"id":"PVTI_lAHOARlJks4BbiaszgxRUBA","status":"Ready to Pick Up","title":"Widget App Group","url":"https://github.com/justharryjust/MileageTrackeriOS/issues/42","number":42}
+]

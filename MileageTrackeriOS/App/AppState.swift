@@ -79,10 +79,15 @@ final class AppState {
             guard let self, let vehicleId else { return }
             if newMethod == .logbook {
                 if self.logbookPeriodRepo.activePeriod(for: vehicleId) == nil {
-                    self.logbookPeriodRepo.createPeriod(vehicleId: vehicleId, jurisdiction: jurisdiction)
+                    let period = self.logbookPeriodRepo.createPeriod(vehicleId: vehicleId, jurisdiction: jurisdiction)
+                    if let endDate = period.endedAt {
+                        self.notificationManager.scheduleLogbookEndSoonReminder(endDate: endDate, daysRemaining: 7)
+                        self.notificationManager.scheduleLogbookEnded(endDate: endDate)
+                    }
                 }
             } else {
                 self.logbookPeriodRepo.abandonPeriods(for: vehicleId)
+                self.notificationManager.cancelLogbookNotifications()
             }
         }
 

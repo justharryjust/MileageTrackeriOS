@@ -51,7 +51,7 @@ final class RealmProvider {
                 }
                 // v7 -> v8: new SavedAddress collection — no enumerate needed (empty default).
                 // Drives the commute (home↔work) auto-categorisation rule.
-                // v8 -> v9: added MTSubscriptionPeriod table — new table, no migration action needed.
+                // v8 -> v9: new LogbookPeriod model + MTSubscriptionPeriod table — no enumerate needed (empty defaults).
             },
             objectTypes: [
                 UserProfile.self,
