@@ -16,7 +16,6 @@ final class AppState {
     let tripRepo            : TripRepository
     let odometerRepo        : OdometerReadingRepository
     let savedAddressRepo    : SavedAddressRepository
-    let logbookPeriodRepo   : LogbookPeriodRepository
 
     // MARK: - Business Logic
     let mileageCalculator   : MileageCalculator
@@ -37,10 +36,6 @@ final class AppState {
     // MARK: - Schedule Gate
     let scheduleManager     : TrackingScheduleManager
 
-    /// Alert flag: when true, the UI should show a pre-permission dialog
-    /// offering to upgrade from provisional to full notification authorization.
-    var showFullAuthAlert = false
-
     private init() {
         // 1. Open Realm first — everything else reads from it
         realmProvider = RealmProvider.shared
@@ -51,19 +46,6 @@ final class AppState {
         tripRepo         = TripRepository(realm: realm)
         odometerRepo     = OdometerReadingRepository(realm: realm)
         savedAddressRepo = SavedAddressRepository(realm: realm)
-        logbookPeriodRepo = LogbookPeriodRepository(realm: realm)
-
-        // 2a. Wire logbook period lifecycle to claim method changes
-        profileRepo.onClaimMethodChange = { [weak self] newMethod, jurisdiction, vehicleId in
-            guard let self, let vehicleId else { return }
-            if newMethod == .logbook {
-                if self.logbookPeriodRepo.activePeriod(for: vehicleId) == nil {
-                    self.logbookPeriodRepo.createPeriod(vehicleId: vehicleId, jurisdiction: jurisdiction)
-                }
-            } else {
-                self.logbookPeriodRepo.abandonPeriods(for: vehicleId)
-            }
-        }
 
         // 3. Business logic
         mileageCalculator = MileageCalculator()
@@ -110,29 +92,7 @@ final class AppState {
             forName: UIApplication.willEnterForegroundNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            guard let self else { return }
-            self.tripRecorder.reprocessPendingTrips()
-            // Refresh weekly summary with fresh data when app foregrounds
-            self.notificationManager.refreshWeeklySummary(
-                tripRepo: self.tripRepo,
-                mileageCalculator: self.mileageCalculator,
-                profileRepo: self.profileRepo
-            )
-        }
-
-        // Wire trip completion callback for full auth prompt and weekly summary refresh
-        tripRecorder.onTripCompleted = { [weak self] in
-            guard let self else { return }
-            // Check if we should prompt for full notification authorization
-            if NotificationManager.incrementAndCheckFullAuthPrompt() {
-                self.showFullAuthAlert = true
-            }
-            // Refresh weekly summary after each trip save
-            self.notificationManager.refreshWeeklySummary(
-                tripRepo: self.tripRepo,
-                mileageCalculator: self.mileageCalculator,
-                profileRepo: self.profileRepo
-            )
+            self?.tripRecorder.reprocessPendingTrips()
         }
     }
 
@@ -144,9 +104,6 @@ final class AppState {
         locationManager.startSignificantLocationMonitoring()
         locationManager.startVisitMonitoring()
         scheduleManager.startMonitoring()
-        // Request provisional notification permission (silent -- no system prompt).
-        // Safe to call even if already determined; the system ignores repeat requests.
-        notificationManager.requestPermission()
         TripLogger.shared.log("Tracking started -- motion, pedometer, battery, bluetooth, significant-location, visit monitoring, and schedule gate active", category: .system)
     }
 }
