@@ -1450,3 +1450,188 @@ struct OnboardingNavigationTests {
 }
 
 }
+
+// MARK: - ═══════════════════════════════════════════════
+// MARK:   Suite 15 — Report Export
+// MARK: ═══════════════════════════════════════════════
+
+@Suite("Report Export Tests")
+struct ReportExportTests {
+
+    private struct ExportHarness {
+        let realm: Realm
+        let profile: UserProfile
+        let calculator: MileageCalculator
+        let generator: ReportGenerator
+
+        init(jurisdiction: Jurisdiction, distanceUnit: DistanceUnit) throws {
+            let config = Realm.Configuration(
+                inMemoryIdentifier: UUID().uuidString,
+                schemaVersion: RealmProvider.schemaVersion,
+                objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self]
+            )
+            realm = try Realm(configuration: config)
+            calculator = MileageCalculator()
+            generator = ReportGenerator()
+
+            guard let p = realm.object(ofType: UserProfile.self, forPrimaryKey: "singleton") else {
+                Issue.record("No profile singleton"); fatalError()
+            }
+            try realm.write {
+                p.jurisdiction = jurisdiction
+                p.claimMethod = .standardRate
+                p.distanceUnit = distanceUnit
+            }
+            profile = p
+        }
+
+        @discardableResult
+        func addTrip(startedAt: Date, distanceMetres: Double, category: TripCategory) -> Trip {
+            let trip = Trip()
+            trip.startedAt = startedAt
+            trip.distanceMetres = distanceMetres
+            trip.category = category
+            trip.startAddress = "Start"
+            trip.endAddress = "End"
+            try! realm.write { realm.add(trip) }
+            return trip
+        }
+    }
+
+    @Test("CSV excludes personal and uncategorised trips")
+    func csvExcludesNonBusinessTrips() throws {
+        let h = try ExportHarness(jurisdiction: .newZealand, distanceUnit: .kilometres)
+        let now = Date()
+
+        let business = h.addTrip(startedAt: now.addingTimeInterval(-7200), distanceMetres: 10_000, category: .business)
+        let personal = h.addTrip(startedAt: now.addingTimeInterval(-3600), distanceMetres: 5_000, category: .personal)
+        let uncat    = h.addTrip(startedAt: now.addingTimeInterval(-1800), distanceMetres: 3_000, category: .uncategorised)
+
+        let url = h.generator.exportCSV(
+            trips: [business, personal, uncat],
+            calculator: h.calculator,
+            profile: h.profile,
+            dateRange: (now.addingTimeInterval(-86400), now.addingTimeInterval(86400))
+        )
+
+        let csv = try String(contentsOf: url, encoding: .utf8)
+        let lines = csv.components(separatedBy: "\n").filter { !$0.isEmpty }
+        let dataLines = lines.filter { $0.contains(",business,") || $0.contains(",personal,") || $0.contains(",uncategorised,") }
+        #expect(dataLines.count == 1)
+        #expect(dataLines[0].contains(",business,"))
+    }
+
+    @Test("CSV column headers use profile distance unit")
+    func csvUsesProfileDistanceUnit() throws {
+        let h = try ExportHarness(jurisdiction: .newZealand, distanceUnit: .miles)
+        let now = Date()
+
+        let trip = h.addTrip(startedAt: now, distanceMetres: 10_000, category: .business)
+        let url = h.generator.exportCSV(
+            trips: [trip],
+            calculator: h.calculator,
+            profile: h.profile,
+            dateRange: (now.addingTimeInterval(-86400), now.addingTimeInterval(86400))
+        )
+
+        let csv = try String(contentsOf: url, encoding: .utf8)
+        #expect(csv.contains("Distance (mi)"))
+        #expect(csv.contains("Rate (c/mi)"))
+    }
+
+    @Test("CSV with km unit uses km labels")
+    func csvWithKmUnit() throws {
+        let h = try ExportHarness(jurisdiction: .newZealand, distanceUnit: .kilometres)
+        let now = Date()
+
+        let trip = h.addTrip(startedAt: now, distanceMetres: 10_000, category: .business)
+        let url = h.generator.exportCSV(
+            trips: [trip],
+            calculator: h.calculator,
+            profile: h.profile,
+            dateRange: (now.addingTimeInterval(-86400), now.addingTimeInterval(86400))
+        )
+
+        let csv = try String(contentsOf: url, encoding: .utf8)
+        #expect(csv.contains("Distance (km)"))
+        #expect(csv.contains("Rate (c/km)"))
+    }
+
+    @Test("Cumulative km above NZ tier threshold uses lower rate")
+    func nzTierRateWithHighCumulativeKm() throws {
+        let h = try ExportHarness(jurisdiction: .newZealand, distanceUnit: .kilometres)
+        let now = Date()
+
+        let trip = h.addTrip(startedAt: now, distanceMetres: 10_000, category: .business)
+        let url = h.generator.exportCSV(
+            trips: [trip],
+            calculator: h.calculator,
+            profile: h.profile,
+            dateRange: (now.addingTimeInterval(-86400), now.addingTimeInterval(86400)),
+            baseCumulativeKm: 14_500
+        )
+
+        let csv = try String(contentsOf: url, encoding: .utf8)
+        let lines = csv.components(separatedBy: "\n")
+        let dataLine = lines.first { $0.contains(",business,") } ?? ""
+        #expect(dataLine.contains(",34,"))
+    }
+
+    @Test("Cumulative km within NZ tier-1 uses higher rate")
+    func nzTierRateWithinThreshold() throws {
+        let h = try ExportHarness(jurisdiction: .newZealand, distanceUnit: .kilometres)
+        let now = Date()
+
+        let trip = h.addTrip(startedAt: now, distanceMetres: 10_000, category: .business)
+        let url = h.generator.exportCSV(
+            trips: [trip],
+            calculator: h.calculator,
+            profile: h.profile,
+            dateRange: (now.addingTimeInterval(-86400), now.addingTimeInterval(86400)),
+            baseCumulativeKm: 0
+        )
+
+        let csv = try String(contentsOf: url, encoding: .utf8)
+        let lines = csv.components(separatedBy: "\n")
+        let dataLine = lines.first { $0.contains(",business,") } ?? ""
+        #expect(dataLine.contains(",104,"))
+    }
+
+    @Test("Cumulative km with base below threshold stays in tier-1")
+    func nzTierRateWithPartialBase() throws {
+        let h = try ExportHarness(jurisdiction: .newZealand, distanceUnit: .kilometres)
+        let now = Date()
+
+        let trip = h.addTrip(startedAt: now, distanceMetres: 3_000_000, category: .business)
+        let url = h.generator.exportCSV(
+            trips: [trip],
+            calculator: h.calculator,
+            profile: h.profile,
+            dateRange: (now.addingTimeInterval(-86400), now.addingTimeInterval(86400)),
+            baseCumulativeKm: 10_000
+        )
+
+        let csv = try String(contentsOf: url, encoding: .utf8)
+        let lines = csv.components(separatedBy: "\n")
+        let dataLine = lines.first { $0.contains(",business,") } ?? ""
+        #expect(dataLine.contains(",104,"))
+    }
+
+    @Test("Summary total value is computed correctly")
+    func summaryTotalValue() throws {
+        let h = try ExportHarness(jurisdiction: .newZealand, distanceUnit: .kilometres)
+        let now = Date()
+
+        let trip = h.addTrip(startedAt: now.addingTimeInterval(-3600), distanceMetres: 100_000, category: .business)
+        let url = h.generator.exportCSV(
+            trips: [trip],
+            calculator: h.calculator,
+            profile: h.profile,
+            dateRange: (now.addingTimeInterval(-86400), now.addingTimeInterval(86400))
+        )
+
+        let csv = try String(contentsOf: url, encoding: .utf8)
+        #expect(csv.contains("Total Value,$"))
+        #expect(csv.contains("$104.00"))
+    }
+}
