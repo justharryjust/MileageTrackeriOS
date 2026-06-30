@@ -16,7 +16,6 @@ fileprivate struct TripSnapshot {
     let category: TripCategory
     let dollarValue: Double?
     let processingStatus: TripProcessingStatus
-    let source: TripSource
 
     init(from trip: Trip) {
         id = trip.id
@@ -27,8 +26,7 @@ fileprivate struct TripSnapshot {
         startAddress = trip.startAddress; endAddress = trip.endAddress
         category = trip.category
         dollarValue = trip.dollarValue
-        processingStatus = trip.processingStatus
-        source = trip.source
+        processingStatus = .complete// trip.processingStatus
     }
 
     var startCoord: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: startLat, longitude: startLng) }
@@ -56,7 +54,7 @@ struct TripDetailView: View {
 
     @State private var snapshot: TripSnapshot
     @State private var position: MapCameraPosition = .automatic
-    @State private var routes: [MKRoute] = []
+    @State private var route: MKRoute?
     @State private var isFetchingRoute = false
     @State private var showActualPath = true   // toggle between modes
 
@@ -90,8 +88,8 @@ struct TripDetailView: View {
                         .stroke(Color.teal, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
                 }
             } else {
-                ForEach(routes.indices, id: \.self) { idx in
-                    MapPolyline(routes[idx].polyline)
+                if let route {
+                    MapPolyline(route.polyline)
                         .stroke(Color.mtGreen, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
                 }
             }
@@ -144,29 +142,13 @@ struct TripDetailView: View {
                             systemImage: showActualPath ? "road.lanes" : "point.topleft.down.to.point.bottomright.curvepath.fill"
                         )
                     }
-
-                    Divider()
-
-                    Button(role: .destructive) {
-                        guard !trip.isInvalidated else { return }
-                        appState.tripRepo.deleteTrip(trip)
-                        dismiss()
-                    } label: {
-                        Label("Delete Trip", systemImage: "trash")
-                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .fontWeight(.semibold)
                 }
             }
         }
-        .onAppear {
-            position = .automatic
-            // Manual trips default to showing the road route (MKDirections)
-            if snapshot.source == .manual {
-                showActualPath = false
-            }
-        }
+        .onAppear { position = .automatic }
         .task { await fetchRouteIfNeeded() }
     }
 
@@ -181,7 +163,7 @@ struct TripDetailView: View {
             return
         }
 
-        guard routes.isEmpty else { return }   // already fetched
+        guard route == nil else { return }   // already fetched, no need to re-fetch on toggle back
 
         let midLat = (snapshot.startCoord.latitude + snapshot.endCoord.latitude) / 2
         let midLng = (snapshot.startCoord.longitude + snapshot.endCoord.longitude) / 2
@@ -195,33 +177,16 @@ struct TripDetailView: View {
         isFetchingRoute = true
         defer { isFetchingRoute = false }
 
-        // For multi-stop trips, chain MKDirections through intermediate waypoints
-        let waypoints: [CLLocationCoordinate2D] = {
-            let coords = actualCoordinates
-            // Use stored TripPoints as waypoints — for manual trips these include
-            // intermediate stops. For dense auto-trips use start/end only.
-            if coords.count > 2 && snapshot.source == .manual {
-                return coords
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: snapshot.startCoord))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: snapshot.endCoord))
+        request.transportType = .automobile
+
+        if let result = try? await MKDirections(request: request).calculate() {
+            route = result.routes.first
+            if route != nil {
+                position = .automatic
             }
-            return [snapshot.startCoord, snapshot.endCoord]
-        }()
-
-        var fetchedRoutes: [MKRoute] = []
-        for i in 0..<(waypoints.count - 1) {
-            let request = MKDirections.Request()
-            request.source = MKMapItem(placemark: MKPlacemark(coordinate: waypoints[i]))
-            request.destination = MKMapItem(placemark: MKPlacemark(coordinate: waypoints[i + 1]))
-            request.transportType = .automobile
-
-            if let result = try? await MKDirections(request: request).calculate(),
-               let legRoute = result.routes.first {
-                fetchedRoutes.append(legRoute)
-            }
-        }
-
-        routes = fetchedRoutes
-        if !routes.isEmpty {
-            position = .automatic
         }
     }
 }

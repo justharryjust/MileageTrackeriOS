@@ -28,6 +28,14 @@ struct RootView: View {
         @Bindable var repo = appState.profileRepo
         if repo.hasCompletedOnboarding {
             MainTabView()
+                .alert("Get the most out of MileageTracker", isPresented: Bindable(appState).showFullAuthAlert) {
+                    Button("Continue") {
+                        appState.notificationManager.requestFullAuthorization()
+                    }
+                    Button("Not Now", role: .cancel) {}
+                } message: {
+                    Text("Enable banners and sound for trip alerts so you never miss a recording.")
+                }
         } else {
             OnboardingView()
         }

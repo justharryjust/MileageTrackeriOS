@@ -57,15 +57,15 @@ private struct CompactDayRowLive: View {
     }
 
     var body: some View {
-        HStack(spacing: MTSpacing.sm + MTSpacing.xs) {
+        HStack(spacing: MTSpacing.sm) {
             Toggle(isOn: $isEnabled) {
                 Text(day.weekdayName)
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(isEnabled ? Color.mtTextPrimary : Color.mtTextSub)
-                    .fixedSize(horizontal: true, vertical: false)
             }
             .toggleStyle(.switch)
             .tint(Color.mtGreen)
+            .frame(width: 130, alignment: .leading)
             .onChange(of: isEnabled) { _, new in
                 repo.setScheduleEnabled(new, weekday: day.weekday)
             }
@@ -81,7 +81,7 @@ private struct CompactDayRowLive: View {
                 }
 
                 Text("to")
-                    .font(.system(size: 14))
+                    .font(.system(size: 12))
                     .foregroundStyle(Color.mtTextSub)
 
                 Picker("To", selection: $endHour) {
@@ -96,7 +96,7 @@ private struct CompactDayRowLive: View {
                 Spacer()
             }
         }
-        .listRowInsets(EdgeInsets(top: MTSpacing.sm + MTSpacing.xs, leading: MTSpacing.md, bottom: MTSpacing.sm + MTSpacing.xs, trailing: MTSpacing.md))
+        .listRowInsets(EdgeInsets(top: 4, leading: MTSpacing.md, bottom: 4, trailing: MTSpacing.md))
     }
 
     private func hourLabel(_ h: Int) -> String {

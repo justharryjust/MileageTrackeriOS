@@ -8,21 +8,16 @@ final class ReportGenerator {
     // MARK: - CSV Export
 
     /// Generates a CSV report for the given trips within a date range.
-    /// Only business-category trips are included in the claim totals.
     /// Returns a temporary file URL ready for sharing.
     func exportCSV(
         trips: [Trip],
         calculator: MileageCalculator,
         profile: UserProfile,
-        dateRange: (start: Date, end: Date),
-        baseCumulativeKm: Double = 0
+        dateRange: (start: Date, end: Date)
     ) -> URL {
         let sorted = trips
-            .filter { $0.category == .business }
             .filter { $0.startedAt >= dateRange.start && $0.startedAt <= dateRange.end }
             .sorted { $0.startedAt < $1.startedAt }
-
-        let unit = profile.distanceUnit.shortName
 
         var csv = "Mileage Expense Report\n"
         csv += "Jurisdiction: \(profile.jurisdiction.displayName)\n"
@@ -33,7 +28,7 @@ final class ReportGenerator {
         // Column headers
         csv += "Date,Start Address,End Address,Distance (\(unit)),Rate (c/\(unit)),Value ($),Category,Business Use %,Notes\n"
 
-        var cumulativeKm = baseCumulativeKm
+        var cumulativeKm = 0.0
         var totalValue = 0.0
         var totalDistance = 0.0
 
@@ -72,6 +67,11 @@ final class ReportGenerator {
     }
 
     // MARK: - Helpers
+
+    private var unit: String {
+        // Defer to profile — this is a simplification; in production inject the profile.
+        "km"
+    }
 
     private func format(_ date: Date, short: Bool = false) -> String {
         let f = DateFormatter()

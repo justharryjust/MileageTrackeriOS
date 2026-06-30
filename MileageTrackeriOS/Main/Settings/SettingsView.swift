@@ -40,11 +40,16 @@ struct SettingsView: View {
                 }
 
                 Section("Notifications") {
-                    if !appState.notificationManager.isAuthorized {
+                    let status = appState.notificationManager.authorizationStatus
+                    if status == .denied || status == .notDetermined {
                         Button {
-                            appState.notificationManager.requestPermission()
+                            if status == .denied {
+                                appState.notificationManager.openSystemSettings()
+                            } else {
+                                appState.notificationManager.requestPermission()
+                            }
                         } label: {
-                            Label("Enable Notifications", systemImage: "bell.badge")
+                            Label(status == .denied ? "Enable in Settings" : "Enable Notifications", systemImage: "bell.badge")
                         }
                     }
 
@@ -58,7 +63,11 @@ struct SettingsView: View {
 
                     Toggle(isOn: Binding(
                         get: { NotificationManager.odometerReminderEnabled },
-                        set: { NotificationManager.odometerReminderEnabled = $0 }
+                        set: { newValue in
+                            NotificationManager.odometerReminderEnabled = newValue
+                            let vehicleName = appState.profileRepo.defaultVehicle?.name ?? ""
+                            appState.notificationManager.odometerToggleChanged(isEnabled: newValue, vehicleName: vehicleName)
+                        }
                     )) {
                         Label("Odometer Reminder", systemImage: "speedometer")
                     }
@@ -66,7 +75,10 @@ struct SettingsView: View {
 
                     Toggle(isOn: Binding(
                         get: { NotificationManager.weeklySummaryEnabled },
-                        set: { NotificationManager.weeklySummaryEnabled = $0 }
+                        set: { newValue in
+                            NotificationManager.weeklySummaryEnabled = newValue
+                            appState.notificationManager.weeklySummaryToggleChanged(isEnabled: newValue)
+                        }
                     )) {
                         Label("Weekly Summary", systemImage: "chart.bar.fill")
                     }
@@ -74,6 +86,7 @@ struct SettingsView: View {
                 }
 
                 Section("Profile") {
+
                     NavigationLink {
                         ProfileEditView()
                             .environment(appState)
@@ -150,8 +163,7 @@ struct SettingsView: View {
 
                 Section("Reporting") {
                     NavigationLink {
-                        let period = appState.profileRepo.jurisdiction.taxYear.containing(Date())
-                        ReportExportView(startDate: period.start, endDate: period.end)
+                        ReportExportView()
                             .environment(appState)
                     } label: {
                         Label("Mileage Report", systemImage: "doc.text.fill")
