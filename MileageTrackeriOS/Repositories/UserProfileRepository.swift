@@ -143,10 +143,11 @@ final class UserProfileRepository {
         vehicles.first(where: { $0.isDefault }) ?? vehicles.first
     }
 
-    func addVehicle(name: String, registration: String, type: VehicleType = .car, fuelType: FuelType = .petrol) {
+    func addVehicle(name: String, registration: String, type: VehicleType = .car, fuelType: FuelType = .petrol, defaultCategory: TripCategory = .uncategorised) {
         let isFirst = vehicles.isEmpty
         let vehicle = Vehicle(name: name, registration: registration.uppercased(),
-                              type: type, fuelType: fuelType, isDefault: isFirst)
+                              type: type, fuelType: fuelType, isDefault: isFirst,
+                              defaultCategory: defaultCategory)
         write { self.realm.add(vehicle) }
         TripLogger.shared.log("Vehicle added: \(name) [\(registration)]", category: .system)
     }
@@ -189,6 +190,8 @@ final class UserProfileRepository {
     /// default, promotes the next available vehicle by createdAt.
     func deleteVehicle(_ vehicle: Vehicle, tripRepo: TripRepository) {
         let wasDefault = vehicle.isDefault
+        let vehicleName = vehicle.name
+        let vehicleReg = vehicle.registration
         write {
             // Delete all trips for this vehicle (cascade to TripPoints)
             let trips = self.realm.objects(Trip.self).where { $0.vehicleId == vehicle.id }
@@ -205,12 +208,12 @@ final class UserProfileRepository {
             // Delete the vehicle itself
             self.realm.delete(vehicle)
         }
-        TripLogger.shared.log("Vehicle deleted: \(vehicle.name) [\(vehicle.registration)]", category: .system)
+        TripLogger.shared.log("Vehicle deleted: \(vehicleName) [\(vehicleReg)]", category: .system)
 
-        // Promote next available vehicle if this was the default
+        // Promote next available vehicle if this was the default.
+        // Query Realm directly instead of using cached self.vehicles which is stale until the next runloop.
         if wasDefault {
-            let remaining = self.vehicles.first
-            if let next = remaining {
+            if let next = realm.objects(Vehicle.self).where({ !$0.isArchived }).sorted(byKeyPath: "createdAt").first {
                 setDefaultVehicle(next)
             }
         }

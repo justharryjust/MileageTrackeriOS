@@ -47,8 +47,8 @@ struct VehicleManagementView: View {
             }
         }
         .sheet(isPresented: $showingAddSheet) {
-            VehicleFormView(mode: .add) { name, reg, type, fuel, _ in
-                repo.addVehicle(name: name, registration: reg, type: type, fuelType: fuel)
+            VehicleFormView(mode: .add) { name, reg, type, fuel, category in
+                repo.addVehicle(name: name, registration: reg, type: type, fuelType: fuel, defaultCategory: category)
                 showingAddSheet = false
             }
         }
@@ -76,10 +76,6 @@ struct VehicleManagementView: View {
             titleVisibility: .visible
         ) {
             if let vehicle = vehicleToDelete {
-                let count = vehicleTripCounts[vehicle.id] ?? 0
-                if count > 0 {
-                    Text("This will also delete \(count) trip\(count == 1 ? "" : "s") associated with this vehicle.")
-                }
                 Button("Delete", role: .destructive) {
                     confirmDelete(vehicle)
                 }
