@@ -22,7 +22,15 @@
       "Bash(grep -n *)",
       "Read(//Users/harryjust/Development/MileageTracker/MileageTrackeriOS/**)",
       "Bash(git -C /Users/harryjust/Development/MileageTracker/MileageTrackeriOS add MileageTrackeriOS/Managers/TripRecorder.swift)",
-      "Bash(git -C /Users/harryjust/Development/MileageTracker/MileageTrackeriOS commit --no-edit)"
+      "Bash(git -C /Users/harryjust/Development/MileageTracker/MileageTrackeriOS commit --no-edit)",
+      "Bash(AIR=\"127305A2-9DC7-4E77-8F12-E311EB18BAAA\" *)",
+      "Bash(ping -c 4 127.0.0.1)",
+      "Bash(crontab -l)",
+      "Bash(ps -eo pid,etime,command)",
+      "Bash(bash /private/tmp/claude-501/-Users-harryjust-Development-MileageTracker-MileageTrackeriOS/a0ebbbf4-42ba-4389-a53b-176e96a2ab01/scratchpad/create_tickets.sh)",
+      "Bash(awk '{print \"size\",$2,\" used\",$3,\" avail\",$4,\" \\(\"$5\" used\\)\"}')",
+      "Bash(memory_pressure)",
+      "Bash(vm_stat)"
     ]
   },
   "hooks": {
