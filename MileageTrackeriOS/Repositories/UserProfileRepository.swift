@@ -10,16 +10,10 @@ final class UserProfileRepository {
     // MARK: - Observed State (drives SwiftUI)
     private(set) var profile: UserProfile
     private(set) var vehicles: [Vehicle] = []
-    /// All vehicles including archived, for the archived section UI.
-    private(set) var allVehicles: [Vehicle] = []
 
     private let realm: Realm
     private var profileToken: NotificationToken?
     private var vehiclesToken: NotificationToken?
-    private var allVehiclesToken: NotificationToken?
-
-    /// Callback fired when claimMethod changes, so AppState can manage logbook period lifecycle.
-    var onClaimMethodChange: ((ClaimMethod, Jurisdiction, String?) -> Void)?
 
     init(realm: Realm) {
         self.realm = realm
@@ -54,45 +48,23 @@ final class UserProfileRepository {
             self.vehicles = Array(self.realm.objects(Vehicle.self).where { !$0.isArchived }.sorted(byKeyPath: "createdAt"))
         }
         vehicles = Array(vehicleResults)
-
-        // Observe ALL vehicles including archived, for the archived section UI
-        let allVehicleResults = realm.objects(Vehicle.self).sorted(byKeyPath: "createdAt", ascending: true)
-        allVehiclesToken = allVehicleResults.observe { [weak self] _ in
-            guard let self else { return }
-            self.allVehicles = Array(self.realm.objects(Vehicle.self).sorted(byKeyPath: "createdAt"))
-        }
-        allVehicles = Array(allVehicleResults)
     }
 
     deinit {
         profileToken?.invalidate()
         vehiclesToken?.invalidate()
-        allVehiclesToken?.invalidate()
     }
 
     // MARK: - Profile Updates
 
     var jurisdiction: Jurisdiction {
         get { profile.jurisdiction }
-        set {
-            let oldValue = profile.jurisdiction
-            write { self.profile.jurisdiction = newValue }
-            // AC14: jurisdiction change mid-logbook-period should notify the period manager
-            if newValue != oldValue && profile.claimMethod == .logbook {
-                onClaimMethodChange?(.logbook, newValue, defaultVehicle?.id)
-            }
-        }
+        set { write { self.profile.jurisdiction = newValue } }
     }
 
     var claimMethod: ClaimMethod {
         get { profile.claimMethod }
-        set {
-            let oldValue = profile.claimMethod
-            write { self.profile.claimMethod = newValue }
-            if newValue != oldValue {
-                onClaimMethodChange?(newValue, profile.jurisdiction, defaultVehicle?.id)
-            }
-        }
+        set { write { self.profile.claimMethod = newValue } }
     }
 
     var customRatePerKm: Double? {
@@ -143,11 +115,10 @@ final class UserProfileRepository {
         vehicles.first(where: { $0.isDefault }) ?? vehicles.first
     }
 
-    func addVehicle(name: String, registration: String, type: VehicleType = .car, fuelType: FuelType = .petrol, defaultCategory: TripCategory = .uncategorised) {
+    func addVehicle(name: String, registration: String, type: VehicleType = .car, fuelType: FuelType = .petrol) {
         let isFirst = vehicles.isEmpty
         let vehicle = Vehicle(name: name, registration: registration.uppercased(),
-                              type: type, fuelType: fuelType, isDefault: isFirst,
-                              defaultCategory: defaultCategory)
+                              type: type, fuelType: fuelType, isDefault: isFirst)
         write { self.realm.add(vehicle) }
         TripLogger.shared.log("Vehicle added: \(name) [\(registration)]", category: .system)
     }
@@ -183,40 +154,6 @@ final class UserProfileRepository {
     func setVehicleDefaultCategory(_ vehicle: Vehicle, _ category: TripCategory) {
         write { vehicle.defaultCategory = category }
         TripLogger.shared.log("Vehicle \(vehicle.name) default category set to \(category.rawValue)", category: .system)
-    }
-
-    /// Permanently deletes the vehicle and cascades: removes all associated trips
-    /// (with their TripPoints) and odometer readings. If the deleted vehicle was the
-    /// default, promotes the next available vehicle by createdAt.
-    func deleteVehicle(_ vehicle: Vehicle, tripRepo: TripRepository) {
-        let wasDefault = vehicle.isDefault
-        let vehicleName = vehicle.name
-        let vehicleReg = vehicle.registration
-        write {
-            // Delete all trips for this vehicle (cascade to TripPoints)
-            let trips = self.realm.objects(Trip.self).where { $0.vehicleId == vehicle.id }
-            for trip in trips {
-                let pts = self.realm.objects(TripPoint.self).where { $0.tripId == trip.id }
-                self.realm.delete(pts)
-            }
-            self.realm.delete(trips)
-
-            // Delete odometer readings for this vehicle
-            let readings = self.realm.objects(OdometerReading.self).where { $0.vehicleId == vehicle.id }
-            self.realm.delete(readings)
-
-            // Delete the vehicle itself
-            self.realm.delete(vehicle)
-        }
-        TripLogger.shared.log("Vehicle deleted: \(vehicleName) [\(vehicleReg)]", category: .system)
-
-        // Promote next available vehicle if this was the default.
-        // Query Realm directly instead of using cached self.vehicles which is stale until the next runloop.
-        if wasDefault {
-            if let next = realm.objects(Vehicle.self).where({ !$0.isArchived }).sorted(byKeyPath: "createdAt").first {
-                setDefaultVehicle(next)
-            }
-        }
     }
 
 

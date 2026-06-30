@@ -70,7 +70,7 @@ private enum Heuristic {
     static let minTripDuration      : TimeInterval = 60
 
     // Pedometer
-    static let maxStepsDuringPromotion: Int = 40     // "not clearly walking" threshold (main: tightened from 50)
+    static let maxStepsDuringPromotion: Int = 50     // "not clearly walking" threshold
     static let walkingEndStepThreshold: Int = 30     // §6.1: single threshold for walking-end across all paths
 
     // Pause limits (dynamic)
@@ -191,6 +191,9 @@ final class TripRecorder {
     var heuristicMinTripDistance: Double   = Heuristic.minTripDistanceM
     var heuristicMinTripDuration: TimeInterval = Heuristic.minTripDuration
 
+    /// Fired after a trip is successfully saved and committed.
+    var onTripCompleted: (() -> Void)?
+
     private let logger = TripLogger.shared
 
     init() {}
@@ -258,6 +261,28 @@ final class TripRecorder {
         bluetooth.onCarKitDisconnected = { [weak self] event in
             self?.handleCarKitDisconnected(event)
         }
+
+        // Wire schedule gate notifications
+        scheduleManager?.onBecameAllowed = { [weak self] in
+            guard let self, let notificationManager else { return }
+            let now = Date()
+            let cal = Calendar.current
+            let weekday = cal.component(.weekday, from: now)
+            let dayName = Self.dayName(for: weekday)
+            notificationManager.sendTrackingResumedNotification(dayName: dayName)
+        }
+        scheduleManager?.onBecameDisallowed = { [weak self] in
+            guard let self, let notificationManager else { return }
+            let now = Date()
+            let cal = Calendar.current
+            let weekday = cal.component(.weekday, from: now)
+            let dayName = Self.dayName(for: weekday)
+            if let day = profileRepo.schedule(for: weekday) {
+                let timeRange = "\(Self.formatHour(day.startHour))-\(Self.formatHour(day.endHour))"
+                notificationManager.sendScheduleGateBlockedNotification(dayName: dayName, timeRange: timeRange)
+            }
+        }
+
         // §1.D: hydrate persisted learning state from disk
         let snapshot = learnedStore.load()
         knownCarBTUIDs    = snapshot.knownCarBTUIDs
@@ -951,6 +976,8 @@ final class TripRecorder {
                 }
             }
             logger.log("Trip saved ✅ dist:\(Int(distance))m pts:\(filled.count) status:\(status.rawValue)", category: .trip)
+                    let completion = self.onTripCompleted
+            completion?()
         }
     }
 
@@ -1629,7 +1656,6 @@ final class TripRecorder {
 
     /// Re-processes trips that were saved while offline (empty addresses, raw GPS).
     /// Called when the app foregrounds or network connectivity is restored.
-    /// Dispatches manual trips through a dedicated route-snapping path.
     func reprocessPendingTrips() {
         guard let tripRepo else { return }
         let pending = tripRepo.pendingTrips
@@ -1642,11 +1668,6 @@ final class TripRecorder {
             guard let self else { return }
             for trip in pending {
                 guard trip.processingRetries < maxRetries else { continue }
-
-                if trip.source == .manual {
-                    await self.reprocessManualTrip(trip)
-                    continue
-                }
 
                 // Rebuild locations from stored TripPoints
                 let points = tripRepo.tripPoints(for: trip)
@@ -1683,77 +1704,6 @@ final class TripRecorder {
                 }
             }
         }
-    }
-
-    /// Re-processes a pending manual trip by chaining road-snapped routes between
-    /// each consecutive pair of waypoints, then updating the stored TripPoints.
-    private func reprocessManualTrip(_ trip: Trip) async {
-        guard let tripRepo else { return }
-
-        let points = tripRepo.tripPoints(for: trip)
-        let locations = points.map { pt in
-            CLLocation(
-                coordinate: CLLocationCoordinate2D(latitude: pt.latitude, longitude: pt.longitude),
-                altitude: pt.altitude,
-                horizontalAccuracy: pt.horizontalAccuracy,
-                verticalAccuracy: -1,
-                course: -1,
-                speed: pt.speedMs,
-                timestamp: pt.recordedAt
-            )
-        }
-        guard locations.count >= 2 else {
-            tripRepo.bumpTripRetry(trip)
-            return
-        }
-
-        // Re-resolve addresses
-        let startAddr = await self.resolveAddress(for: locations.first) ?? trip.startAddress
-        let endAddr   = await self.resolveAddress(for: locations.last) ?? trip.endAddress
-
-        // Chain snapped routes through each consecutive pair
-        var snappedLocations: [CLLocation] = []
-        var totalDistance: Double = 0
-
-        for i in 0..<(locations.count - 1) {
-            guard let legSnapped = await requestSnappedRoute(from: locations[i], to: locations[i + 1]),
-                  !legSnapped.isEmpty else {
-                tripRepo.bumpTripRetry(trip)
-                logger.log("Manual trip reprocess: leg \(i) failed — retrying later", category: .trip)
-                return
-            }
-            totalDistance += legSnapped.last?.distance(from: legSnapped.first ?? locations[i]) ?? 0
-            if snappedLocations.isEmpty {
-                snappedLocations = legSnapped
-            } else {
-                snappedLocations.append(contentsOf: legSnapped.dropFirst())
-            }
-        }
-
-        guard !snappedLocations.isEmpty else {
-            tripRepo.bumpTripRetry(trip)
-            return
-        }
-
-        // Update the trip with road-snapped data and corrected distance
-        tripRepo.updateTrip(trip, startAddress: startAddr, endAddress: endAddr, locations: snappedLocations)
-        // Override the distance with the true driving distance from route data
-        tripRepo.storeDistance(totalDistance, for: trip)
-
-        // Recalculate dollar value using the corrected road-snapped distance
-        if let profile = profileRepo?.profile {
-            let fuelType = profileRepo?.defaultVehicle?.fuelType ?? .petrol
-            let cumulativeKm = tripRepo.cumulativeBusinessKm(before: trip)
-            let value = mileageCalculator?.dollarValue(
-                for: trip,
-                profile: profile,
-                fuelType: fuelType,
-                cumulativeKm: cumulativeKm
-            ) ?? 0
-            tripRepo.storeDollarValue(value, for: trip)
-        }
-
-        logger.log("Manual trip reprocessed ✅ id:\(trip.id.prefix(8)) dist:\(Int(totalDistance))m pts:\(snappedLocations.count)", category: .trip)
     }
 
     // MARK: - Address Resolution
@@ -1840,5 +1790,26 @@ final class TripRecorder {
             group.cancelAll()
             return first ?? nil
         }
+    }
+
+    // MARK: - Schedule gate notification helpers
+
+    /// English day name for the given Calendar weekday (1=Sunday…7=Saturday).
+    static func dayName(for weekday: Int) -> String {
+        switch weekday {
+        case 1:  return "Sunday"
+        case 2:  return "Monday"
+        case 3:  return "Tuesday"
+        case 4:  return "Wednesday"
+        case 5:  return "Thursday"
+        case 6:  return "Friday"
+        case 7:  return "Saturday"
+        default: return ""
+        }
+    }
+
+    /// Format an hour (0-23) as HH:MM.
+    static func formatHour(_ hour: Int) -> String {
+        String(format: "%02d:00", hour)
     }
 }

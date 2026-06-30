@@ -17,6 +17,7 @@ final class AppState {
     let tripRepo            : TripRepository
     let odometerRepo        : OdometerReadingRepository
     let savedAddressRepo    : SavedAddressRepository
+    let logbookPeriodRepo   : LogbookPeriodRepository
 
     // MARK: - Business Logic
     let mileageCalculator   : MileageCalculator
@@ -50,6 +51,7 @@ final class AppState {
         tripRepo         = TripRepository(realm: realm)
         odometerRepo     = OdometerReadingRepository(realm: realm)
         savedAddressRepo = SavedAddressRepository(realm: realm)
+        logbookPeriodRepo = LogbookPeriodRepository(realm: realm)
 
         // 3. Business logic
         mileageCalculator = MileageCalculator()
@@ -68,6 +70,31 @@ final class AppState {
         // 5. Subscription manager
         subscriptionManager = SubscriptionManager()
         subscriptionManager.configure(profileRepo: profileRepo, realm: realm)
+
+        // 2a. Wire notification manager to logbook period repo
+        logbookPeriodRepo.notificationManager = notificationManager
+
+        // 2b. Wire logbook period lifecycle to claim method changes
+        profileRepo.onClaimMethodChange = { [weak self] newMethod, jurisdiction, vehicleId in
+            guard let self, let vehicleId else { return }
+            if newMethod == .logbook {
+                if self.logbookPeriodRepo.activePeriod(for: vehicleId) == nil {
+                    self.logbookPeriodRepo.createPeriod(vehicleId: vehicleId, jurisdiction: jurisdiction)
+                }
+            } else {
+                self.logbookPeriodRepo.abandonPeriods(for: vehicleId)
+            }
+        }
+
+        // AC14: jurisdiction change mid-logbook-period
+        profileRepo.onJurisdictionChange = { [weak self] newJurisdiction, vehicleId in
+            guard let self, let vehicleId else { return }
+            self.logbookPeriodRepo.abandonPeriods(for: vehicleId)
+            self.logbookPeriodRepo.createPeriod(vehicleId: vehicleId, jurisdiction: newJurisdiction)
+        }
+
+        // AC6: auto-complete expired periods on launch
+        logbookPeriodRepo.autoCompleteExpiredPeriods(jurisdiction: profileRepo.jurisdiction, calculator: mileageCalculator)
 
         // 6. Wire TripRecorder
         tripRecorder.configure(
@@ -104,7 +131,12 @@ final class AppState {
             forName: UIApplication.willEnterForegroundNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            self?.tripRecorder.reprocessPendingTrips()
+            guard let self else { return }
+            self.tripRecorder.reprocessPendingTrips()
+            self.logbookPeriodRepo.autoCompleteExpiredPeriods(
+                jurisdiction: self.profileRepo.jurisdiction,
+                calculator: self.mileageCalculator
+            )
         }
     }
 

@@ -15,9 +15,8 @@ struct ManualTripSheet: View {
     @State private var stops:      [AddressResult] = []
     @State private var endResult:  AddressResult?
     @State private var tripDate:   Date = Date()
-    @State private var startTime:  Date?
-    @State private var endTime:    Date?
-    @State private var showTimes:  Bool = false
+    @State private var startTime:  Date = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? Date()
+    @State private var endTime:    Date = Calendar.current.date(bySettingHour: 9, minute: 30, second: 0, of: Date()) ?? Date()
     @State private var notes:      String = ""
 
     // MARK: Resolution state
@@ -25,8 +24,6 @@ struct ManualTripSheet: View {
     @State private var resolvedDistanceM: Double?
     @State private var isCalculating    = false
     @State private var routeError: String?
-    @State private var routeWarning: String?
-    @State private var hasApproximateDistance = false
 
     // MARK: Search sheet
     @State private var searchTarget: SearchTarget?
@@ -45,14 +42,6 @@ struct ManualTripSheet: View {
     @State private var isSaving  = false
     @State private var saveError: String?
 
-    /// Defaults for time pickers when toggling "Add times" on.
-    private var defaultStartTime: Date {
-        Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: tripDate) ?? tripDate
-    }
-    private var defaultEndTime: Date {
-        defaultStartTime.addingTimeInterval(1800) // 30 min after start
-    }
-
     private var allResolved: Bool {
         startResult != nil && endResult != nil && !stops.contains(where: { $0.title.isEmpty })
     }
@@ -69,10 +58,6 @@ struct ManualTripSheet: View {
                     detailsSection
                     if let err = routeError {
                         Text(err).font(.caption).foregroundStyle(Color.mtRecording)
-                            .padding(.horizontal, MTSpacing.md)
-                    }
-                    if let warn = routeWarning {
-                        Text(warn).font(.caption).foregroundStyle(.orange)
                             .padding(.horizontal, MTSpacing.md)
                     }
                     if let err = saveError {
@@ -186,33 +171,14 @@ struct ManualTripSheet: View {
             DatePicker("Date", selection: $tripDate, displayedComponents: .date)
                 .font(.system(size: 15)).padding(MTSpacing.md)
             Divider().padding(.leading, MTSpacing.md)
-
-            Toggle(isOn: $showTimes) {
-                Label("Add times", systemImage: "clock")
-                    .font(.system(size: 15))
-            }
-            .padding(MTSpacing.md)
-
-            if showTimes {
-                Divider().padding(.leading, MTSpacing.md)
-                DatePicker("Departed", selection: Binding(
-                    get: { startTime ?? defaultStartTime },
-                    set: { startTime = $0 }
-                ), displayedComponents: .hourAndMinute)
+            DatePicker("Departed", selection: $startTime, displayedComponents: .hourAndMinute)
                 .font(.system(size: 15)).padding(MTSpacing.md)
                 .onChange(of: startTime) { _, new in
-                    if let new = new, let end = endTime, end <= new {
-                        endTime = new.addingTimeInterval(60)
-                    }
+                    if endTime <= new { endTime = new.addingTimeInterval(60) }
                 }
-                Divider().padding(.leading, MTSpacing.md)
-                DatePicker("Arrived", selection: Binding(
-                    get: { endTime ?? defaultEndTime },
-                    set: { endTime = $0 }
-                ), displayedComponents: .hourAndMinute)
+            Divider().padding(.leading, MTSpacing.md)
+            DatePicker("Arrived", selection: $endTime, displayedComponents: .hourAndMinute)
                 .font(.system(size: 15)).padding(MTSpacing.md)
-            }
-
             Divider().padding(.leading, MTSpacing.md)
             HStack(alignment: .top) {
                 Label("Notes", systemImage: "note.text")
@@ -248,7 +214,6 @@ struct ManualTripSheet: View {
 
     private func resolve(_ completion: MKLocalSearchCompletion, for target: SearchTarget) async {
         routeError = nil
-        routeWarning = nil
         do {
             let result = try await searcher.resolve(completion)
             switch target {
@@ -270,8 +235,6 @@ struct ManualTripSheet: View {
 
         isCalculating     = true
         routeError        = nil
-        routeWarning      = nil
-        hasApproximateDistance = false
         resolvedDistanceM = nil
 
         // Chain directions through all stops
@@ -280,24 +243,10 @@ struct ManualTripSheet: View {
         let waypoints = stops + [end]
         for wp in waypoints {
             let leg = await searcher.drivingDistance(from: prev, to: wp)
-            switch leg {
-            case .driving(let d):
-                total += d
-            case .approximate(let d):
-                total += d
-                hasApproximateDistance = true
-            case .noRoute:
-                routeError = "Could not calculate a driving route between stops."
-                isCalculating = false
-                return
-            }
+            if leg == 0 { routeError = "Could not calculate a driving route."; break }
+            total += leg
             prev = wp
         }
-
-        if hasApproximateDistance {
-            routeWarning = "Driving route unavailable for some segments — distance is approximate and will be refined later."
-        }
-
         resolvedDistanceM = total > 0 ? total : nil
         isCalculating     = false
     }
@@ -310,25 +259,14 @@ struct ManualTripSheet: View {
         saveError = nil
 
         let cal = Calendar.current
-        let startedAt: Date
-        let endedAt: Date?
-        // If showTimes is off, ignore any stored startTime/endTime values
-        if showTimes, let st = startTime {
-            startedAt = cal.date(
-                bySettingHour: cal.component(.hour, from: st),
-                minute: cal.component(.minute, from: st), second: 0, of: tripDate
-            ) ?? tripDate
-        } else {
-            startedAt = cal.date(bySettingHour: 9, minute: 0, second: 0, of: tripDate) ?? tripDate
-        }
-        if showTimes, let et = endTime {
-            endedAt = cal.date(
-                bySettingHour: cal.component(.hour, from: et),
-                minute: cal.component(.minute, from: et), second: 0, of: tripDate
-            ) ?? tripDate
-        } else {
-            endedAt = nil
-        }
+        let startedAt = cal.date(
+            bySettingHour: cal.component(.hour, from: startTime),
+            minute: cal.component(.minute, from: startTime), second: 0, of: tripDate
+        ) ?? tripDate
+        let endedAt = cal.date(
+            bySettingHour: cal.component(.hour, from: endTime),
+            minute: cal.component(.minute, from: endTime), second: 0, of: tripDate
+        ) ?? tripDate
 
         let vehicleId = appState.profileRepo.defaultVehicle?.id ?? ""
 
@@ -337,13 +275,6 @@ struct ManualTripSheet: View {
             return (stop.coordinate.latitude, stop.coordinate.longitude)
         }
 
-        // Attempt to fetch road-snapped coordinates for all legs
-        let snappedCoords = await fetchSnappedRouteCoords()
-
-        // When we couldn't get snapped coordinates and had approximate distance,
-        // mark the trip as pending so background reprocessing retries later.
-        let needsReprocess = snappedCoords == nil && hasApproximateDistance
-        let processingStatus: TripProcessingStatus = needsReprocess ? .pending : .complete
         let trip = appState.tripRepo.saveManualTrip(
             vehicleId: vehicleId, startedAt: startedAt, endedAt: endedAt,
             distanceMetres: dist,
@@ -352,12 +283,11 @@ struct ManualTripSheet: View {
             endLat: end.coordinate.latitude, endLng: end.coordinate.longitude,
             stops: stopCoords,
             category: .business,
-            notes: notes.isEmpty ? nil : notes,
-            processingStatus: processingStatus,
-            snappedCoordinates: snappedCoords
+            notes: notes.isEmpty ? nil : notes
         )
 
         // Compute and store dollar value for the manually-saved trip
+        // trip is already non-optional — use it directly
         let profile = appState.profileRepo.profile
         let fuelType = appState.profileRepo.defaultVehicle?.fuelType ?? .petrol
         let cumulativeKm = appState.tripRepo.cumulativeBusinessKm(before: trip)
@@ -371,32 +301,6 @@ struct ManualTripSheet: View {
 
         isSaving = false
         dismiss()
-    }
-
-    // MARK: - Road-Snapped Route
-
-    /// Fetches road-snapped polyline coordinates for each leg between start, stops, and end.
-    /// Returns a combined array of coordinates through all waypoints, or nil if any leg fails.
-    private func fetchSnappedRouteCoords() async -> [CLLocationCoordinate2D]? {
-        guard let start = startResult, let end = endResult else { return nil }
-
-        let waypoints: [AddressResult] = [start] + stops.filter { !$0.title.isEmpty } + [end]
-        var combined: [CLLocationCoordinate2D] = []
-
-        for i in 0..<(waypoints.count - 1) {
-            guard let legCoords = await searcher.snappedCoordinates(from: waypoints[i], to: waypoints[i + 1]),
-                  !legCoords.isEmpty else {
-                return nil
-            }
-            // Drop duplicate junction point between legs
-            if combined.isEmpty {
-                combined = legCoords
-            } else {
-                combined.append(contentsOf: legCoords.dropFirst())
-            }
-        }
-
-        return combined.isEmpty ? nil : combined
     }
 
     private func formatDistance(_ metres: Double) -> String {

@@ -62,6 +62,7 @@ final class RealmProvider {
                 TripPoint.self,
                 OdometerReading.self,
                 SavedAddress.self,
+                LogbookPeriod.self,
                 MTSubscriptionPeriod.self,
             ]
         )

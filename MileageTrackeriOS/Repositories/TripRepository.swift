@@ -213,27 +213,21 @@ final class TripRepository {
     /// Persists a trip created by the user without GPS tracking.
     /// Creates TripPoints for start, optional stops, and end so the map renders a polyline.
     /// Returns the saved Trip for further processing (e.g. dollar value computation).
-    /// When `snappedCoordinates` is provided, those road-snapped points replace the raw
-    /// waypoints so the map shows a realistic driving path.
-    /// When `processingStatus` is `.pending`, the trip will be queued for background
-    /// route-snapping retry.
     @discardableResult
     func saveManualTrip(
-        vehicleId          : String,
-        startedAt          : Date,
-        endedAt            : Date?,
-        distanceMetres     : Double,
-        startAddress       : String,
-        endAddress         : String,
-        startLat           : Double,
-        startLng           : Double,
-        endLat             : Double,
-        endLng             : Double,
-        stops              : [(lat: Double, lng: Double)] = [],
-        category           : TripCategory = .business,
-        notes              : String? = nil,
-        processingStatus   : TripProcessingStatus = .complete,
-        snappedCoordinates : [CLLocationCoordinate2D]? = nil
+        vehicleId     : String,
+        startedAt     : Date,
+        endedAt       : Date,
+        distanceMetres: Double,
+        startAddress  : String,
+        endAddress    : String,
+        startLat      : Double,
+        startLng      : Double,
+        endLat        : Double,
+        endLng        : Double,
+        stops         : [(lat: Double, lng: Double)] = [],
+        category      : TripCategory = .business,
+        notes         : String? = nil
     ) -> Trip {
         let trip = Trip()
         trip.vehicleId      = vehicleId
@@ -249,82 +243,33 @@ final class TripRepository {
         trip.category       = category
         trip.source         = .manual
         trip.notes          = notes
-        trip.processingStatus = processingStatus
 
-        if let snapped = snappedCoordinates, !snapped.isEmpty {
-            // Road-snapped points: downsample to 500 and apply interpolated timestamps
-            let snappedEnd = endedAt ?? Date()
-            let snappedLocations = snapped.enumerated().map { (i, coord) in
-                let fraction = Double(i) / Double(max(snapped.count - 1, 1))
-                let ts = startedAt.addingTimeInterval(snappedEnd.timeIntervalSince(startedAt) * fraction)
-                return CLLocation(
-                    coordinate: coord,
-                    altitude: 0,
-                    horizontalAccuracy: 5,
-                    verticalAccuracy: -1,
-                    course: -1,
-                    speed: -1,
-                    timestamp: ts
-                )
-            }
-            let sampled = downsample(snappedLocations, maxPoints: 500)
-            let points: [TripPoint] = sampled.map { loc in
-                TripPoint(tripId: trip.id, latitude: loc.coordinate.latitude,
-                          longitude: loc.coordinate.longitude,
-                          altitude: 0, speedMs: -1, accuracy: 5,
-                          recordedAt: loc.timestamp)
-            }
-            write {
-                realm.add(trip)
-                realm.add(points)
-            }
-            TripLogger.shared.log(
-                "Manual trip saved ✅ id:\(trip.id.prefix(8)) \(startAddress) → \(endAddress) \(String(format:"%.0f",distanceMetres))m snapped pts:\(points.count)",
-                category: .trip
-            )
-        } else {
-            // Raw waypoints (fallback — offline or rate-limited)
-            var points: [TripPoint] = [
-                TripPoint(tripId: trip.id, latitude: startLat, longitude: startLng,
-                          altitude: 0, speedMs: -1, accuracy: -1, recordedAt: startedAt)
-            ]
-            // Intermediate stops — space evenly when endedAt is known, otherwise use 60s gaps
-            if let end = endedAt {
-                let stopInterval = end.timeIntervalSince(startedAt) / Double(stops.count + 1)
-                for (i, stop) in stops.enumerated() {
-                    points.append(TripPoint(
-                        tripId: trip.id, latitude: stop.lat, longitude: stop.lng,
-                        altitude: 0, speedMs: -1, accuracy: -1,
-                        recordedAt: startedAt.addingTimeInterval(stopInterval * Double(i + 1))
-                    ))
-                }
-                points.append(
-                    TripPoint(tripId: trip.id, latitude: endLat, longitude: endLng,
-                              altitude: 0, speedMs: -1, accuracy: -1, recordedAt: end)
-                )
-            } else {
-                let stopInterval: TimeInterval = 60 // 60s between stops when no end time
-                for (i, stop) in stops.enumerated() {
-                    points.append(TripPoint(
-                        tripId: trip.id, latitude: stop.lat, longitude: stop.lng,
-                        altitude: 0, speedMs: -1, accuracy: -1,
-                        recordedAt: startedAt.addingTimeInterval(stopInterval * Double(i + 1))
-                    ))
-                }
-                points.append(
-                    TripPoint(tripId: trip.id, latitude: endLat, longitude: endLng,
-                              altitude: 0, speedMs: -1, accuracy: -1, recordedAt: startedAt)
-                )
-            }
-            write {
-                realm.add(trip)
-                realm.add(points)
-            }
-            TripLogger.shared.log(
-                "Manual trip saved ✅ id:\(trip.id.prefix(8)) \(startAddress) → \(endAddress) \(String(format:"%.0f",distanceMetres))m pts:\(points.count)",
-                category: .trip
-            )
+        var points: [TripPoint] = [
+            TripPoint(tripId: trip.id, latitude: startLat, longitude: startLng,
+                      altitude: 0, speedMs: -1, accuracy: -1, recordedAt: startedAt)
+        ]
+        // Intermediate stops
+        let stopInterval = endedAt.timeIntervalSince(startedAt) / Double(stops.count + 1)
+        for (i, stop) in stops.enumerated() {
+            points.append(TripPoint(
+                tripId: trip.id, latitude: stop.lat, longitude: stop.lng,
+                altitude: 0, speedMs: -1, accuracy: -1,
+                recordedAt: startedAt.addingTimeInterval(stopInterval * Double(i + 1))
+            ))
         }
+        points.append(
+            TripPoint(tripId: trip.id, latitude: endLat, longitude: endLng,
+                      altitude: 0, speedMs: -1, accuracy: -1, recordedAt: endedAt)
+        )
+
+        write {
+            realm.add(trip)
+            realm.add(points)
+        }
+        TripLogger.shared.log(
+            "Manual trip saved ✅ id:\(trip.id.prefix(8)) \(startAddress) → \(endAddress) \(String(format:"%.0f",distanceMetres))m pts:\(points.count)",
+            category: .trip
+        )
         return trip
     }
 
@@ -403,12 +348,6 @@ final class TripRepository {
             .sorted(byKeyPath: "recordedAt"))
     }
 
-    /// Overwrites the stored distance (used during reprocessing when route-snapping
-    /// yields a more accurate driving distance than the saved haversine estimate).
-    func storeDistance(_ metres: Double, for trip: Trip) {
-        write { trip.distanceMetres = metres; trip.updatedAt = Date() }
-    }
-
     // MARK: - Pending Trip Reprocessing
 
     /// Trips saved while offline that still need address resolution / route snapping.
@@ -464,11 +403,6 @@ final class TripRepository {
     }
 
     // MARK: - Trip Merging
-
-    /// Returns all trips for a given vehicleId.
-    func trips(for vehicleId: String) -> [Trip] {
-        Array(realm.objects(Trip.self).where { $0.vehicleId == vehicleId })
-    }
 
     /// Fetches a single trip by primary key.
     func trip(id: String) -> Trip? {

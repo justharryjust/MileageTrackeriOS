@@ -49,9 +49,14 @@ struct ReportExportView: View {
         }
     }
 
-    init(startDate: Date, endDate: Date) {
-        _startDate = State(initialValue: startDate)
-        _endDate = State(initialValue: endDate)
+    init() {
+        let cal = Calendar.current
+        let now = Date()
+        // Default to current tax year
+        let taxYear = Jurisdiction.newZealand.taxYear  // overridden in onAppear
+        let ty = taxYear.containing(now)
+        _startDate = State(initialValue: ty.start)
+        _endDate = State(initialValue: ty.end)
     }
 
     var body: some View {
@@ -173,6 +178,9 @@ struct ReportExportView: View {
                 .environment(appState)
         }
         .onAppear {
+            let ty = profile.jurisdiction.taxYear.containing(Date())
+            startDate = ty.start
+            endDate = ty.end
             selectedVehicleId = appState.profileRepo.defaultVehicle?.id ?? ""
         }
     }

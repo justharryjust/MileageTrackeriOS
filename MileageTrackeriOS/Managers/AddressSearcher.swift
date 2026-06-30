@@ -26,16 +26,6 @@ struct AddressResult: Identifiable, Equatable {
     }
 }
 
-// MARK: - DrivingDistanceResult
-
-/// Distinguishes between a real MKDirections driving distance, a haversine
-/// fallback (rate-limited or offline), and total failure (same coordinate).
-enum DrivingDistanceResult: Equatable {
-    case driving(distanceMetres: Double)
-    case approximate(distanceMetres: Double)
-    case noRoute
-}
-
 // MARK: - AddressSearcher
 
 @Observable
@@ -86,15 +76,8 @@ final class AddressSearcher: NSObject, MKLocalSearchCompleterDelegate {
     // MARK: - Driving distance between two results
 
     /// Returns the driving route distance in metres between two resolved addresses.
-    /// Checks the shared MKDirections rate limiter first. Falls back to straight-line
-    /// haversine when rate-limited, offline, or no route exists.
-    func drivingDistance(from start: AddressResult, to end: AddressResult) async -> DrivingDistanceResult {
-        // Check rate limiter before calling MKDirections
-        guard await MKDirectionsRateLimiter.shared.tryAcquire() else {
-            let d = haversine(start.coordinate, end.coordinate)
-            return d > 0 ? .approximate(distanceMetres: d) : .noRoute
-        }
-
+    /// Falls back to straight-line haversine if routing fails (offline, no route).
+    func drivingDistance(from start: AddressResult, to end: AddressResult) async -> Double {
         let origin      = MKMapItem(placemark: MKPlacemark(coordinate: start.coordinate))
         let destination = MKMapItem(placemark: MKPlacemark(coordinate: end.coordinate))
 
@@ -107,40 +90,10 @@ final class AddressSearcher: NSObject, MKLocalSearchCompleterDelegate {
         do {
             let directions = MKDirections(request: req)
             let response   = try await directions.calculate()
-            if let distance = response.routes.first?.distance {
-                return .driving(distanceMetres: distance)
-            }
+            return response.routes.first?.distance ?? haversine(start.coordinate, end.coordinate)
         } catch {
-            // MKDirections failed — fall through to haversine
-        }
-
-        let d = haversine(start.coordinate, end.coordinate)
-        return d > 0 ? .approximate(distanceMetres: d) : .noRoute
-    }
-
-    // MARK: - Road-snapped polyline coordinates
-
-    /// Fetches the road-snapped polyline coordinates between two addresses.
-    /// Returns nil when rate-limited, offline, or no route is found.
-    /// Coordinates are the full-resolution route polyline — callers should downsample.
-    func snappedCoordinates(from start: AddressResult, to end: AddressResult) async -> [CLLocationCoordinate2D]? {
-        guard await MKDirectionsRateLimiter.shared.tryAcquire() else { return nil }
-
-        let origin      = MKMapItem(placemark: MKPlacemark(coordinate: start.coordinate))
-        let destination = MKMapItem(placemark: MKPlacemark(coordinate: end.coordinate))
-
-        let req = MKDirections.Request()
-        req.source             = origin
-        req.destination        = destination
-        req.transportType      = .automobile
-        req.requestsAlternateRoutes = false
-
-        do {
-            let directions = MKDirections(request: req)
-            let response   = try await directions.calculate()
-            return response.routes.first?.polyline.coordinates
-        } catch {
-            return nil
+            // Offline or no automobile route — fall back to straight-line
+            return haversine(start.coordinate, end.coordinate)
         }
     }
 
@@ -157,10 +110,9 @@ final class AddressSearcher: NSObject, MKLocalSearchCompleterDelegate {
         self.error  = error.localizedDescription
     }
 
-    // MARK: - Haversine (internal for testing)
+    // MARK: - Private: Haversine fallback
 
-    /// Straight-line distance in metres between two coordinates (great-circle).
-    func haversine(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
+    private func haversine(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
         let R   = 6_371_000.0  // Earth radius in metres
         let φ1  = a.latitude  * .pi / 180
         let φ2  = b.latitude  * .pi / 180
