@@ -256,7 +256,7 @@ final class SubscriptionManager {
         do {
             try realm.write(block)
         } catch {
-            logger.log("SubscriptionManager: Realm write error", category: .error")
+            logger.log("SubscriptionManager: Realm write error", category: .error)
         }
     }
 }

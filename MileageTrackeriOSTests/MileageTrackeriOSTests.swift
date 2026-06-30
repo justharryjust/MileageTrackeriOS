@@ -1822,6 +1822,6 @@ struct ReportExportTests {
         )
 
         #expect(pdfContains(url, "Odometer Summary"))
-        #expect(pdfContains(url, "60.0%")) // Should show 65% business use
+        #expect(pdfContains(url, "65.0%"))
     }
 }
