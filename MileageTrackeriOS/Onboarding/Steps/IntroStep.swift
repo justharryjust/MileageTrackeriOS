@@ -34,6 +34,7 @@ struct IntroStep: View {
                     IntroRow(icon: "car.fill", color: .mtGreen, text: "Detects trips automatically")
                     IntroRow(icon: "bolt.shield.fill", color: .blue, text: "Stays private on your device")
                     IntroRow(icon: "battery.75", color: .orange, text: "Battery-friendly background tracking")
+                    IntroRow(icon: "clock.fill", color: .purple, text: "30-day free trial, then from $6.99/mo")
                 }
                 .padding(MTSpacing.lg)
                 .mtCard()
