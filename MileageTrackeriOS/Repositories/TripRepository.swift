@@ -212,6 +212,7 @@ final class TripRepository {
 
     /// Persists a trip created by the user without GPS tracking.
     /// Creates TripPoints for start, optional stops, and end so the map renders a polyline.
+    /// Returns the saved Trip for further processing (e.g. dollar value computation).
     /// When `snappedCoordinates` is provided, those road-snapped points replace the raw
     /// waypoints so the map shows a realistic driving path.
     /// When `processingStatus` is `.pending`, the trip will be queued for background
@@ -327,7 +328,22 @@ final class TripRepository {
         return trip
     }
 
-    // MARK: - Categorise    // MARK: - Categorise
+    // MARK: - Dollar Value
+
+    /// Stores a computed dollar value on a trip (snapshot at time of finalisation).
+    func storeDollarValue(_ value: Double, for trip: Trip) {
+        write { trip.dollarValue = value; trip.updatedAt = Date() }
+    }
+
+    /// Sum of distance (in km) for all business-category trips that started before `trip`.
+    /// Used to determine the correct rate tier for dollar value computation.
+    func cumulativeBusinessKm(before trip: Trip) -> Double {
+        allTrips
+            .filter { $0.category == .business && $0.startedAt < trip.startedAt && $0.id != trip.id }
+            .reduce(0) { $0 + ($1.distanceMetres / 1000) }
+    }
+
+    // MARK: - Categorise
 
     func categorise(_ trip: Trip, as category: TripCategory) {
         write {
@@ -385,21 +401,6 @@ final class TripRepository {
         Array(realm.objects(TripPoint.self)
             .where { $0.tripId == trip.id }
             .sorted(byKeyPath: "recordedAt"))
-    }
-
-    // MARK: - Dollar Value
-
-    /// Sum of distance (in km) for all business-category trips that started before `trip`.
-    /// Used to determine the correct rate tier for dollar value computation.
-    func cumulativeBusinessKm(before trip: Trip) -> Double {
-        allTrips
-            .filter { $0.category == .business && $0.startedAt < trip.startedAt && $0.id != trip.id }
-            .reduce(0) { $0 + ($1.distanceMetres / 1000) }
-    }
-
-    /// Stores a computed dollar value on a trip (snapshot at time of finalisation).
-    func storeDollarValue(_ value: Double, for trip: Trip) {
-        write { trip.dollarValue = value; trip.updatedAt = Date() }
     }
 
     /// Overwrites the stored distance (used during reprocessing when route-snapping

@@ -344,7 +344,6 @@ struct ManualTripSheet: View {
         // mark the trip as pending so background reprocessing retries later.
         let needsReprocess = snappedCoords == nil && hasApproximateDistance
         let processingStatus: TripProcessingStatus = needsReprocess ? .pending : .complete
-
         let trip = appState.tripRepo.saveManualTrip(
             vehicleId: vehicleId, startedAt: startedAt, endedAt: endedAt,
             distanceMetres: dist,

@@ -957,6 +957,8 @@ final class TripRecorder {
     /// Applies the categorisation rules engine (§4.1) and writes a tamper-evident
     /// commit hash (§5.2) to a freshly-saved trip. Also runs the odometer
     /// cross-check (§3.4) and same-day stitching pass (§2.5).
+    /// After categorisation, computes and stores the trip's dollar value as a
+    /// snapshot at the time of finalisation.
     private func applyTripCategorisationAndHash(trip: Trip, vehicleDefault: TripCategory, locations: [CLLocation]) {
         let categoriser = TripCategoriser(
             tripRepo: tripRepo,
@@ -969,6 +971,24 @@ final class TripRecorder {
         }
         tripRepo?.writeCommitHash(for: trip, locations: locations)
         tripRepo?.stitchSameDayFragments(around: trip)
+        // Compute and store dollar value as a snapshot at time of finalisation
+        storeDollarValueOnTrip(trip)
+    }
+
+    /// Computes and stores the dollar value for a trip using current profile settings.
+    /// Shared between the initial save path and the re-processing path so both
+    /// compute dollar values consistently.
+    private func storeDollarValueOnTrip(_ trip: Trip) {
+        guard let profile = profileRepo?.profile else { return }
+        let fuelType = profileRepo?.defaultVehicle?.fuelType ?? .petrol
+        let cumulativeKm = tripRepo?.cumulativeBusinessKm(before: trip) ?? 0
+        let value = mileageCalculator?.dollarValue(
+            for: trip,
+            profile: profile,
+            fuelType: fuelType,
+            cumulativeKm: cumulativeKm
+        ) ?? 0
+        tripRepo?.storeDollarValue(value, for: trip)
     }
 
     // MARK: - Gap Filling (MKDirections road-snapping)
@@ -1654,6 +1674,8 @@ final class TripRecorder {
                 let success = !startAddr.isEmpty && !endAddr.isEmpty && filled.count >= locations.count
                 if success {
                     tripRepo.updateTrip(trip, startAddress: startAddr, endAddress: endAddr, locations: filled)
+                    // Recompute and store dollar value for the re-processed trip
+                    self.storeDollarValueOnTrip(trip)
                     self.logger.log("Reprocessed ✅ trip \(trip.id.prefix(8))…", category: .trip)
                 } else {
                     tripRepo.bumpTripRetry(trip)

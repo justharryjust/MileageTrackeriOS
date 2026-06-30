@@ -34,8 +34,6 @@ final class AppState {
     let tripRecorder        : TripRecorder
 
     // MARK: - Schedule Gate
-    /// Gates new-trip detection by the user's per-day tracking hours.
-    /// In-progress trips are NEVER interrupted by the schedule — only NEW trip starts are blocked.
     let scheduleManager     : TrackingScheduleManager
 
     private init() {
@@ -82,7 +80,7 @@ final class AppState {
         // in-flight trips via lock-screen / banner actions.
         notificationManager.registerRecoveryActions()
 
-        TripLogger.shared.log("AppState initialised — Realm ready", category: .system)
+        TripLogger.shared.log("AppState initialised -- Realm ready", category: .system)
 
         // If onboarding is already complete, start tracking immediately
         if profileRepo.hasCompletedOnboarding {
@@ -106,6 +104,6 @@ final class AppState {
         locationManager.startSignificantLocationMonitoring()
         locationManager.startVisitMonitoring()
         scheduleManager.startMonitoring()
-        TripLogger.shared.log("Tracking started — motion, pedometer, battery, bluetooth, significant-location, visit monitoring, and schedule gate active", category: .system)
+        TripLogger.shared.log("Tracking started -- motion, pedometer, battery, bluetooth, significant-location, visit monitoring, and schedule gate active", category: .system)
     }
 }
