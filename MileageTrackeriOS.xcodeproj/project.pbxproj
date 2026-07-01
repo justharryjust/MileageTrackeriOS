@@ -16,7 +16,6 @@
 		DE6308B72FAB750A0051D2A5 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DE6308B62FAB750A0051D2A5 /* SwiftUI.framework */; };
 		DE6308C62FAB750B0051D2A5 /* MileageTrackerWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DE6308B22FAB750A0051D2A5 /* MileageTrackerWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DEA884C72F9788BF008FC71A /* RealmSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DEA884C62F9788BF008FC71A /* RealmSwift */; };
-		DEA884D02F9788BF008FC71A /* RealmSwift in Embed Frameworks */ = {isa = PBXBuildFile; productRef = DEA884C62F9788BF008FC71A /* RealmSwift */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		DEAB9B602F97B78F00B4A412 /* RealmSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DEA884C62F9788BF008FC71A /* RealmSwift */; };
 /* End PBXBuildFile section */
 
@@ -62,7 +61,6 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				DEA884D02F9788BF008FC71A /* RealmSwift in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -350,7 +348,7 @@
 			mainGroup = DEA883312F9758D3008FC71A;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				DEA884C32F9788BF008FC71A /* XCRemoteSwiftPackageReference "realm-swift" */,
+				DEA884C32F9788BF008FC71A /* XCLocalSwiftPackageReference "RealmBinary" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = DEA8833B2F9758D3008FC71A /* Products */;
@@ -828,21 +826,17 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		DEA884C32F9788BF008FC71A /* XCRemoteSwiftPackageReference "realm-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/realm/realm-swift";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 20.0.0;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		DEA884C32F9788BF008FC71A /* XCLocalSwiftPackageReference "RealmBinary" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = LocalPackages/RealmBinary;
 		};
-/* End XCRemoteSwiftPackageReference section */
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		DEA884C62F9788BF008FC71A /* RealmSwift */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = DEA884C32F9788BF008FC71A /* XCRemoteSwiftPackageReference "realm-swift" */;
+			package = DEA884C32F9788BF008FC71A /* XCLocalSwiftPackageReference "RealmBinary" */;
 			productName = RealmSwift;
 		};
 /* End XCSwiftPackageProductDependency section */
