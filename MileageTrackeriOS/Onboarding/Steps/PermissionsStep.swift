@@ -2,6 +2,7 @@ import SwiftUI
 import CoreLocation
 import CoreMotion
 
+import UserNotifications
 struct PermissionsStep: View {
     @Environment(AppState.self) private var appState
     let vm: OnboardingViewModel
@@ -9,13 +10,14 @@ struct PermissionsStep: View {
     @State private var locationStatus: CLAuthorizationStatus = .notDetermined
     @State private var motionGranted = false
     @State private var locationRequested = false
+    @State private var notificationGranted = false
 
     var body: some View {
         OnboardingStepShell(
             icon: "hand.raised.fill",
             iconColor: .blue,
             title: "Permissions",
-            subtitle: "Two quick permissions so the app can detect your drives automatically."
+            subtitle: "A few permissions so the app can detect your drives and keep you informed."
         ) {
             VStack(spacing: MTSpacing.md) {
                 // Location card
@@ -71,6 +73,25 @@ struct PermissionsStep: View {
                     .clipShape(RoundedRectangle(cornerRadius: MTRadius.sm))
                 }
 
+                // Notification info
+                HStack(alignment: .top, spacing: MTSpacing.sm) {
+                    Image(systemName: notificationGranted ? "checkmark.circle.fill" : "bell.fill")
+                        .foregroundStyle(notificationGranted ? Color.mtGreen : Color.mtTextSub)
+                    Text("Notifications for trip recovery and reminders")
+                        .font(.system(size: 13))
+                        .foregroundStyle(notificationGranted ? Color.mtGreen : Color.mtTextSub)
+                    Spacer()
+                    if notificationGranted {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Color.mtGreen)
+                    }
+                }
+                .padding(.horizontal, MTSpacing.sm + 4)
+                .padding(.vertical, 6)
+                .background(notificationGranted ? Color.mtGreen.opacity(0.08) : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: MTRadius.sm))
+
                 Spacer(minLength: MTSpacing.xl)
 
                 Button("Continue") { vm.advance() }
@@ -86,12 +107,18 @@ struct PermissionsStep: View {
         .onAppear {
             locationStatus = appState.locationManager.authorizationStatus
             motionGranted = appState.motionManager.isAuthorized
+            notificationGranted = appState.notificationManager.isAuthorized
+            // Request provisional notification permission (silent — no system prompt)
+            appState.notificationManager.requestPermission()
         }
         .onChange(of: appState.locationManager.authorizationStatus) { _, new in
             locationStatus = new
         }
         .onChange(of: appState.motionManager.isAuthorized) { _, granted in
             motionGranted = granted
+        }
+        .onChange(of: appState.notificationManager.authorizationStatus) { _, status in
+            notificationGranted = status == .authorized || status == .provisional
         }
     }
 
