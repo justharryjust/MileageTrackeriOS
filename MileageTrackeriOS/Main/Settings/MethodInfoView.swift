@@ -152,9 +152,22 @@ struct MethodInfoView: View {
 
     private var agencyName: String {
         switch jurisdiction {
-        case .newZealand: return "IRD"
-        case .australia:  return "ATO"
-        case .other:      return "HMRC"
+        case .newZealand:   return "IRD"
+        case .australia:    return "ATO"
+        case .unitedStates: return "IRS"
+        case .canada:       return "CRA"
+        case .germany:      return "BMF"
+        case .belgium:      return "SPF/BOSA"
+        case .netherlands:  return "Belastingdienst"
+        case .switzerland:  return "EFD/ESTV"
+        case .austria:      return "BMF"
+        case .sweden:       return "Skatteverket"
+        case .norway:       return "Skatteetaten"
+        case .denmark:      return "Skattestyrelsen"
+        case .finland:      return "Verohallinto"
+        case .spain:        return "Agencia Tributaria"
+        case .southAfrica:  return "SARS"
+        case .other:        return "HMRC"
         }
     }
 
@@ -164,11 +177,39 @@ struct MethodInfoView: View {
             return URL(string: "https://www.ird.govt.nz/income-tax/income-tax-for-businesses-and-organisations/types-of-business-expenses/motor-vehicle-expenses/kilometre-rates")!
         case .australia:
             return URL(string: "https://www.ato.gov.au/individuals-and-families/income-deductions-and-concessions/deductions-you-can-claim/transport-and-travel-expenses/car-expenses/cents-per-kilometre-method")!
+        case .unitedStates:
+            return URL(string: "https://www.irs.gov/tax-professionals/standard-mileage-rates")!
+        case .canada:
+            return URL(string: "https://www.canada.ca/en/department-finance/news/2026/01/government-announces-the-2026-automobile-deduction-limits-and-expense-benefit-rates-for-businesses.html")!
+        case .germany:
+            return URL(string: "https://www.gesetze-im-internet.de/brkg_2005/__5.html")!
+        case .belgium:
+            return URL(string: "https://www.partena-professional.be/fr/nouveau-montant-pour-lindemnite-kilometrique-de-juillet-2026")!
+        case .netherlands:
+            return URL(string: "https://www.belastingdienst.nl/wps/wcm/connect/bldcontentnl/berichten/nieuws/verhoging-onbelaste-kilometervergoeding-hoe-verwerkt-u-dit-in-de-loonaangifte")!
+        case .switzerland:
+            return URL(string: "https://law.ch/lawnews/2026/01/autokilometeransatz-regeln-ab-01-01-2026/")!
+        case .austria:
+            return URL(string: "https://www.bmf.gv.at/themen/steuern/kraftfahrzeuge/kilometergeld.html")!
+        case .sweden:
+            return URL(string: "https://www.skatteverket.se/privat/skatter/beloppochprocent/2026.4.1522bf3f19aea8075ba21.html")!
+        case .norway:
+            return URL(string: "https://www.skatteetaten.no/en/rates/car-allowance-distance-based-allowance/")!
+        case .denmark:
+            return URL(string: "https://sktst.dk/nyheder-og-pressemeddelelser/hoejere-fradrag-til-pendlerne-i-2026")!
+        case .finland:
+            return URL(string: "https://www.vero.fi/en/About-us/newsroom/news/uutiset/2025/tax-exempt-allowances-in-2026-for-business-travel/")!
+        case .spain:
+            return URL(string: "https://sede.agenciatributaria.gob.es")!
+        case .southAfrica:
+            return URL(string: "https://www.sars.gov.za/wp-content/uploads/Docs/PAYE/Tables/tables2026/PAYE-GEN-01-G03-A01-Rate-per-Kilometre-Schedule-External-Annexure.pdf")!
         case .other:
             return URL(string: "https://www.gov.uk/expenses-and-benefits-business-travel-mileage/rules-for-tax")!
         }
     }
 
+    /// Logbook-specific guidance pages weren't researched for the newer jurisdictions (out of scope
+    /// for the rates research pass) — fall back to the same general agency page rather than guess a URL.
     private var agencyLogbookURL: URL {
         switch jurisdiction {
         case .newZealand:
@@ -177,6 +218,8 @@ struct MethodInfoView: View {
             return URL(string: "https://www.ato.gov.au/individuals-and-families/income-deductions-and-concessions/deductions-you-can-claim/transport-and-travel-expenses/car-expenses/logbook-method")!
         case .other:
             return URL(string: "https://www.gov.uk/expenses-and-benefits-business-travel-mileage/rules-for-tax")!
+        default:
+            return agencyURL
         }
     }
 
@@ -186,8 +229,34 @@ struct MethodInfoView: View {
             return "NZ rates have a two-tier structure: a higher rate for the first 14,000 km, and a lower rate beyond that."
         case .australia:
             return "The ATO caps claims at 5,000 business kilometres per year."
+        case .unitedStates:
+            return "The IRS rate is flat — 72.5¢/mile for 2026, with no distance tiers or annual cap."
+        case .canada:
+            return "CRA rates are tiered: a higher rate for the first 5,000 km, then a lower rate beyond that."
+        case .germany:
+            return "The BRKG rate is flat — €0.30/km for cars, with no distance tiers or annual cap."
+        case .belgium:
+            return "Belgium's rate is flat but revised frequently — the figure shown is the most recently published one."
+        case .netherlands:
+            return "The Belastingdienst rate is flat — €0.25/km, with no distance tiers or annual cap."
+        case .switzerland:
+            return "The federal rate is flat — CHF 0.75/km, with no distance tiers or annual cap."
+        case .austria:
+            return "Austria's rate is flat but capped at 30,000 km per year."
+        case .sweden:
+            return "Skatteverket's rate is flat — 2.50 SEK/km for your own car, with no distance tiers or annual cap."
+        case .norway:
+            return "Skatteetaten's rate is flat — 3.50 NOK/km, with no distance tiers or annual cap."
+        case .denmark:
+            return "Danish rates are tiered: a higher rate for the first 20,000 km, then a lower rate beyond that."
+        case .finland:
+            return "Verohallinto's rate is flat — €0.55/km, with no distance tiers or annual cap."
+        case .spain:
+            return "The Spanish rate is flat — €0.26/km, with no distance tiers or annual cap."
+        case .southAfrica:
+            return "This uses SARS's simplified flat rate (495 c/km) — only valid if you receive no other travel allowance besides tolls/parking."
         case .other:
-            return "UK rates are 45p/mi for the first 10,000 miles, then 25p/mi beyond that."
+            return "UK rates are 55p/mi for the first 10,000 miles, then 25p/mi beyond that."
         }
     }
 }
