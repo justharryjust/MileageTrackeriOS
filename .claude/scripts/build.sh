@@ -7,10 +7,14 @@
 #
 # This wrapper fixes that:
 #   1. SHARED SwiftPM cache  — Realm is downloaded once for all worktrees.
-#   2. PREWARMED template DD — Realm is COMPILED once into a template, then each
-#      worktree's DerivedData is seeded by an APFS copy-on-write clone (instant,
-#      ~0 extra disk until it diverges; app target still builds in isolation so
-#      no cross-worktree product collisions).
+#   2. PREWARMED template DD — 'prewarm' compiles Realm into a template ONCE; each
+#      worktree's DerivedData is seeded by an APFS copy-on-write clone of it, which
+#      preserves most Realm objects + the module cache. A fresh worktree builds
+#      ~4x faster (~2.5 min vs ~10 min cold), then later builds in it are fully
+#      incremental (~30s). NOTE: a fresh worktree still PARTIALLY recompiles Realm
+#      (build records are path-specific); for zero Realm recompiles, move the
+#      project to Realm's prebuilt XCFramework. App target builds in isolation so
+#      there are no cross-worktree product collisions.
 #   3. BUILD SEMAPHORE       — at most MT_MAX_BUILDS (default 2) xcodebuilds run
 #      at once; the rest queue. This is the anti-thrash control.
 #   4. Uses 'generic/platform=iOS Simulator' for builds, so the missing

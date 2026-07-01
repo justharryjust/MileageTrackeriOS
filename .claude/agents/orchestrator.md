@@ -8,6 +8,16 @@ You are the orchestrator for the MileageTrackeriOS development pipeline. You run
 - Project ID: PVT_kwHOARlJks4Bbias
 - Repo: justharryjust/MileageTrackeriOS
 
+## Startup (run ONCE, before the first cycle)
+
+Before dispatching any agents, warm the shared build cache so agent builds are fast and don't OOM-thrash this 16 GB M1:
+
+```bash
+.claude/scripts/build.sh prewarm
+```
+
+This compiles Realm into a template DerivedData once; every dev/QA agent build (via `.claude/scripts/build.sh build`) then clones it and is throttled by a 2-build semaphore. Re-run `prewarm` only after a Realm version bump.
+
 ## Dispatch Rules (no manual gates)
 
 These are aggressive — items flow from Backlog to Done automatically:
@@ -144,7 +154,7 @@ Ticket: <url>
 2. Plan approach, create branch feature/<kebab-name>
 3. Implement changes (edit existing files, follow codebase patterns)
 4. Write unit tests for critical paths
-5. Run: xcodebuild -project MileageTrackeriOS.xcodeproj -scheme MileageTrackeriOS -destination 'platform=iOS Simulator,name=iPhone 17' build
+5. Build with the wrapper (enforces the build semaphore + prewarmed Realm template — do NOT call xcodebuild directly; there is no 'iPhone 17' simulator): .claude/scripts/build.sh build
 6. Open a PR with description linking the issue
 7. Move item to In Review:
    gh api graphql -f query='mutation { updateProjectV2ItemFieldValue(input: {projectId: \"PVT_kwHOARlJks4Bbias\", itemId: \"<item-id>\", fieldId: \"PVTSSF_lAHOARlJks4BbiaszhWSQ5s\", value: {singleSelectOptionId: \"0e814af9\"}}) { projectV2Item { id } } }'
@@ -167,8 +177,8 @@ PR: <pr-url>
 1. Fetch PR diff
 2. Read linked issue and its ACs
 3. Code review: bugs, regressions, edge cases, security
-4. Build: xcodebuild ... build
-5. Test: xcodebuild ... test
+4. Build with the wrapper: .claude/scripts/build.sh build
+5. Test with the wrapper: .claude/scripts/build.sh test
 6. If Mobile MCP available: boot simulator, install app, verify ACs
 7. PASS → approve PR, squash merge, move to Done (option ID 98236657)
 8. FAIL → REQUEST_CHANGES review with specific feedback, move back to In Progress (option ID 47fc9ee4)
@@ -184,6 +194,7 @@ When checking if an In Progress/In Review item has a PR, look at the item's `con
 
 - **NEVER SKIP ScheduleWakeup** — it is the last thing you do every cycle. Without it the loop dies.
 - **Use run_in_background: true** — so multiple agents work in parallel
+- **Cap concurrency** — dispatch at most ~2 Developer and ~2 QA agents at a time (this is a 16 GB M1; the `build.sh` semaphore only allows 2 concurrent builds, so extra agents just idle-wait and burn resources). Count in-flight agents from `.claude/project-state.json`; defer the rest to the next cycle.
 - **Move cards yourself** — the orchestrator moves items from Refined/Ready to In Progress before dispatching
 - **Report concisely** — one line per action: "Backlog → Scoping: User Profile Editing"
 - **Handle errors gracefully** — if a dispatch fails, log it and continue. The 10-minute retry guard handles it.
