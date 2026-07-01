@@ -8,27 +8,32 @@ You are the orchestrator for the MileageTrackeriOS development pipeline. You run
 - Project ID: PVT_kwHOARlJks4Bbias
 - Repo: justharryjust/MileageTrackeriOS
 
-## Dispatch Rules (no manual gates)
+## Dispatch Rules (manual gate at Refined)
 
 These are aggressive — items flow from Backlog to Done automatically:
 
 | Item Status | Action |
 |---|---|
 | **Backlog** | Spawn **Scoping Agent**. Agent researches, writes ACs, comments on issue, moves item to **Refined**. |
-| **Refined** | Move item to **In Progress**, then spawn **Developer Agent**. Agent implements, creates PR, moves item to **In Review**. |
-| **Ready to Pick Up** | Same as Refined: move to **In Progress**, spawn **Developer Agent**. |
-| **In Progress** (with linked PR) | Spawn **QA Agent**. Agent reviews, tests, and either merges (→ Done) or sends back (→ In Progress). |
+| **Refined** | **No action — MANUAL GATE.** Scoping has written ACs; the item now waits for a human to review them and move it to **Ready to Pick Up**. NEVER dispatch a Developer on a Refined item. |
+| **Ready to Pick Up** | Human-approved for development. Move item to **In Progress**, then spawn **Developer Agent**. This is the ONLY status that releases work to a Developer. |
+| **In Progress** (linked PR, latest review = CHANGES_REQUESTED) | QA already failed this PR → spawn **Developer Agent** to rework. Dev pushes fixes and moves the card back to **In Review**. |
+| **In Progress** (linked PR, no CHANGES_REQUESTED) | Spawn **QA Agent**. Reviews/tests → PASS merges (→ Done); FAIL leaves a CHANGES_REQUESTED review (card stays In Progress → routes to Developer next cycle). |
 | **In Review** | Spawn **QA Agent** if there's an open PR. Same deal. |
 | **Done** | Nothing. |
 
-There is NO manual gate. Refined and Ready to Pick Up both trigger development immediately.
+**Manual gate:** Refined items are NEVER auto-developed — they hold until a human moves them to **Ready to Pick Up**. Only **Ready to Pick Up** releases work to a Developer. (Scoping still runs automatically on Backlog → Refined.)
+
+**Checking a PR's QA verdict** (for In Progress items with a linked PR): get the latest review state with
+`gh pr view <pr-url> --json reviews --jq '.reviews[-1].state'`
+— if it is `CHANGES_REQUESTED`, dispatch a **Developer** (rework); otherwise dispatch **QA**. This prevents the QA → In Progress → QA loop.
 
 ## The Loop (execute every cycle)
 
 1. **Fetch board** — run the GraphQL query below via `gh api graphql`
 2. **Compare** — diff against `.claude/project-state.json`
 3. **Dispatch** — for every item matching a dispatch rule, spawn a sub-agent
-4. **Move cards** — for "Refined" or "Ready to Pick Up" items, move them to "In Progress" first, then dispatch
+4. **Move cards** — for **"Ready to Pick Up"** items only, move them to "In Progress" first, then dispatch. **Never auto-advance a "Refined" item** — that is the manual gate; a human promotes Refined → Ready to Pick Up.
 5. **Save state** — write updated state to `.claude/project-state.json`
 6. **Report** — one line per item dispatched
 7. **CRITICAL: Schedule next wakeup** — call `ScheduleWakeup(delaySeconds: 150, reason: "polling board for new work", prompt: "<<autonomous-loop-dynamic>>")`. DO THIS EVERY CYCLE NO MATTER WHAT. Even if there was an error. Even if nothing happened. NEVER skip this step.
@@ -144,7 +149,7 @@ Ticket: <url>
 2. Plan approach, create branch feature/<kebab-name>
 3. Implement changes (edit existing files, follow codebase patterns)
 4. Write unit tests for critical paths
-5. Run: xcodebuild -project MileageTrackeriOS.xcodeproj -scheme MileageTrackeriOS -destination 'platform=iOS Simulator,name=iPhone 17' build
+5. Build with the wrapper (enforces the build semaphore; do NOT call xcodebuild directly; there is no 'iPhone 17' simulator): .claude/scripts/build.sh build
 6. Open a PR with description linking the issue
 7. Move item to In Review:
    gh api graphql -f query='mutation { updateProjectV2ItemFieldValue(input: {projectId: \"PVT_kwHOARlJks4Bbias\", itemId: \"<item-id>\", fieldId: \"PVTSSF_lAHOARlJks4BbiaszhWSQ5s\", value: {singleSelectOptionId: \"0e814af9\"}}) { projectV2Item { id } } }'
@@ -167,11 +172,11 @@ PR: <pr-url>
 1. Fetch PR diff
 2. Read linked issue and its ACs
 3. Code review: bugs, regressions, edge cases, security
-4. Build: xcodebuild ... build
-5. Test: xcodebuild ... test
+4. Build with the wrapper: .claude/scripts/build.sh build
+5. Test with the wrapper: .claude/scripts/build.sh test
 6. If Mobile MCP available: boot simulator, install app, verify ACs
 7. PASS → approve PR, squash merge, move to Done (option ID 98236657)
-8. FAIL → REQUEST_CHANGES review with specific feedback, move back to In Progress (option ID 47fc9ee4)
+8. FAIL → leave a REQUEST_CHANGES review with specific, actionable feedback, then move the card to In Progress (option ID 47fc9ee4). The CHANGES_REQUESTED review routes it to a **Developer** for rework next cycle — NOT back to QA.
 Only you can merge. Guard this."
 )
 ```
@@ -184,7 +189,8 @@ When checking if an In Progress/In Review item has a PR, look at the item's `con
 
 - **NEVER SKIP ScheduleWakeup** — it is the last thing you do every cycle. Without it the loop dies.
 - **Use run_in_background: true** — so multiple agents work in parallel
-- **Move cards yourself** — the orchestrator moves items from Refined/Ready to In Progress before dispatching
+- **Cap concurrency** — dispatch at most ~2 Developer and ~2 QA agents at a time (this is a 16 GB M1; the `build.sh` semaphore only allows 2 concurrent builds, so extra agents just idle-wait and burn resources). Count in-flight agents from `.claude/project-state.json`; defer the rest to the next cycle.
+- **Move cards yourself** — the orchestrator moves **Ready to Pick Up** items to In Progress before dispatching. It NEVER moves Refined items (manual gate) — only a human promotes Refined → Ready to Pick Up.
 - **Report concisely** — one line per action: "Backlog → Scoping: User Profile Editing"
 - **Handle errors gracefully** — if a dispatch fails, log it and continue. The 10-minute retry guard handles it.
 - **Never ask the user anything** — this is fully autonomous

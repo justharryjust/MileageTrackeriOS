@@ -1,28 +1,22 @@
 #!/bin/bash
-# build.sh — fast, conflict-safe builds for parallel dev/QA agents.
+# build.sh — conflict-safe parallel builds for dev/QA agents.
 #
-# Why this exists (Apple M1 / 16 GB): a fresh per-worktree build recompiles
-# Realm-core from source (~10 min, multi-GB RAM spike). Run a few of those at
-# once and the machine OOM-thrashes and xcodebuild dies "BUILD INTERRUPTED".
-#
-# This wrapper fixes that:
-#   1. SHARED SwiftPM cache  — Realm is downloaded once for all worktrees.
-#   2. PREWARMED template DD — Realm is COMPILED once into a template, then each
-#      worktree's DerivedData is seeded by an APFS copy-on-write clone (instant,
-#      ~0 extra disk until it diverges; app target still builds in isolation so
-#      no cross-worktree product collisions).
-#   3. BUILD SEMAPHORE       — at most MT_MAX_BUILDS (default 2) xcodebuilds run
-#      at once; the rest queue. This is the anti-thrash control.
-#   4. Uses 'generic/platform=iOS Simulator' for builds, so the missing
-#      'iPhone 17' simulator no longer breaks every build.
+# Realm ships as a prebuilt binary (LocalPackages/RealmBinary), so builds no
+# longer compile realm-core from source. This wrapper still does two useful things
+# on this Apple M1 / 16 GB machine:
+#   1. BUILD SEMAPHORE — at most MT_MAX_BUILDS (default 2) xcodebuilds run at once;
+#      the rest queue. Stops parallel app-builds + simulators from OOM-thrashing.
+#   2. SHARED SwiftPM cache — the Realm binary (and any package) is downloaded once
+#      into a shared cache and reused by every worktree, not re-fetched per build.
+#   Builds use 'generic/platform=iOS Simulator' so a specific device name is never
+#   required (there is no 'iPhone 17' simulator).
 #
 # Usage:
-#   build.sh prewarm     # one-time (or after Realm version bump): compile the template
-#   build.sh build       # build this worktree's app (CoW-seeded + semaphored)
-#   build.sh test        # build + run unit tests on an available simulator
-#   build.sh status      # show cache + semaphore state
-#   build.sh clean       # prune per-worktree DerivedData + stale locks
-#   build.sh selftest [secs]   # exercise the semaphore without building
+#   build.sh build           # build the app
+#   build.sh test            # build + run unit tests on an available simulator
+#   build.sh status          # show cache + semaphore state
+#   build.sh clean           # prune per-worktree DerivedData + stale locks
+#   build.sh selftest [secs] # exercise the semaphore without building
 #
 # Env: MT_MAX_BUILDS (default 2), MT_SCHEME, MT_PROJECT, MT_SIM
 
@@ -36,7 +30,6 @@ STALE_MIN=45   # a held build slot older than this is considered stale and steal
 # Shared cache lives outside the repo so the orchestrator's branch-churn can't disturb it.
 BASE="$HOME/Library/Caches/MileageTrackerBuild"
 SPM_CACHE="$BASE/spm"
-TEMPLATE_DD="$BASE/template-dd"
 SEM_DIR="$BASE/sem"
 mkdir -p "$SPM_CACHE" "$SEM_DIR" "$BASE/dd"
 
@@ -68,45 +61,19 @@ acquire(){
 }
 release(){ [ -n "$SLOT" ] && rm -rf "$SLOT" 2>/dev/null; SLOT=""; }
 
-resolve_pkgs(){
-  log "resolving SwiftPM packages into shared cache…"
-  xcodebuild -project "$PROJECT" -scheme "$SCHEME" \
-    -clonedSourcePackagesDirPath "$SPM_CACHE" \
-    -resolvePackageDependencies >/dev/null 2>&1 || true
-}
-
-cmd_prewarm(){
-  resolve_pkgs
-  log "compiling Realm + app into TEMPLATE DerivedData (one-time, slow)…"
-  rm -rf "$TEMPLATE_DD"
+# Run xcodebuild under the semaphore, with the shared SwiftPM cache + this
+# worktree's own isolated (persistent, incremental) DerivedData.
+xcb(){
   acquire
   xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Debug \
-    -destination 'generic/platform=iOS Simulator' \
     -clonedSourcePackagesDirPath "$SPM_CACHE" \
-    -derivedDataPath "$TEMPLATE_DD" \
-    build || { log "prewarm FAILED"; exit 1; }
-  log "template ready: $TEMPLATE_DD"
-}
-
-seed_dd(){
-  [ -d "$WT_DD" ] && return
-  if [ -d "$TEMPLATE_DD" ]; then
-    log "seeding '$WT_NAME' DerivedData from template (APFS clone)…"
-    cp -c -R "$TEMPLATE_DD" "$WT_DD" 2>/dev/null || cp -R "$TEMPLATE_DD" "$WT_DD"
-  else
-    log "no template yet — first build will be slow. Run 'build.sh prewarm' once."
-    mkdir -p "$WT_DD"
-  fi
+    -derivedDataPath "$WT_DD" \
+    "$@"
 }
 
 cmd_build(){
-  seed_dd; acquire
   log "building $SCHEME (worktree: $WT_NAME)…"
-  xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Debug \
-    -destination 'generic/platform=iOS Simulator' \
-    -clonedSourcePackagesDirPath "$SPM_CACHE" \
-    -derivedDataPath "$WT_DD" \
-    build
+  xcb -destination 'generic/platform=iOS Simulator' build
 }
 
 pick_sim(){
@@ -119,18 +86,12 @@ pick_sim(){
 }
 
 cmd_test(){
-  seed_dd; acquire
   local sim; sim="$(pick_sim)"; log "testing on simulator: $sim"
-  xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Debug \
-    -destination "platform=iOS Simulator,name=$sim" \
-    -clonedSourcePackagesDirPath "$SPM_CACHE" \
-    -derivedDataPath "$WT_DD" \
-    test
+  xcb -destination "platform=iOS Simulator,name=$sim" test
 }
 
 cmd_status(){
   echo "cache base : $BASE"
-  echo "template   : $([ -d "$TEMPLATE_DD" ] && du -sh "$TEMPLATE_DD" 2>/dev/null | cut -f1 || echo 'NOT BUILT — run prewarm')"
   echo "spm cache  : $(du -sh "$SPM_CACHE" 2>/dev/null | cut -f1 || echo '-')"
   echo "worktree DDs:"; du -sh "$BASE"/dd/* 2>/dev/null || echo "  (none)"
   echo "max builds : $MAX_BUILDS   slots in use: $(ls -d "$SEM_DIR"/slot.* 2>/dev/null | wc -l | tr -d ' ')"
@@ -139,7 +100,7 @@ cmd_status(){
 cmd_clean(){
   log "pruning per-worktree DerivedData and stale locks…"
   rm -rf "$BASE"/dd/* "$SEM_DIR"/slot.* 2>/dev/null
-  log "kept template + spm cache. Done."
+  log "done."
 }
 
 cmd_selftest(){
@@ -151,11 +112,10 @@ cmd_selftest(){
 }
 
 case "${1:-build}" in
-  prewarm) cmd_prewarm ;;
   build)   cmd_build ;;
   test)    cmd_test ;;
   status)  cmd_status ;;
   clean)   cmd_clean ;;
   selftest) shift; cmd_selftest "${1:-8}" ;;
-  *) echo "usage: build.sh [prewarm|build|test|status|clean|selftest]"; exit 2 ;;
+  *) echo "usage: build.sh [build|test|status|clean|selftest]"; exit 2 ;;
 esac

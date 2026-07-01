@@ -8,9 +8,13 @@ Codebase-agnostic agents read this file for everything specific to this project.
 - **Language**: Swift (SwiftUI + UIKit)
 - **Bundle ID**: `com.harryjust.MileageTrackeriOS`
 
+## Project layout
+
+All app Swift source lives under `MileageTrackeriOS/` (e.g. `MileageTrackeriOS/App/`, `MileageTrackeriOS/Models/`). **Never create files at the repo root** — write code under `MileageTrackeriOS/`, and generated assets/scratch into a gitignored `build/` dir. Stray top-level `App/`, `Main/`, `output/`, `scripts/` dirs are mis-cwd bugs — delete them.
+
 ## Build & Test
 
-All builds and tests go through the wrapper script — **never call `xcodebuild` directly.** It enforces the build semaphore, shares the SwiftPM cache, and seeds DerivedData from the prewarmed Realm template (see *Parallel builds* below).
+All builds and tests go through the wrapper script — **never call `xcodebuild` directly.** It enforces the build semaphore and shares the SwiftPM cache (see *Parallel builds* below).
 
 ```bash
 # Build the app
@@ -18,18 +22,17 @@ All builds and tests go through the wrapper script — **never call `xcodebuild`
 
 # Build + run unit tests
 .claude/scripts/build.sh test
-
-# One-time (orchestrator runs this before dispatching agents; also after a Realm version bump):
-.claude/scripts/build.sh prewarm
 ```
 
 ### Parallel builds (read this)
 
-This is an Apple M1 / 16 GB machine — naïve parallel `xcodebuild`s recompile Realm from source and OOM-thrash (builds die "BUILD INTERRUPTED"). The wrapper prevents that:
+This is an Apple M1 / 16 GB machine — naïve parallel `xcodebuild`s can OOM-thrash it. The wrapper prevents that:
 
 - **Build semaphore** — at most `MT_MAX_BUILDS` (default **2**) builds run at once; extra builds queue. Do not bypass it.
-- **Prewarmed Realm** — Realm is compiled **once** into a template DerivedData; each worktree's DerivedData is an APFS copy-on-write clone of it (instant, near-zero disk). The orchestrator **must run `.claude/scripts/build.sh prewarm` once** (and after any Realm version bump) before dispatching dev/QA agents.
+- **Shared SwiftPM cache** — the Realm binary (below) and any package are downloaded once into a shared cache and reused by every worktree, not re-fetched per build.
 - **Agent concurrency** — cap concurrent **Developer** agents to ≈2 (match `MT_MAX_BUILDS`), not just QA. Developer/Scoper agents are otherwise uncapped and will stampede.
+
+> Realm ships as a **prebuilt binary** (`LocalPackages/RealmBinary`) — builds no longer compile realm-core from source, so a fresh worktree builds the app in ~45 s and no prewarm step is needed.
 
 ## Simulator
 
