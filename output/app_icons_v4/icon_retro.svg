@@ -7,184 +7,120 @@
     <filter id="odoShadow">
       <feDropShadow dx="0" dy="8" stdDeviation="18" flood-color="#000" flood-opacity="0.30"/>
     </filter>
-    <filter id="carShadow">
-      <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#000" flood-opacity="0.15"/>
-    </filter>
   </defs>
 
-  <!-- Light background — lets the green car pop -->
   <rect width="1024" height="1024" fill="#F2F2F7"/>
-
-  <!-- Subtle radial vignette -->
   <radialGradient id="vignette" cx="0.5" cy="0.5" r="0.7">
     <stop offset="60%" stop-color="white" stop-opacity="0"/>
     <stop offset="100%" stop-color="#E5E5EA" stop-opacity="0.5"/>
   </radialGradient>
   <rect width="1024" height="1024" fill="url(#vignette)"/>
 
-  <!--
-    RETRO CAR — hatchback, facing RIGHT
-    ====================================
-    Lowered roof (was 300, now 345)
-    Reference points:
-      Rear bumper:   (150, 540)
-      C-pillar base: (310, 465)
-      C-pillar top:  (365, 345)
-      A-pillar top:  (605, 345)
-      A-pillar base: (660, 465)
-      Front bumper:  (870, 540)
-      Front axle:    (680, 570)
-      Rear axle:     (330, 570)
-      Roof:          y=345
-      Beltline:      y=465
-      Ground:        y=625
-  -->
-
-  <!-- Ground shadow -->
-  <ellipse cx="510" cy="625" rx="360" ry="16" fill="rgba(0,0,0,0.10)"/>
-
-  <!-- Ground line -->
+  <ellipse cx="510" cy="625" rx="360" ry="14" fill="rgba(0,0,0,0.08)"/>
   <line x1="100" y1="625" x2="924" y2="625" stroke="rgba(0,0,0,0.06)" stroke-width="2" stroke-linecap="round"/>
 
-  <!-- === CAR BODY (lower shell) — brand green === -->
+  <!--
+    UNIFIED CAR BODY — one continuous green path
+    Includes wheel arch cutouts so there are no gaps or hacks.
+  -->
   <path d="
     M 154 545
     C 142 545, 138 530, 143 512
-    C 146 498, 151 482, 155 470
-    C 168 465, 188 463, 203 462
-    L 310 462
-    C 308 478, 305 490, 305 505
-    A 66 66 0 0 1 371 566
-    L 651 566
-    A 66 66 0 0 1 717 505
-    C 717 492, 715 478, 712 462
-    L 860 462
-    C 878 462, 888 468, 890 482
-    L 892 510
-    C 894 532, 885 545, 868 545
-    L 154 545
-    Z
-  " fill="#2DC873" filter="url(#carShadow)"/>
-
-  <!-- === CABIN (upper body) === -->
-  <path d="
-    M 203 462
-    L 310 462
+    L 155 470
+    C 160 460, 168 458, 178 458
+    L 203 458
+    L 310 458
     L 365 345
     L 605 345
-    L 660 462
-    L 712 462
-    L 660 462
-    L 605 349
-    L 365 349
-    L 310 462
-  " fill="#2DC873" opacity="0.92"/>
-
-  <!-- === GLASS AREA === -->
-  <path d="
-    M 320 457
-    L 372 355
-    L 598 355
-    L 650 457
+    L 660 458
+    L 860 458
+    C 878 458, 888 465, 890 478
+    L 892 510
+    C 894 532, 886 545, 868 545
+    L 718 545
+    A 70 70 0 0 1 650 545
+    L 375 545
+    A 70 70 0 0 1 307 545
+    L 154 545
     Z
-  " fill="#1C1C20"/>
+  " fill="#2DC873"/>
 
-  <!-- === PILLARS === -->
-  <!-- A-pillar -->
-  <polygon points="650,457 660,462 605,345 598,355" fill="#2DC873" opacity="0.88"/>
-  <!-- B-pillar -->
-  <polygon points="485,355 500,355 502,458 487,458" fill="#2DC873" opacity="0.88"/>
-  <!-- C-pillar -->
-  <polygon points="320,457 310,462 365,345 372,355" fill="#2DC873" opacity="0.88"/>
+  <!-- Glass -->
+  <path d="M 320 457 L 372 355 L 598 355 L 650 457 Z" fill="#1C1C20"/>
 
-  <!-- === BELTLINE TRIM === -->
-  <line x1="201" y1="462" x2="714" y2="462" stroke="rgba(0,0,0,0.12)" stroke-width="2.5"/>
+  <!-- Pillars -->
+  <polygon points="650,457 660,458 605,345 598,355" fill="#2DC873"/>
+  <polygon points="485,355 500,355 502,458 487,458" fill="#2DC873"/>
+  <polygon points="320,457 310,458 365,345 372,355" fill="#2DC873"/>
 
-  <!-- === DOOR CUT LINES === -->
-  <line x1="435" y1="375" x2="430" y2="540" stroke="rgba(0,0,0,0.08)" stroke-width="2"/>
-  <line x1="550" y1="375" x2="555" y2="540" stroke="rgba(0,0,0,0.08)" stroke-width="2"/>
+  <!-- Beltline -->
+  <line x1="176" y1="458" x2="862" y2="458" stroke="rgba(0,0,0,0.08)" stroke-width="2"/>
 
-  <!-- === DOOR HANDLES === -->
-  <rect x="415" y="415" width="24" height="5" rx="2.5" fill="rgba(0,0,0,0.13)"/>
-  <rect x="568" y="415" width="24" height="5" rx="2.5" fill="rgba(0,0,0,0.13)"/>
+  <!-- Door cuts -->
+  <line x1="435" y1="375" x2="430" y2="548" stroke="rgba(0,0,0,0.05)" stroke-width="2"/>
+  <line x1="550" y1="375" x2="555" y2="548" stroke="rgba(0,0,0,0.05)" stroke-width="2"/>
 
-  <!-- === HEADLIGHT === -->
-  <path d="M 862 492 L 888 492 C 892 492, 892 498, 892 505 L 892 515 L 862 515 Z" fill="rgba(255,255,200,0.55)"/>
-  <circle cx="880" cy="503" r="3.5" fill="white" opacity="0.8"/>
+  <!-- Door handles -->
+  <rect x="415" y="418" width="24" height="5" rx="2.5" fill="rgba(0,0,0,0.10)"/>
+  <rect x="568" y="418" width="24" height="5" rx="2.5" fill="rgba(0,0,0,0.10)"/>
 
-  <!-- === TAILLIGHT === -->
-  <path d="M 148 492 L 174 492 L 174 515 L 151 515 C 146 515, 146 498, 148 492 Z" fill="#CC3328" opacity="0.65"/>
-  <circle cx="164" cy="503" r="2.5" fill="#CC3328" opacity="0.8"/>
+  <!-- Headlight -->
+  <path d="M 862 492 L 888 492 C 892 492, 892 498, 892 505 L 892 515 L 862 515 Z" fill="#FFF9C4"/>
+  <circle cx="880" cy="503" r="3" fill="#FFFFFF"/>
 
-  <!-- === FRONT BUMPER OVERRIDER (retro detail) === -->
-  <rect x="865" y="515" width="20" height="12" rx="2" fill="rgba(255,255,255,0.2)"/>
+  <!-- Taillight -->
+  <path d="M 148 492 L 174 492 L 174 515 L 151 515 C 146 515, 146 498, 148 492 Z" fill="#CC2222"/>
+  <circle cx="164" cy="503" r="2.5" fill="#FF4444"/>
 
-  <!-- === FRONT WHEEL === -->
-  <circle cx="680" cy="570" r="52" fill="#1C1C1E"/>
-  <circle cx="680" cy="570" r="34" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="5"/>
-  <circle cx="680" cy="570" r="12" fill="rgba(255,255,255,0.08)"/>
-  <g stroke="rgba(255,255,255,0.08)" stroke-width="2.5">
-    <line x1="680" y1="540" x2="680" y2="600"/>
-    <line x1="650" y1="570" x2="710" y2="570"/>
-    <line x1="658" y1="548" x2="702" y2="592"/>
-    <line x1="658" y1="592" x2="702" y2="548"/>
-  </g>
+  <!-- Bumper overrider -->
+  <rect x="865" y="515" width="20" height="10" rx="2" fill="#1F9955"/>
 
-  <!-- === REAR WHEEL === -->
-  <circle cx="330" cy="570" r="52" fill="#1C1C1E"/>
-  <circle cx="330" cy="570" r="34" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="5"/>
-  <circle cx="330" cy="570" r="12" fill="rgba(255,255,255,0.08)"/>
-  <g stroke="rgba(255,255,255,0.08)" stroke-width="2.5">
-    <line x1="330" y1="540" x2="330" y2="600"/>
-    <line x1="300" y1="570" x2="360" y2="570"/>
-    <line x1="308" y1="548" x2="352" y2="592"/>
-    <line x1="308" y1="592" x2="352" y2="548"/>
-  </g>
+  <!-- === WHEELS — clean: tire, one rim ring, hub === -->
+  <!-- Front wheel -->
+  <circle cx="680" cy="570" r="52" fill="#111114"/>
+  <circle cx="680" cy="570" r="32" fill="none" stroke="#2D2D30" stroke-width="4"/>
+  <circle cx="680" cy="570" r="10" fill="#2D2D30"/>
+
+  <!-- Rear wheel -->
+  <circle cx="335" cy="570" r="52" fill="#111114"/>
+  <circle cx="335" cy="570" r="32" fill="none" stroke="#2D2D30" stroke-width="4"/>
+  <circle cx="335" cy="570" r="10" fill="#2D2D30"/>
 
   <!--
-    ============================================================
-    ODOMETER — clean, no comma, leading zeros, no label
-    ============================================================
+    ODOMETER — digits centered, shifted down, no stray details
   -->
   <g filter="url(#odoShadow)">
-    <!-- Panel -->
-    <rect x="262" y="680" width="500" height="140" rx="20" fill="url(#odoBg)"/>
-    <rect x="262" y="680" width="500" height="140" rx="20" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="2"/>
+    <rect x="237" y="705" width="550" height="140" rx="20" fill="url(#odoBg)"/>
+    <rect x="237" y="705" width="550" height="140" rx="20" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="2"/>
 
-    <!-- Display area -->
-    <rect x="282" y="694" width="460" height="86" rx="10" fill="#08080A"/>
-    <rect x="282" y="694" width="460" height="86" rx="10" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="1.5"/>
+    <rect x="257" y="718" width="510" height="90" rx="10" fill="#08080A"/>
+    <rect x="257" y="718" width="510" height="90" rx="10" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="1.5"/>
 
-    <!-- Green accent bar -->
-    <rect x="282" y="689" width="460" height="3" rx="1.5" fill="#2DC873" opacity="0.5"/>
+    <rect x="257" y="713" width="510" height="3" rx="1.5" fill="#2DC873" opacity="0.45"/>
 
-    <!-- DIGITS: "00042137" — 8 digits, no comma -->
-    <g font-family="Menlo, SF Mono, Courier, monospace" font-size="62" font-weight="700" fill="#2DC873" text-anchor="middle">
-      <text x="313" y="753">0</text>
-      <text x="363" y="753">0</text>
-      <text x="413" y="753">0</text>
-      <text x="463" y="753">4</text>
-      <text x="513" y="753">2</text>
-      <text x="563" y="753">1</text>
-      <text x="613" y="753">3</text>
-      <text x="663" y="753">7</text>
+    <!-- 9 digits centered in 510px display (257 to 767, center 512) -->
+    <!-- Span: 9 digits × 54px gap = 432px. Start = 512 - 216 = 296 -->
+    <g font-family="Menlo, SF Mono, Courier, monospace" font-size="60" font-weight="700" fill="#2DC873" text-anchor="middle">
+      <text x="296" y="776">0</text>
+      <text x="350" y="776">0</text>
+      <text x="404" y="776">0</text>
+      <text x="458" y="776">0</text>
+      <text x="512" y="776">4</text>
+      <text x="566" y="776">2</text>
+      <text x="620" y="776">1</text>
+      <text x="674" y="776">3</text>
+      <text x="728" y="776">7</text>
     </g>
 
-    <!-- Digit separators -->
     <g stroke="rgba(45,200,115,0.06)" stroke-width="1">
-      <line x1="338" y1="698" x2="338" y2="776"/>
-      <line x1="388" y1="698" x2="388" y2="776"/>
-      <line x1="438" y1="698" x2="438" y2="776"/>
-      <line x1="488" y1="698" x2="488" y2="776"/>
-      <line x1="538" y1="698" x2="538" y2="776"/>
-      <line x1="588" y1="698" x2="588" y2="776"/>
-      <line x1="638" y1="698" x2="638" y2="776"/>
+      <line x1="323" y1="722" x2="323" y2="804"/>
+      <line x1="377" y1="722" x2="377" y2="804"/>
+      <line x1="431" y1="722" x2="431" y2="804"/>
+      <line x1="485" y1="722" x2="485" y2="804"/>
+      <line x1="539" y1="722" x2="539" y2="804"/>
+      <line x1="593" y1="722" x2="593" y2="804"/>
+      <line x1="647" y1="722" x2="647" y2="804"/>
+      <line x1="701" y1="722" x2="701" y2="804"/>
     </g>
-
-    <!-- Center line -->
-    <line x1="285" y1="737" x2="739" y2="737" stroke="rgba(45,200,115,0.04)" stroke-width="1"/>
-
-    <!-- Active dot -->
-    <circle cx="468" cy="720" r="4.5" fill="#2DC873" opacity="0.55"/>
   </g>
 </svg>

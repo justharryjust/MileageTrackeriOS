@@ -36,7 +36,9 @@
       "Bash(rm -f /tmp/mtsem_*.log /tmp/mtbuildtest.log)",
       "Bash(awk '{print \"root avail:\",$4,\"\\(\"$5\" used\\)\"}')",
       "Bash(python3 -c \"from PIL import Image; print\\('Pillow available'\\)\")",
-      "Bash(python3 -c \"import cairosvg; print\\('cairosvg available'\\)\")"
+      "Bash(python3 -c \"import cairosvg; print\\('cairosvg available'\\)\")",
+      "Bash(gh issue *)",
+      "Bash(gh api *)"
     ]
   },
   "hooks": {
