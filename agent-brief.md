@@ -8,9 +8,13 @@ Codebase-agnostic agents read this file for everything specific to this project.
 - **Language**: Swift (SwiftUI + UIKit)
 - **Bundle ID**: `com.harryjust.MileageTrackeriOS`
 
+## Project layout
+
+All app Swift source lives under `MileageTrackeriOS/` (e.g. `MileageTrackeriOS/App/`, `MileageTrackeriOS/Models/`). **Never create files at the repo root** — write code under `MileageTrackeriOS/`, and generated assets/scratch into a gitignored `build/` dir. Stray top-level `App/`, `Main/`, `output/`, `scripts/` dirs are mis-cwd bugs — delete them.
+
 ## Build & Test
 
-All builds and tests go through the wrapper script — **never call `xcodebuild` directly.** It enforces the build semaphore, shares the SwiftPM cache, and seeds DerivedData from the prewarmed Realm template (see *Parallel builds* below).
+All builds and tests go through the wrapper script — **never call `xcodebuild` directly.** It enforces the build semaphore and shares the SwiftPM cache (see *Parallel builds* below).
 
 ```bash
 # Build the app
@@ -18,9 +22,6 @@ All builds and tests go through the wrapper script — **never call `xcodebuild`
 
 # Build + run unit tests
 .claude/scripts/build.sh test
-
-# One-time (orchestrator runs this before dispatching agents; also after a Realm version bump):
-.claude/scripts/build.sh prewarm
 ```
 
 ### Parallel builds (read this)

@@ -149,7 +149,7 @@ Ticket: <url>
 2. Plan approach, create branch feature/<kebab-name>
 3. Implement changes (edit existing files, follow codebase patterns)
 4. Write unit tests for critical paths
-5. Build with the wrapper (enforces the build semaphore + prewarmed Realm template — do NOT call xcodebuild directly; there is no 'iPhone 17' simulator): .claude/scripts/build.sh build
+5. Build with the wrapper (enforces the build semaphore; do NOT call xcodebuild directly; there is no 'iPhone 17' simulator): .claude/scripts/build.sh build
 6. Open a PR with description linking the issue
 7. Move item to In Review:
    gh api graphql -f query='mutation { updateProjectV2ItemFieldValue(input: {projectId: \"PVT_kwHOARlJks4Bbias\", itemId: \"<item-id>\", fieldId: \"PVTSSF_lAHOARlJks4BbiaszhWSQ5s\", value: {singleSelectOptionId: \"0e814af9\"}}) { projectV2Item { id } } }'
