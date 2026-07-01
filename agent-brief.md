@@ -25,11 +25,13 @@ All builds and tests go through the wrapper script — **never call `xcodebuild`
 
 ### Parallel builds (read this)
 
-This is an Apple M1 / 16 GB machine — naïve parallel `xcodebuild`s recompile Realm from source and OOM-thrash (builds die "BUILD INTERRUPTED"). The wrapper prevents that:
+This is an Apple M1 / 16 GB machine — naïve parallel `xcodebuild`s can OOM-thrash it. The wrapper prevents that:
 
 - **Build semaphore** — at most `MT_MAX_BUILDS` (default **2**) builds run at once; extra builds queue. Do not bypass it.
-- **Prewarmed Realm** — `prewarm` compiles Realm into a template DerivedData once; each worktree's DerivedData is an APFS copy-on-write clone of it. A fresh worktree then builds ~4x faster (~2.5 min vs ~10 min cold) and later builds in it are incremental (~30s). The orchestrator **must run `.claude/scripts/build.sh prewarm` once** (and after any Realm version bump) before dispatching dev/QA agents. *(A fresh worktree still partially recompiles Realm; for zero recompiles, move the project to Realm's prebuilt XCFramework — tracked as a follow-up.)*
+- **Shared SwiftPM cache** — the Realm binary (below) and any package are downloaded once into a shared cache and reused by every worktree, not re-fetched per build.
 - **Agent concurrency** — cap concurrent **Developer** agents to ≈2 (match `MT_MAX_BUILDS`), not just QA. Developer/Scoper agents are otherwise uncapped and will stampede.
+
+> Realm ships as a **prebuilt binary** (`LocalPackages/RealmBinary`) — builds no longer compile realm-core from source, so a fresh worktree builds the app in ~45 s and no prewarm step is needed.
 
 ## Simulator
 

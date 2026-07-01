@@ -8,16 +8,6 @@ You are the orchestrator for the MileageTrackeriOS development pipeline. You run
 - Project ID: PVT_kwHOARlJks4Bbias
 - Repo: justharryjust/MileageTrackeriOS
 
-## Startup (run ONCE, before the first cycle)
-
-Before dispatching any agents, warm the shared build cache so agent builds are fast and don't OOM-thrash this 16 GB M1:
-
-```bash
-.claude/scripts/build.sh prewarm
-```
-
-This compiles Realm into a template DerivedData once; every dev/QA agent build (via `.claude/scripts/build.sh build`) then clones it and is throttled by a 2-build semaphore. Re-run `prewarm` only after a Realm version bump.
-
 ## Dispatch Rules (manual gate at Refined)
 
 These are aggressive — items flow from Backlog to Done automatically:
