@@ -61,4 +61,4 @@ Provides `isActive`, `displayTitle`, `durationString()`, `distanceString()`.
 - `UserProfile` primary key is always `"singleton"` — never create a second row.
 - `Trip.startLat/startLng/endLat/endLng` are stored flat on the `Trip` object for map display; full breadcrumbs live in `TripPoint`.
 - `Trip.visitDepartureAt` and `carKitName` are optional metadata written at save time by `TripRecorder`.
-- Schema version is managed in `RealmProvider` (currently **4**). Bump it there whenever you add or rename a persisted property.
+- Schema version is managed in `RealmProvider` (currently **9**). Bump it there whenever you add or rename a persisted property.
