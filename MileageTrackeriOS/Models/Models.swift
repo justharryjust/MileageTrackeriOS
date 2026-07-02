@@ -8,23 +8,62 @@ import RealmSwift
 // MARK: - Jurisdiction
 
 enum Jurisdiction: String, CaseIterable, PersistableEnum {
-    case newZealand = "NZ"
-    case australia  = "AU"
-    case other      = "other"
+    case newZealand   = "NZ"
+    case australia    = "AU"
+    case unitedStates = "US"
+    case canada       = "CA"
+    case germany      = "DE"
+    case belgium      = "BE"
+    case netherlands  = "NL"
+    case switzerland  = "CH"
+    case austria      = "AT"
+    case sweden       = "SE"
+    case norway       = "NO"
+    case denmark      = "DK"
+    case finland      = "FI"
+    case spain        = "ES"
+    case southAfrica  = "ZA"
+    case other        = "other"
 
     var displayName: String {
         switch self {
-        case .newZealand: return "New Zealand"
-        case .australia:  return "Australia"
-        case .other:      return "Other"
+        case .newZealand:   return "New Zealand"
+        case .australia:    return "Australia"
+        case .unitedStates: return "United States"
+        case .canada:       return "Canada"
+        case .germany:      return "Germany"
+        case .belgium:      return "Belgium"
+        case .netherlands:  return "Netherlands"
+        case .switzerland:  return "Switzerland"
+        case .austria:      return "Austria"
+        case .sweden:       return "Sweden"
+        case .norway:       return "Norway"
+        case .denmark:      return "Denmark"
+        case .finland:      return "Finland"
+        case .spain:        return "Spain"
+        case .southAfrica:  return "South Africa"
+        case .other:        return "Other"
         }
     }
 
     var flag: String {
         switch self {
-        case .newZealand: return "🇳🇿"
-        case .australia:  return "🇦🇺"
-        case .other:      return "🌍"
+        case .newZealand:   return "🇳🇿"
+        case .australia:    return "🇦🇺"
+        case .unitedStates: return "🇺🇸"
+        case .canada:       return "🇨🇦"
+        case .germany:      return "🇩🇪"
+        case .belgium:      return "🇧🇪"
+        case .netherlands:  return "🇳🇱"
+        case .switzerland:  return "🇨🇭"
+        case .austria:      return "🇦🇹"
+        case .sweden:       return "🇸🇪"
+        case .norway:       return "🇳🇴"
+        case .denmark:      return "🇩🇰"
+        case .finland:      return "🇫🇮"
+        case .spain:        return "🇪🇸"
+        case .southAfrica:  return "🇿🇦"
+        case .other:        return "🌍"
         }
     }
 
@@ -32,7 +71,7 @@ enum Jurisdiction: String, CaseIterable, PersistableEnum {
         switch self {
         case .newZealand: return 90
         case .australia:  return 84
-        case .other:      return 90
+        default:          return 90
         }
     }
 
@@ -40,7 +79,7 @@ enum Jurisdiction: String, CaseIterable, PersistableEnum {
         switch self {
         case .newZealand: return 3
         case .australia:  return 5
-        case .other:      return 3
+        default:          return 3
         }
     }
 }
