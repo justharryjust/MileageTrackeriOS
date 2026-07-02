@@ -3,27 +3,23 @@ import SwiftUI
 struct JurisdictionStep: View {
     @Bindable var vm: OnboardingViewModel
 
-    private let options: [(code: String, name: String, flag: String)] = [
-        ("NZ", "New Zealand", "🇳🇿"),
-        ("AU", "Australia",   "🇦🇺"),
-        ("--", "Other",       "🌍"),
-    ]
-
     var body: some View {
         OnboardingStepShell(
             icon: "globe.asia.australia.fill",
             iconColor: .mtGreen,
             title: "Where are you based?",
-            subtitle: "Sets the mileage rates used for your expense claims."
+            subtitle: "Sets the mileage rates used for your expense claims.",
+            contentScrolls: true
         ) {
             VStack(spacing: MTSpacing.sm) {
-                ForEach(options, id: \.code) { option in
+                ForEach(Jurisdiction.allCases, id: \.rawValue) { j in
                     RegionCard(
-                        flag: option.flag,
-                        name: option.name,
-                        isSelected: vm.regionCode == option.code
-                            || (option.code == "--" && !["NZ", "AU"].contains(vm.regionCode)),
-                        onTap: { vm.regionCode = option.code }
+                        flag: j.flag,
+                        name: j.displayName,
+                        isSelected: j == .other
+                            ? Jurisdiction(rawValue: vm.regionCode) == nil
+                            : vm.regionCode == j.rawValue,
+                        onTap: { vm.regionCode = j.rawValue }
                     )
                 }
             }

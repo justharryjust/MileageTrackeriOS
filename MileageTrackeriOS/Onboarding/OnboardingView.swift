@@ -23,11 +23,7 @@ final class OnboardingViewModel {
     }()
 
     var jurisdiction: Jurisdiction {
-        switch regionCode {
-        case "NZ": return .newZealand
-        case "AU": return .australia
-        default:   return .other
-        }
+        Jurisdiction(rawValue: regionCode) ?? .other
     }
     var claimMethod: ClaimMethod       = .standardRate
     var customRateTiers: [CustomRateTier] = [.initial]
@@ -46,6 +42,10 @@ final class OnboardingViewModel {
 
     var isVehicleValid: Bool {
         !vehicleRegistration.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    var isRegionValid: Bool {
+        !regionCode.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     func advance() {
