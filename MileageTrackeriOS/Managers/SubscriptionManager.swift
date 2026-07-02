@@ -76,15 +76,13 @@ final class SubscriptionManager {
     }
 
     func refreshState() {
-        guard let profile = profileRepo?.profile else { return }
-        let activePeriods = fetchActivePeriods()
-
 #if DEBUG
         if let override = debugOverrideStatus {
+            let activePeriods = fetchActivePeriods()
             let state = MTSubscriptionState(
                 status: override,
-                trialEndsAt: trialEndDate(trialStartedAt: profile.trialStartedAt),
-                graceEndsAt: graceEndDate(trialStartedAt: profile.trialStartedAt),
+                trialEndsAt: nil,
+                graceEndsAt: nil,
                 activePeriods: activePeriods
             )
             updateProfileStatus(override)
@@ -93,6 +91,9 @@ final class SubscriptionManager {
             return
         }
 #endif
+
+        guard let profile = profileRepo?.profile else { return }
+        let activePeriods = fetchActivePeriods()
 
         let status = computeStatus(
             trialStartedAt: profile.trialStartedAt,
@@ -218,6 +219,10 @@ final class SubscriptionManager {
         refreshState()
         logger.log("SubscriptionManager: override cleared", category: .system)
     }
+#else
+    var isOverrideActive: Bool { false }
+    func setOverride(_ status: MTSubscriptionStatus) {}
+    func clearOverride() {}
 #endif
 
     // MARK: - Private
