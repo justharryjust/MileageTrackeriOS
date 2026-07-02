@@ -8,7 +8,9 @@
 import Testing
 import CoreLocation
 import CoreMotion
+import CloudKit
 import RealmSwift
+import UserNotifications
 @testable import MileageTrackeriOS
 
 // MARK: - TripRecorderState helpers (pattern-match shorthands for assertions)
@@ -1946,6 +1948,11 @@ struct RealmProviderRecoveryTests {
         let realm = try Realm(configuration: config)
         #expect(realm.objects(Trip.self).count == 0)
 // MARK: - Notification Recovery Action Tests
+    }
+}
+
+
+// MARK: - Notification Recovery Action Tests
 
 @Suite("Notification Recovery Actions")
 struct NotificationRecoveryTests {
@@ -2158,6 +2165,8 @@ private extension Harness {
             realm.add(trip)
         }
         return trip.id
+    }
+}
 // MARK: - ═══════════════════════════════════════════════════════
 // MARK:   Suite 16 — Gap-Fill Detection
 // MARK: ═══════════════════════════════════════════════════════
@@ -2437,5 +2446,243 @@ struct ThresholdDriftTests {
         let gap = b.distance(from: a)
         #expect(gap < 300) // 111m < 300m spatial threshold
         #expect(TripRecorder.shouldFillGap(from: a, to: b) == false)
+    }
+}
+
+// MARK: - ═══════════════════════════════════════
+// MARK:   Suite 20 — CloudSyncManager Conversion Tests
+// MARK: ═══════════════════════════════════════
+
+@Suite("CloudSyncManager Conversion")
+struct CloudSyncManagerConversionTests {
+
+    // MARK: - Trip toCloudRecord
+
+    @Test("Trip toCloudRecord maps all fields")
+    func tripToCloudRecordMapsAllFields() {
+        let trip = Trip()
+        trip.id = "test-trip-1"
+        trip.vehicleId = "v1"
+        trip.startAddress = "Start St"
+        trip.endAddress = "End Ave"
+        trip.startLat = -36.848
+        trip.startLng = 174.763
+        trip.endLat = -36.850
+        trip.endLng = 174.765
+        trip.startedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        trip.endedAt = Date(timeIntervalSince1970: 1_700_003_600)
+        trip.distanceMetres = 10_000
+        trip.category = .business
+        trip.source = .automatic
+        trip.notes = "Client meeting"
+        trip.dollarValue = 104.00
+        trip.isCapExceeded = false
+        trip.processingStatus = .complete
+        trip.gpsDistanceMetres = 10_000
+        trip.odometerDistanceMetres = nil
+        trip.purpose = "Meet client"
+        trip.commitHash = "abc123"
+        trip.committedAt = Date(timeIntervalSince1970: 1_700_003_600)
+        trip.isSyncedToCloud = false
+        trip.createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+        trip.updatedAt = Date(timeIntervalSince1970: 1_700_003_600)
+
+        let record = trip.toCloudRecord()
+
+        #expect(record.recordType == "MTTrip")
+        #expect(record.recordID.recordName == "test-trip-1")
+        #expect(record["vehicleId"] as? String == "v1")
+        #expect(record["startAddress"] as? String == "Start St")
+        #expect(record["endAddress"] as? String == "End Ave")
+        #expect(record["startLat"] as? Double == -36.848)
+        #expect(record["startLng"] as? Double == 174.763)
+        #expect(record["endLat"] as? Double == -36.850)
+        #expect(record["endLng"] as? Double == 174.765)
+    }
+
+    @Test("Trip toCloudRecord maps optional fields as nil when not set")
+    func tripToCloudRecordMapsOptionals() {
+        let trip = Trip()
+        trip.id = "test-trip-2"
+        let record = trip.toCloudRecord()
+
+        #expect(record["notes"] as? String == nil)
+        #expect(record["dollarValue"] as? Double == nil)
+        #expect(record["odometerDistanceMetres"] as? Double == nil)
+        #expect(record["purpose"] as? String == nil)
+        #expect(record["commitHash"] as? String == nil)
+        #expect(record["committedAt"] as? Date == nil)
+        #expect(record["endedAt"] as? Date == nil)
+    }
+
+    // MARK: - Vehicle toCloudRecord
+
+    @Test("Vehicle toCloudRecord maps all fields")
+    func vehicleToCloudRecordMapsAllFields() {
+        let vehicle = Vehicle()
+        vehicle.id = "test-vehicle-1"
+        vehicle.name = "My Car"
+        vehicle.registration = "ABC123"
+        vehicle.type = .car
+        vehicle.fuelType = .petrol
+        vehicle.isDefault = true
+        vehicle.isArchived = false
+        vehicle.defaultCategory = .business
+
+        let record = vehicle.toCloudRecord()
+
+        #expect(record.recordType == "MTVehicle")
+        #expect(record.recordID.recordName == "test-vehicle-1")
+        #expect(record["name"] as? String == "My Car")
+        #expect(record["registration"] as? String == "ABC123")
+        #expect(record["type"] as? String == "car")
+        #expect(record["fuelType"] as? String == "petrol")
+        #expect(record["isDefault"] as? Bool == true)
+        #expect(record["isArchived"] as? Bool == false)
+        #expect(record["defaultCategory"] as? String == "business")
+    }
+
+    // MARK: - OdometerReading toCloudRecord
+
+    @Test("OdometerReading toCloudRecord maps all fields")
+    func odometerToCloudRecordMapsAllFields() {
+        let reading = OdometerReading()
+        reading.id = "test-reading-1"
+        reading.vehicleId = "v1"
+        reading.readingKm = 50_000
+        reading.tripId = "trip-1"
+        reading.notes = "Weekly check"
+        reading.source = .manual
+
+        let record = reading.toCloudRecord()
+
+        #expect(record.recordType == "MTOdometerReading")
+        #expect(record.recordID.recordName == "test-reading-1")
+        #expect(record["vehicleId"] as? String == "v1")
+        #expect(record["readingKm"] as? Double == 50_000)
+        #expect(record["tripId"] as? String == "trip-1")
+        #expect(record["notes"] as? String == "Weekly check")
+        #expect(record["source"] as? String == "manual")
+    }
+
+    // MARK: - CKRecord to Realm Object
+
+    @Test("CKRecord toRealmObject creates Trip correctly")
+    func recordToTripObject() {
+        let recordID = CKRecord.ID(recordName: "test-trip-3")
+        let record = CKRecord(recordType: "MTTrip", recordID: recordID)
+        record["vehicleId"] = "v1" as NSString
+        record["startAddress"] = "Start" as NSString
+        record["endAddress"] = "End" as NSString
+        record["startLat"] = -36.848 as NSNumber
+        record["startLng"] = 174.763 as NSNumber
+        record["endLat"] = -36.850 as NSNumber
+        record["endLng"] = 174.765 as NSNumber
+        record["startedAt"] = Date(timeIntervalSince1970: 1_700_000_000) as NSDate
+        record["category"] = "business" as NSString
+        record["source"] = "automatic" as NSString
+        record["distanceMetres"] = 10_000 as NSNumber
+        record["processingStatus"] = "complete" as NSString
+
+        let trip = record.toRealmObject(type: Trip.self)
+
+        #expect(trip != nil)
+        #expect(trip?.id == "test-trip-3")
+        #expect(trip?.vehicleId == "v1")
+        #expect(trip?.startAddress == "Start")
+        #expect(trip?.endAddress == "End")
+        #expect(trip?.startLat == -36.848)
+        #expect(trip?.startLng == 174.763)
+        #expect(trip?.category == .business)
+        #expect(trip?.source == .automatic)
+        #expect(trip?.distanceMetres == 10_000)
+        #expect(trip?.isSyncedToCloud == true)
+    }
+
+    @Test("CKRecord toRealmObject creates Vehicle correctly")
+    func recordToVehicleObject() {
+        let recordID = CKRecord.ID(recordName: "test-vehicle-2")
+        let record = CKRecord(recordType: "MTVehicle", recordID: recordID)
+        record["name"] = "Work Van" as NSString
+        record["registration"] = "VAN123" as NSString
+        record["type"] = "car" as NSString
+        record["fuelType"] = "diesel" as NSString
+        record["isDefault"] = true as NSNumber
+        record["isArchived"] = false as NSNumber
+        record["defaultCategory"] = "business" as NSString
+
+        let vehicle = record.toRealmObject(type: Vehicle.self)
+
+        #expect(vehicle != nil)
+        #expect(vehicle?.id == "test-vehicle-2")
+        #expect(vehicle?.name == "Work Van")
+        #expect(vehicle?.registration == "VAN123")
+        #expect(vehicle?.type == .car)
+        #expect(vehicle?.fuelType == .diesel)
+        #expect(vehicle?.isDefault == true)
+        #expect(vehicle?.isArchived == false)
+        #expect(vehicle?.defaultCategory == .business)
+        #expect(vehicle?.isSyncedToCloud == true)
+    }
+
+    @Test("CKRecord toRealmObject creates OdometerReading correctly")
+    func recordToOdometerObject() {
+        let recordID = CKRecord.ID(recordName: "test-reading-2")
+        let record = CKRecord(recordType: "MTOdometerReading", recordID: recordID)
+        record["vehicleId"] = "v1" as NSString
+        record["readingKm"] = 75_000 as NSNumber
+        record["tripId"] = "trip-5" as NSString
+        record["notes"] = "Service" as NSString
+        record["source"] = "manual" as NSString
+
+        let reading = record.toRealmObject(type: OdometerReading.self)
+
+        #expect(reading != nil)
+        #expect(reading?.id == "test-reading-2")
+        #expect(reading?.vehicleId == "v1")
+        #expect(reading?.readingKm == 75_000)
+        #expect(reading?.tripId == "trip-5")
+        #expect(reading?.notes == "Service")
+        #expect(reading?.source == .manual)
+        #expect(reading?.isSyncedToCloud == true)
+    }
+
+    @Test("CKRecord toRealmObject with unknown type returns nil")
+    func recordToUnknownTypeReturnsNil() {
+        let recordID = CKRecord.ID(recordName: "unknown")
+        let record = CKRecord(recordType: "UnknownType", recordID: recordID)
+
+        let result = record.toRealmObject(type: Trip.self)
+        #expect(result == nil)
+    }
+
+    // MARK: - Sync metadata fields
+
+    @Test("New Vehicle has isSyncedToCloud = false")
+    func newVehicleNotSynced() {
+        let vehicle = Vehicle()
+        #expect(vehicle.isSyncedToCloud == false)
+    }
+
+    @Test("New OdometerReading has isSyncedToCloud = false")
+    func newOdometerNotSynced() {
+        let reading = OdometerReading()
+        #expect(reading.isSyncedToCloud == false)
+    }
+
+    @Test("Vehicle allows setting sync metadata")
+    func vehicleSyncMetadataSettable() {
+        let vehicle = Vehicle()
+        vehicle.isSyncedToCloud = true
+        vehicle.updatedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        #expect(vehicle.isSyncedToCloud == true)
+    }
+
+    @Test("OdometerReading allows setting sync metadata")
+    func odometerSyncMetadataSettable() {
+        let reading = OdometerReading()
+        reading.isSyncedToCloud = true
+        reading.updatedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        #expect(reading.isSyncedToCloud == true)
     }
 }
