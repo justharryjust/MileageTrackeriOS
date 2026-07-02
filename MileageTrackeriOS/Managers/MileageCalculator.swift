@@ -6,6 +6,17 @@ import Foundation
 @Observable
 final class MileageCalculator {
 
+    // MARK: - Currency Formatting
+
+    /// Shared currency formatter configured for the given ISO 4217 currency code.
+    /// Uses the user's current locale for symbol placement and decimal separators.
+    static func currencyFormatter(for currencyCode: String) -> NumberFormatter {
+        let fmt = NumberFormatter()
+        fmt.numberStyle = .currency
+        fmt.currencyCode = currencyCode
+        return fmt
+    }
+
     // MARK: - Rate Lookup
 
     /// Returns the matching rate entry for the user's profile and vehicle fuel type.

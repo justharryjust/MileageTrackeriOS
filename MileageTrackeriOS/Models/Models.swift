@@ -67,6 +67,28 @@ enum Jurisdiction: String, CaseIterable, PersistableEnum {
         }
     }
 
+    /// ISO 4217 currency code for this jurisdiction.
+    var currencyCode: String {
+        switch self {
+        case .newZealand:   return "NZD"
+        case .australia:    return "AUD"
+        case .unitedStates: return "USD"
+        case .canada:       return "CAD"
+        case .germany:      return "EUR"
+        case .belgium:      return "EUR"
+        case .netherlands:  return "EUR"
+        case .switzerland:  return "CHF"
+        case .austria:      return "EUR"
+        case .sweden:       return "SEK"
+        case .norway:       return "NOK"
+        case .denmark:      return "DKK"
+        case .finland:      return "EUR"
+        case .spain:        return "EUR"
+        case .southAfrica:  return "ZAR"
+        case .other:        return "GBP"
+        }
+    }
+
     var logbookPeriodDays: Int {
         switch self {
         case .newZealand: return 90

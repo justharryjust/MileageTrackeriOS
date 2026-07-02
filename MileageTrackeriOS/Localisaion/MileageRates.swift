@@ -13,6 +13,7 @@ import Foundation
 struct OfficalMileageRate {
     let countryCode: String
     let defaultDistanceUnit: DistanceUnit
+    let currencyCode: String
     let mileageRates: [MileageRates]
 }
 
@@ -80,6 +81,7 @@ extension Jurisdiction {
 private let newZealandRate: OfficalMileageRate = .init(
     countryCode: "NZ",
     defaultDistanceUnit: .kilometres,
+    currencyCode: "NZD",
     mileageRates: [
         .init(
             name: "Petrol",
@@ -120,6 +122,7 @@ private let newZealandRate: OfficalMileageRate = .init(
 private let australiaRate: OfficalMileageRate = .init(
     countryCode: "AU",
     defaultDistanceUnit: .kilometres,
+    currencyCode: "AUD",
     mileageRates: [
         .init(
             name: "All vehicles",
@@ -135,6 +138,7 @@ private let australiaRate: OfficalMileageRate = .init(
 private let unitedKingdomRate: OfficalMileageRate = .init(
     countryCode: "GB",
     defaultDistanceUnit: .miles,
+    currencyCode: "GBP",
     mileageRates: [
         .init(
             name: "Car / Van",
@@ -165,6 +169,7 @@ private let unitedKingdomRate: OfficalMileageRate = .init(
 private let unitedStatesRate: OfficalMileageRate = .init(
     countryCode: "US",
     defaultDistanceUnit: .miles,
+    currencyCode: "USD",
     mileageRates: [
         .init(
             name: "Business",
@@ -181,6 +186,7 @@ private let unitedStatesRate: OfficalMileageRate = .init(
 private let canadaRate: OfficalMileageRate = .init(
     countryCode: "CA",
     defaultDistanceUnit: .kilometres,
+    currencyCode: "CAD",
     mileageRates: [
         .init(
             name: "Provinces",
@@ -198,6 +204,7 @@ private let canadaRate: OfficalMileageRate = .init(
 private let germanyRate: OfficalMileageRate = .init(
     countryCode: "DE",
     defaultDistanceUnit: .kilometres,
+    currencyCode: "EUR",
     mileageRates: [
         .init(
             name: "Car",
@@ -217,6 +224,7 @@ private let germanyRate: OfficalMileageRate = .init(
 private let belgiumRate: OfficalMileageRate = .init(
     countryCode: "BE",
     defaultDistanceUnit: .kilometres,
+    currencyCode: "EUR",
     mileageRates: [
         .init(
             name: "All vehicles",
@@ -230,6 +238,7 @@ private let belgiumRate: OfficalMileageRate = .init(
 private let netherlandsRate: OfficalMileageRate = .init(
     countryCode: "NL",
     defaultDistanceUnit: .kilometres,
+    currencyCode: "EUR",
     mileageRates: [
         .init(
             name: "All vehicles",
@@ -243,6 +252,7 @@ private let netherlandsRate: OfficalMileageRate = .init(
 private let switzerlandRate: OfficalMileageRate = .init(
     countryCode: "CH",
     defaultDistanceUnit: .kilometres,
+    currencyCode: "CHF",
     mileageRates: [
         .init(
             name: "Car",
@@ -258,6 +268,7 @@ private let switzerlandRate: OfficalMileageRate = .init(
 private let austriaRate: OfficalMileageRate = .init(
     countryCode: "AT",
     defaultDistanceUnit: .kilometres,
+    currencyCode: "EUR",
     mileageRates: [
         .init(
             name: "Car",
@@ -278,6 +289,7 @@ private let austriaRate: OfficalMileageRate = .init(
 private let swedenRate: OfficalMileageRate = .init(
     countryCode: "SE",
     defaultDistanceUnit: .kilometres,
+    currencyCode: "SEK",
     mileageRates: [
         .init(
             name: "Own car",
@@ -292,6 +304,7 @@ private let swedenRate: OfficalMileageRate = .init(
 private let norwayRate: OfficalMileageRate = .init(
     countryCode: "NO",
     defaultDistanceUnit: .kilometres,
+    currencyCode: "NOK",
     mileageRates: [
         .init(
             name: "All vehicles",
@@ -306,6 +319,7 @@ private let norwayRate: OfficalMileageRate = .init(
 private let denmarkRate: OfficalMileageRate = .init(
     countryCode: "DK",
     defaultDistanceUnit: .kilometres,
+    currencyCode: "DKK",
     mileageRates: [
         .init(
             name: "All vehicles",
@@ -322,6 +336,7 @@ private let denmarkRate: OfficalMileageRate = .init(
 private let finlandRate: OfficalMileageRate = .init(
     countryCode: "FI",
     defaultDistanceUnit: .kilometres,
+    currencyCode: "EUR",
     mileageRates: [
         .init(
             name: "All vehicles",
@@ -335,6 +350,7 @@ private let finlandRate: OfficalMileageRate = .init(
 private let spainRate: OfficalMileageRate = .init(
     countryCode: "ES",
     defaultDistanceUnit: .kilometres,
+    currencyCode: "EUR",
     mileageRates: [
         .init(
             name: "All vehicles",
@@ -352,6 +368,7 @@ private let spainRate: OfficalMileageRate = .init(
 private let southAfricaRate: OfficalMileageRate = .init(
     countryCode: "ZA",
     defaultDistanceUnit: .kilometres,
+    currencyCode: "ZAR",
     mileageRates: [
         .init(
             name: "Simplified method (opt-in, no other allowance)",

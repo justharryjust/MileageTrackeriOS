@@ -134,7 +134,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     // MARK: - Weekly Summary
 
     /// Schedule a weekly summary notification. Sunday at 8pm.
-    func scheduleWeeklySummary(weekKm: Double, businessCount: Int, valueDollars: Double) {
+    func scheduleWeeklySummary(weekKm: Double, businessCount: Int, valueDollars: Double, currencyCode: String = "USD") {
         guard Self.weeklySummaryEnabled else { return }
         center.removePendingNotificationRequests(withIdentifiers: ["weekly-summary"])
 
@@ -144,7 +144,13 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
             content.body = "No business trips this week."
         } else {
             let kmStr = String(format: "%.0f km", weekKm)
-            let valStr = valueDollars > 0 ? String(format: " · $%.0f", valueDollars) : ""
+            let valStr: String
+            if valueDollars > 0 {
+                let fmt = MileageCalculator.currencyFormatter(for: currencyCode)
+                valStr = " · \(fmt.string(from: NSNumber(value: valueDollars)) ?? "")"
+            } else {
+                valStr = ""
+            }
             content.body = "\(kmStr) across \(businessCount) business trips this week\(valStr)."
         }
         content.sound = .default
@@ -179,7 +185,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         let weeklyDollars = weeklyBusinessTrips.compactMap(\.dollarValue).reduce(0, +)
         let weeklyCount = weeklyBusinessTrips.count
 
-        scheduleWeeklySummary(weekKm: weeklyKm, businessCount: weeklyCount, valueDollars: weeklyDollars)
+        scheduleWeeklySummary(weekKm: weeklyKm, businessCount: weeklyCount, valueDollars: weeklyDollars, currencyCode: profileRepo.profile.jurisdiction.currencyCode)
     }
 
     /// Returns true when the current time is within the 4-hour window before Sunday 20:00.

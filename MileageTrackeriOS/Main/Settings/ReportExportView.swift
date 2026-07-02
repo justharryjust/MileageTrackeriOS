@@ -114,7 +114,8 @@ struct ReportExportView: View {
                 HStack {
                     Text("Estimated Value")
                     Spacer()
-                    Text(String(format: "$%.2f", totalValue))
+                    let fmt = MileageCalculator.currencyFormatter(for: appState.profileRepo.profile.jurisdiction.currencyCode)
+                    Text(fmt.string(from: NSNumber(value: totalValue)) ?? "")
                         .foregroundStyle(Color.mtGreen)
                         .fontWeight(.semibold)
                 }
