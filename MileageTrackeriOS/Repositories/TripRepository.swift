@@ -94,7 +94,7 @@ final class TripRepository {
 
     /// Commits an in-flight trip on completion — sets end time, distance, address,
     /// writes any remaining location points, and flips source from .inflight to .automatic.
-    func commitTrip(_ trip: Trip, endedAt: Date, distanceMetres: Double,
+    func commitTrip(_ trip: Trip, startedAt: Date, endedAt: Date, distanceMetres: Double,
                     locations: [CLLocation], startAddress: String, endAddress: String,
                     visitDepartureAt: Date?, carKitName: String?,
                     processingStatus: TripProcessingStatus) {
@@ -110,6 +110,7 @@ final class TripRepository {
                           recordedAt: loc.timestamp)
             }
             realm.add(pts)
+            trip.startedAt  = startedAt
             trip.endedAt    = endedAt
             trip.distanceMetres = distanceMetres
             trip.startAddress   = startAddress
@@ -124,6 +125,8 @@ final class TripRepository {
             }
             trip.updatedAt = Date()
         }
+        // Check for adjacent trip fragments to auto-merge
+        autoMergeAdjacent(to: trip)
     }
 
     /// Deletes an in-flight trip that didn't meet minimum thresholds.
@@ -363,6 +366,8 @@ final class TripRepository {
             trip.processingStatus = .complete
             trip.updatedAt = Date()
         }
+        // Check for adjacent trip fragments to auto-merge
+        autoMergeAdjacent(to: trip)
     }
 
     /// Increments the retry counter without changing status (trip stays pending).
@@ -371,6 +376,8 @@ final class TripRepository {
             trip.processingRetries += 1
             trip.updatedAt = Date()
         }
+        // Check for adjacent trip fragments to auto-merge
+        autoMergeAdjacent(to: trip)
     }
 
     /// Updates addresses and polyline for an already-saved trip (re-processing path).
