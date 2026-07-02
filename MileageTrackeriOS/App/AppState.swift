@@ -38,6 +38,9 @@ final class AppState {
     // MARK: - Schedule Gate
     let scheduleManager     : TrackingScheduleManager
 
+    // MARK: - Cloud Sync
+    let cloudSyncManager : CloudSyncManager
+
     // MARK: - Subscription
     let subscriptionManager : SubscriptionManager
 
@@ -56,6 +59,9 @@ final class AppState {
         // 3. Business logic
         mileageCalculator = MileageCalculator()
         reportGenerator   = ReportGenerator()
+
+        // 4. Cloud sync manager (observes Realm changes internally)
+        cloudSyncManager  = CloudSyncManager(realm: realm)
 
         // 4. Hardware managers
         locationManager     = LocationManager()
@@ -146,7 +152,7 @@ final class AppState {
             startTracking()
         }
 
-        // Retry offline-saved trips when the app comes to the foreground
+        // Retry offline-saved trips and sync when the app comes to the foreground
         NotificationCenter.default.addObserver(
             forName: UIApplication.willEnterForegroundNotification,
             object: nil, queue: .main
@@ -157,11 +163,13 @@ final class AppState {
                 jurisdiction: self.profileRepo.jurisdiction,
                 calculator: self.mileageCalculator
             )
+            self.cloudSyncManager.syncNow()
         }
     }
 
     /// Call once onboarding is complete (or on app launch when already onboarded).
     func startTracking() {
+        cloudSyncManager.syncNow()
         motionManager.startActivityUpdates()
         motionManager.startBatteryMonitoring()
         bluetoothManager.startMonitoring()
