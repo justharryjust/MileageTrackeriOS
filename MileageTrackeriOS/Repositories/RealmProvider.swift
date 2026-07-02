@@ -11,7 +11,7 @@ final class RealmProvider {
     private(set) var realm: Realm
 
     /// Current schema version — bump this whenever the model changes and add a migration block.
-    static let schemaVersion: UInt64 = 10
+    static let schemaVersion: UInt64 = 11
 
     private init() {
         let config = Realm.Configuration(
@@ -58,6 +58,8 @@ final class RealmProvider {
                 //            OdometerReading.isSyncedToCloud (Bool, default false),
                 //            OdometerReading.updatedAt (Date, default Date())
                 //            All new fields with defaults — no migration action needed.
+                // v10 -> v11: added OdometerReading.createdAt (Date, default Date())
+                //            New field with default — no migration action needed.
             },
             objectTypes: [
                 UserProfile.self,

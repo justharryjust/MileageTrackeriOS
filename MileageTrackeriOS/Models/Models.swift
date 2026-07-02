@@ -414,6 +414,7 @@ final class OdometerReading: Object, ObjectKeyIdentifiable {
     @Persisted var tripId: String?
     @Persisted var notes: String?
     @Persisted var source: OdometerSource        = .manual
+    @Persisted var createdAt: Date                = Date()
     /// CloudKit sync tracking — set to false on local mutation, true after successful upload.
     @Persisted var isSyncedToCloud: Bool          = false
     /// Last modification timestamp for conflict resolution (last-write-wins).

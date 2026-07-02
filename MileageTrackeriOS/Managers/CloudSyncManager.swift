@@ -7,6 +7,7 @@
 //
 // The manager debounces local changes: a sync is scheduled 5 seconds after
 // the last local mutation so that rapid writes batch into a single operation.
+// First-time initialisation also schedules an immediate sync.
 
 import Foundation
 import CloudKit
@@ -68,6 +69,7 @@ protocol CloudKitRecordConvertible {
 
 @Observable
 final class CloudSyncManager {
+    private let container: CKContainer
     private let database: CKDatabase
     private let realm: Realm
 
@@ -89,28 +91,74 @@ final class CloudSyncManager {
     /// Whether the user has an active iCloud account. Checked before every sync.
     private var accountStatus: CKAccountStatus = .couldNotDetermine
 
+    // Deletion tracking — snapshots of IDs known to exist in Realm.
+    // When a collection notification fires, we diff the current IDs against
+    // the snapshot to detect deletions and propagate them to CloudKit.
+    private var knownTripIDs: Set<String> = []
+    private var knownVehicleIDs: Set<String> = []
+    private var knownOdometerIDs: Set<String> = []
+    /// IDs of locally-deleted objects whose CKRecords need to be removed.
+    private var pendingDeleteRecordIDs: Set<String> = []
+    /// Timestamp of last account status check -- used to avoid re-checking on every sync.
+    private var lastAccountStatusCheck: Date = .distantPast
+
     init(realm: Realm, containerIdentifier: String = "iCloud.com.harryjust.MileageTrackeriOS") {
         self.realm = realm
-        let container = CKContainer(identifier: containerIdentifier)
+        self.container = CKContainer(identifier: containerIdentifier)
         self.database = container.privateCloudDatabase
-        checkAccountStatus(for: container)
+        checkAccountStatus()
         observeRealm()
+        scheduleSync() // First-time sync on init
     }
 
     // MARK: - Account Status
 
-    private func checkAccountStatus(for container: CKContainer) {
+    private func checkAccountStatus() {
         container.accountStatus { [weak self] status, error in
             DispatchQueue.main.async {
+                guard let self else { return }
                 if let error {
-                    self?.syncStatus = .error("iCloud account check failed: \(error.localizedDescription)")
+                    self.syncStatus = .error("iCloud account check failed: \(error.localizedDescription)")
                     return
                 }
-                self?.accountStatus = status
+                self.accountStatus = status
                 if status == .available {
-                    self?.syncStatus = .idle
+                    self.syncStatus = .idle
                 } else {
-                    self?.syncStatus = .error("iCloud account not available (status: \(status.rawValue))")
+                    self.syncStatus = .error("iCloud account not available (status: \(status.rawValue))")
+                }
+            }
+        }
+    }
+
+
+    /// Re-checks account status if the cached value is stale (>60s old).
+    /// Calls completion with true if the account is available, false otherwise.
+    private func refreshAccountStatusIfNeeded(completion: @escaping (Bool) -> Void) {
+        if accountStatus == .available, Date().timeIntervalSince(lastAccountStatusCheck) < 60 {
+            completion(true)
+            return
+        }
+
+        container.accountStatus { [weak self] status, error in
+            DispatchQueue.main.async {
+                guard let self else {
+                    completion(false)
+                    return
+                }
+                self.lastAccountStatusCheck = Date()
+                if let error {
+                    self.syncStatus = .error("iCloud account check failed: \(error.localizedDescription)")
+                    completion(false)
+                    return
+                }
+                self.accountStatus = status
+                if status == .available {
+                    self.syncStatus = .idle
+                    completion(true)
+                } else {
+                    self.syncStatus = .error("iCloud account not available (status: \(status.rawValue))")
+                    completion(false)
                 }
             }
         }
@@ -121,31 +169,72 @@ final class CloudSyncManager {
     private func observeRealm() {
         // Observe trips
         let trips = realm.objects(Trip.self)
+        knownTripIDs = Set(trips.map { $0.id })
         tripObserver = trips.observe { [weak self] changes in
-            guard case .update(let results, _, let insertions, let modifications) = changes else { return }
-            let count = insertions.count + modifications.count
-            if count > 0 {
-                self?.scheduleSync()
+            guard let self else { return }
+            guard case .update(let results, _, _, _) = changes else { return }
+            let newIDs = Set(results.map { $0.id })
+
+            // Detect and track deletions by diffing snapshot vs current state
+            let deletedIDs = knownTripIDs.subtracting(newIDs)
+            if !deletedIDs.isEmpty {
+                TripLogger.shared.log("CloudSync: \(deletedIDs.count) trips deleted locally", category: .system)
+                pendingDeleteRecordIDs.formUnion(deletedIDs)
+            }
+
+            knownTripIDs = newIDs
+
+            // Count insertions/modifications from the change set; schedule sync if anything changed
+            if case .update(_, _, let insertions, let modifications) = changes, insertions.count + modifications.count > 0 {
+                scheduleSync()
+            } else if !deletedIDs.isEmpty {
+                scheduleSync()
             }
         }
 
         // Observe vehicles
         let vehicles = realm.objects(Vehicle.self)
+        knownVehicleIDs = Set(vehicles.map { $0.id })
         vehicleObserver = vehicles.observe { [weak self] changes in
-            guard case .update(_, _, let insertions, let modifications) = changes else { return }
-            let count = insertions.count + modifications.count
-            if count > 0 {
-                self?.scheduleSync()
+            guard let self else { return }
+            guard case .update(let results, _, _, _) = changes else { return }
+            let newIDs = Set(results.map { $0.id })
+
+            let deletedIDs = knownVehicleIDs.subtracting(newIDs)
+            if !deletedIDs.isEmpty {
+                TripLogger.shared.log("CloudSync: \(deletedIDs.count) vehicles deleted locally", category: .system)
+                pendingDeleteRecordIDs.formUnion(deletedIDs)
+            }
+
+            knownVehicleIDs = newIDs
+
+            if case .update(_, _, let insertions, let modifications) = changes, insertions.count + modifications.count > 0 {
+                scheduleSync()
+            } else if !deletedIDs.isEmpty {
+                scheduleSync()
             }
         }
 
         // Observe odometer readings
         let readings = realm.objects(OdometerReading.self)
+        knownOdometerIDs = Set(readings.map { $0.id })
         odometerObserver = readings.observe { [weak self] changes in
-            guard case .update(_, _, let insertions, let modifications) = changes else { return }
-            let count = insertions.count + modifications.count
-            if count > 0 {
-                self?.scheduleSync()
+            guard let self else { return }
+            guard case .update(let results, _, _, _) = changes else { return }
+            let newIDs = Set(results.map { $0.id })
+
+            let deletedIDs = knownOdometerIDs.subtracting(newIDs)
+            if !deletedIDs.isEmpty {
+                TripLogger.shared.log("CloudSync: \(deletedIDs.count) odometer readings deleted locally", category: .system)
+                pendingDeleteRecordIDs.formUnion(deletedIDs)
+            }
+
+            knownOdometerIDs = newIDs
+
+            if case .update(_, _, let insertions, let modifications) = changes, insertions.count + modifications.count > 0 {
+                scheduleSync()
+            } else if !deletedIDs.isEmpty {
+                scheduleSync()
             }
         }
     }
@@ -172,53 +261,52 @@ final class CloudSyncManager {
     }
 
     /// Forces an immediate sync, cancelling any pending debounce.
+    /// Dispatches to the background sync queue so it never blocks the caller.
     func syncNow() {
         pendingSyncWorkItem?.cancel()
-        executeSync()
+        syncQueue.async { [weak self] in
+            self?.executeSync()
+        }
     }
 
     // MARK: - Main Sync
 
+    /// Executes a full sync cycle: upload local changes, then download remote changes.
+    /// Uses async callback chaining instead of DispatchGroup.wait() to avoid
+    /// blocking the sync queue (which would deadlock with notify-dispatch patterns).
     private func executeSync() {
         guard !isSyncing else { return }
         guard accountStatus == .available else { return }
 
+        // Refresh account status if stale (user may have signed in/out since last check)
+        self.lastAccountStatusCheck = Date()
+
         isSyncing = true
 
-        let group = DispatchGroup()
-
-        // 1. Upload local changes
-        var uploadCount = 0
-        group.enter()
-        uploadDirtyObjects { count in
-            uploadCount = count
-            group.leave()
-        }
-
-        group.wait()
-
-        if uploadCount > 0 {
-            DispatchQueue.main.async {
-                self.syncStatus = .idle
-                self.lastSyncAt = Date()
-            }
-        }
-
-        // 2. Download remote changes
-        DispatchQueue.main.async {
-            self.syncStatus = .downloading
-        }
-
-        group.enter()
-        downloadRemoteChanges {
-            group.leave()
-        }
-
-        group.notify(queue: .main) { [weak self] in
+        // 1. Upload local changes (including deletions)
+        uploadDirtyObjects { [weak self] uploadCount in
             guard let self else { return }
-            self.isSyncing = false
-            self.syncStatus = .idle
-            self.lastSyncAt = Date()
+
+            if uploadCount > 0 {
+                DispatchQueue.main.async {
+                    self.syncStatus = .idle
+                    self.lastSyncAt = Date()
+                }
+            }
+
+            // 2. Download remote changes
+            DispatchQueue.main.async {
+                self.syncStatus = .downloading
+            }
+
+            self.downloadRemoteChanges {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.isSyncing = false
+                    self.syncStatus = .idle
+                    self.lastSyncAt = Date()
+                }
+            }
         }
     }
 
@@ -226,6 +314,7 @@ final class CloudSyncManager {
 
     private func uploadDirtyObjects(completion: @escaping (Int) -> Void) {
         var records: [CKRecord] = []
+        var recordIDsToDelete: [CKRecord.ID] = []
 
         // Collect dirty trips
         let dirtyTrips = realm.objects(Trip.self).where { $0.isSyncedToCloud == false }
@@ -239,7 +328,15 @@ final class CloudSyncManager {
         let dirtyReadings = realm.objects(OdometerReading.self).where { $0.isSyncedToCloud == false }
         records.append(contentsOf: dirtyReadings.map { $0.toCloudRecord() })
 
-        guard !records.isEmpty else {
+        // Collect pending deletion IDs (locally-deleted objects to propagate to CloudKit)
+        let deletionIDs = pendingDeleteRecordIDs
+        pendingDeleteRecordIDs.removeAll()
+        for objectID in deletionIDs {
+            let recordID = CKRecord.ID(recordName: objectID)
+            recordIDsToDelete.append(recordID)
+        }
+
+        guard !records.isEmpty || !recordIDsToDelete.isEmpty else {
             DispatchQueue.main.async {
                 self.syncStatus = .idle
             }
@@ -247,11 +344,12 @@ final class CloudSyncManager {
             return
         }
 
+        let totalCount = records.count
         DispatchQueue.main.async {
-            self.syncStatus = .uploading(records.count)
+            self.syncStatus = .uploading(totalCount)
         }
 
-        // Batch upload in chunks of 200 (CloudKit limit is 400)
+        // CloudKit limit is 400 per operation; we use 200 for safety.
         let chunks = stride(from: 0, to: records.count, by: 200).map {
             Array(records[$0..<min($0 + 200, records.count)])
         }
@@ -259,30 +357,62 @@ final class CloudSyncManager {
         let uploadGroup = DispatchGroup()
         var allSucceeded = true
 
-        for chunk in chunks {
+        if chunks.isEmpty && !recordIDsToDelete.isEmpty {
+            // Only deletions to send, no records to save
             uploadGroup.enter()
-            let operation = CKModifyRecordsOperation(recordsToSave: chunk, recordIDsToDelete: nil)
+            let operation = CKModifyRecordsOperation(recordsToSave: nil, recordIDsToDelete: recordIDsToDelete)
             operation.savePolicy = .allKeys
             operation.qualityOfService = .utility
 
             operation.modifyRecordsResultBlock = { result in
-                switch result {
-                case .success:
-                    break
-                case .failure(let error):
-                    print("[CloudSync] Upload error: \(error.localizedDescription)")
+                if case .failure(let error) = result {
+                    TripLogger.shared.log("[CloudSync] Deletion upload error: \(error.localizedDescription)", category: .error)
                     allSucceeded = false
                 }
                 uploadGroup.leave()
             }
 
             database.add(operation)
+        } else {
+            for chunk in chunks {
+                uploadGroup.enter()
+                let operation = CKModifyRecordsOperation(
+                    recordsToSave: chunk,
+                    recordIDsToDelete: nil
+                )
+                operation.savePolicy = .allKeys
+                operation.qualityOfService = .utility
+
+                operation.modifyRecordsResultBlock = { result in
+                    if case .failure(let error) = result {
+                        TripLogger.shared.log("[CloudSync] Upload error: \(error.localizedDescription)", category: .error)
+                        allSucceeded = false
+                    }
+                    uploadGroup.leave()
+                }
+
+                database.add(operation)
+            }
+
+            // If there are also deletions, send them in the last chunk
+            if !recordIDsToDelete.isEmpty {
+                uploadGroup.enter()
+                let deleteOp = CKModifyRecordsOperation(recordsToSave: nil, recordIDsToDelete: recordIDsToDelete)
+                deleteOp.qualityOfService = .utility
+                deleteOp.modifyRecordsResultBlock = { result in
+                    if case .failure(let error) = result {
+                        TripLogger.shared.log("[CloudSync] Deletion error: \(error.localizedDescription)", category: .error)
+                        allSucceeded = false
+                    }
+                    uploadGroup.leave()
+                }
+                database.add(deleteOp)
+            }
         }
 
         uploadGroup.notify(queue: self.syncQueue) { [weak self] in
             guard let self else { return }
             if allSucceeded {
-                // Mark all as synced
                 try? self.realm.write {
                     for trip in dirtyTrips {
                         trip.isSyncedToCloud = true
@@ -295,7 +425,7 @@ final class CloudSyncManager {
                     }
                 }
             }
-            completion(records.count)
+            completion(totalCount)
         }
     }
 
@@ -359,13 +489,13 @@ final class CloudSyncManager {
             switch result {
             case .success(let cursor):
                 if let cursor {
-                    // There are more records — fetch next page
+                    // There are more records — fetch next page using self.database
                     let nextOp = CKQueryOperation(cursor: cursor)
                     nextOp.qualityOfService = .utility
                     nextOp.resultsLimit = 200
                     nextOp.recordMatchedBlock = operation.recordMatchedBlock
                     nextOp.queryResultBlock = operation.queryResultBlock
-                    CKContainer.default().privateCloudDatabase.add(nextOp)
+                    self.database.add(nextOp)
                 } else {
                     completion(allRecords, nil)
                 }
@@ -414,7 +544,7 @@ final class CloudSyncManager {
         guard let object = record.toRealmObject(type: T.self) else { return }
 
         // Ensure the object has the sync flag
-        if var syncable = object as? SyncableObject {
+        if let syncable = object as? SyncableObject {
             syncable.isSyncedToCloud = true
             syncable.updatedAt = record.modificationDate ?? Date()
         }
@@ -493,6 +623,7 @@ final class CloudSyncManager {
                    let source = OdometerSource(rawValue: sourceRaw) {
                     reading.source = source
                 }
+                reading.createdAt = record["createdAt"] as? Date ?? reading.createdAt
             }
         }
     }
@@ -563,6 +694,7 @@ extension OdometerReading {
         record["tripId"] = tripId
         record["notes"] = notes
         record["source"] = source.rawValue
+        record["createdAt"] = createdAt
         record["updatedAt"] = updatedAt
 
         return record
@@ -608,12 +740,9 @@ extension CKRecord {
             trip.createdAt = self["createdAt"] as? Date ?? Date()
             trip.updatedAt = self["updatedAt"] as? Date ?? Date()
             trip.isSyncedToCloud = true
-            // Set the Realm id to the record name
             return trip as? T
         } else if type == Vehicle.self {
             let vehicle = Vehicle()
-            // Vehicle.init sets a UUID but we need to override it
-            // Use a trick: set via the id property after init
             vehicle.id = recordName
             vehicle.name = self["name"] as? String ?? ""
             vehicle.registration = self["registration"] as? String ?? ""
@@ -643,6 +772,7 @@ extension CKRecord {
             if let raw = self["source"] as? String, let s = OdometerSource(rawValue: raw) {
                 reading.source = s
             }
+            reading.createdAt = self["createdAt"] as? Date ?? Date()
             reading.updatedAt = self["updatedAt"] as? Date ?? Date()
             reading.isSyncedToCloud = true
             return reading as? T
