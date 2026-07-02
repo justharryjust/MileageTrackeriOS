@@ -1183,10 +1183,17 @@ struct OnboardingRegionValidationTests {
         #expect(vm.isRegionValid == true)
     }
 
-    @Test("isRegionValid is true when regionCode is Other (--)")
-    func otherRegionIsValid() throws {
+    @Test("isRegionValid is true when regionCode is US")
+    func usRegionIsValid() throws {
         let vm = OnboardingViewModel()
-        vm.regionCode = "--"
+        vm.regionCode = "US"
+        #expect(vm.isRegionValid == true)
+    }
+
+    @Test("isRegionValid is true when regionCode is unsupported code (falls back to Other)")
+    func unsupportedRegionIsValid() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "GB"
         #expect(vm.isRegionValid == true)
     }
 
@@ -1211,11 +1218,110 @@ struct OnboardingRegionValidationTests {
         #expect(vm.jurisdiction == .other)
     }
 
-    @Test("jurisdiction is .other when regionCode is -- (explicit Other)")
+    @Test("jurisdiction is .unitedStates when regionCode is US")
+    func usJurisdiction() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "US"
+        #expect(vm.jurisdiction == .unitedStates)
+    }
+
+    @Test("jurisdiction is .canada when regionCode is CA")
+    func caJurisdiction() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "CA"
+        #expect(vm.jurisdiction == .canada)
+    }
+
+    @Test("jurisdiction is .germany when regionCode is DE")
+    func deJurisdiction() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "DE"
+        #expect(vm.jurisdiction == .germany)
+    }
+
+    @Test("jurisdiction is .belgium when regionCode is BE")
+    func beJurisdiction() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "BE"
+        #expect(vm.jurisdiction == .belgium)
+    }
+
+    @Test("jurisdiction is .netherlands when regionCode is NL")
+    func nlJurisdiction() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "NL"
+        #expect(vm.jurisdiction == .netherlands)
+    }
+
+    @Test("jurisdiction is .switzerland when regionCode is CH")
+    func chJurisdiction() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "CH"
+        #expect(vm.jurisdiction == .switzerland)
+    }
+
+    @Test("jurisdiction is .austria when regionCode is AT")
+    func atJurisdiction() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "AT"
+        #expect(vm.jurisdiction == .austria)
+    }
+
+    @Test("jurisdiction is .sweden when regionCode is SE")
+    func seJurisdiction() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "SE"
+        #expect(vm.jurisdiction == .sweden)
+    }
+
+    @Test("jurisdiction is .norway when regionCode is NO")
+    func noJurisdiction() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "NO"
+        #expect(vm.jurisdiction == .norway)
+    }
+
+    @Test("jurisdiction is .denmark when regionCode is DK")
+    func dkJurisdiction() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "DK"
+        #expect(vm.jurisdiction == .denmark)
+    }
+
+    @Test("jurisdiction is .finland when regionCode is FI")
+    func fiJurisdiction() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "FI"
+        #expect(vm.jurisdiction == .finland)
+    }
+
+    @Test("jurisdiction is .spain when regionCode is ES")
+    func esJurisdiction() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "ES"
+        #expect(vm.jurisdiction == .spain)
+    }
+
+    @Test("jurisdiction is .southAfrica when regionCode is ZA")
+    func zaJurisdiction() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "ZA"
+        #expect(vm.jurisdiction == .southAfrica)
+    }
+
+    @Test("jurisdiction is .other when regionCode is unsupported ISO code")
+    func unsupportedJurisdictionIsOther() throws {
+        let vm = OnboardingViewModel()
+        vm.regionCode = "GB"
+        #expect(vm.jurisdiction == .other)
+    }
+
+    @Test("jurisdiction is .other when regionCode is other (rawValue match)")
     func explicitOtherJurisdiction() throws {
         let vm = OnboardingViewModel()
-        vm.regionCode = "--"
+        vm.regionCode = "other"
         #expect(vm.jurisdiction == .other)
+    }
 }
 
 // MARK: - ═══════════════════════════════
