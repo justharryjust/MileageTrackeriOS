@@ -152,3 +152,4 @@ struct TripRepositoryDeleteTests {
         #expect(remaining.count == 1, "Only one trip should remain")
         #expect(remaining.first?.id != firstTrip.id, "Remaining trip should not be the deleted one")
     }
+}
