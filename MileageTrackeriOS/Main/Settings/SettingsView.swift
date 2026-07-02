@@ -2,8 +2,6 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppState.self) private var appState
-    @State private var isSharingDebugData = false
-    @State private var debugDataURL: URL?
 
     /// Compact summary for the Places row: "Home · Work · 3 others" or "Add home & work for commute auto-tag".
     private var placesSummary: String {
@@ -16,99 +14,81 @@ struct SettingsView: View {
         if saved.contains(where: { $0.isWork }) { parts.append("Work") }
         let others = saved.filter { !$0.isHome && !$0.isWork }.count
         if others > 0 { parts.append("\(others) other\(others == 1 ? "" : "s")") }
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: " \u{00B7} ")
+    }
+
+    private var notificationSummary: String {
+        let status = appState.notificationManager.authorizationStatus
+        if status == .denied { return "Disabled" }
+        if status == .notDetermined { return "Not set up" }
+        let enabled = [NotificationManager.tripDetectedEnabled,
+                       NotificationManager.odometerReminderEnabled,
+                       NotificationManager.weeklySummaryEnabled].filter { $0 }.count
+        return "\(enabled) of 3 on"
+    }
+
+    private var trackingSummary: String {
+        let schedule = appState.profileRepo.trackingSchedule
+        let enabledDays = schedule.filter { $0.isEnabled }.count
+        if enabledDays == 0 { return "Off" }
+        return "\(enabledDays) day\(enabledDays == 1 ? "" : "s")"
+    }
+
+    private var dataSummary: String {
+        let total = appState.tripRepo.allTrips.count
+        let business = appState.tripRepo.businessTrips.count
+        if total == 0 { return "No trips" }
+        return "\(total) total, \(business) business"
     }
 
     var body: some View {
         NavigationStack {
             List {
-                // MARK: Subscription
                 Section {
-                    subscriptionRow
-                }
-
-                Section("Tracking") {
                     NavigationLink {
-                        TrackingHoursView()
+                        SubscriptionDetailView()
                             .environment(appState)
                     } label: {
-                        Label("Tracking Hours", systemImage: "clock")
+                        subscriptionLabel
                     }
-
-                    Toggle(isOn: Binding(
-                        get: { LiveActivityManager.isEnabled },
-                        set: { UserDefaults.standard.set($0, forKey: LiveActivityManager.liveActivityEnabledKey) }
-                    )) {
-                        Label("Live Activity", systemImage: "car.window.right")
-                    }
-                    .tint(Color.mtGreen)
                 }
 
-                Section("Notifications") {
-                    let status = appState.notificationManager.authorizationStatus
-                    if status == .denied || status == .notDetermined {
-                        Button {
-                            if status == .denied {
-                                appState.notificationManager.openSystemSettings()
-                            } else {
-                                appState.notificationManager.requestPermission()
-                            }
-                        } label: {
-                            Label(status == .denied ? "Enable in Settings" : "Enable Notifications", systemImage: "bell.badge")
-                        }
+                Section("Tracking & Notifications") {
+                    NavigationLink {
+                        TrackingSettingsView()
+                            .environment(appState)
+                    } label: {
+                        Label("Tracking", systemImage: "clock")
+                        Spacer()
+                        Text(trackingSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
-                    Toggle(isOn: Binding(
-                        get: { NotificationManager.tripDetectedEnabled },
-                        set: { NotificationManager.tripDetectedEnabled = $0 }
-                    )) {
-                        Label("Trip Started", systemImage: "car.fill")
+                    NavigationLink {
+                        NotificationSettingsView()
+                            .environment(appState)
+                    } label: {
+                        Label("Notifications", systemImage: "bell.fill")
+                        Spacer()
+                        Text(notificationSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .tint(Color.mtGreen)
-
-                    Toggle(isOn: Binding(
-                        get: { NotificationManager.odometerReminderEnabled },
-                        set: { newValue in
-                            NotificationManager.odometerReminderEnabled = newValue
-                            let vehicleName = appState.profileRepo.defaultVehicle?.name ?? ""
-                            appState.notificationManager.odometerToggleChanged(isEnabled: newValue, vehicleName: vehicleName)
-                        }
-                    )) {
-                        Label("Odometer Reminder", systemImage: "speedometer")
-                    }
-                    .tint(Color.mtGreen)
-
-                    Toggle(isOn: Binding(
-                        get: { NotificationManager.weeklySummaryEnabled },
-                        set: { newValue in
-                            NotificationManager.weeklySummaryEnabled = newValue
-                            appState.notificationManager.weeklySummaryToggleChanged(isEnabled: newValue)
-                        }
-                    )) {
-                        Label("Weekly Summary", systemImage: "chart.bar.fill")
-                    }
-                    .tint(Color.mtGreen)
                 }
 
                 Section("Profile") {
-
                     NavigationLink {
                         ProfileEditView()
                             .environment(appState)
                     } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Edit Profile")
-                                    .font(.system(size: 15, weight: .medium))
-                                    .foregroundStyle(Color.mtTextPrimary)
-                                Text("\(appState.profileRepo.jurisdiction.displayName) · \(appState.profileRepo.claimMethod.displayName) · \(appState.profileRepo.distanceUnit.displayName)")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(Color.mtTextSub)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(Color.mtBorder)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Edit Profile")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(Color.mtTextPrimary)
+                            Text("\(appState.profileRepo.jurisdiction.displayName) \u{00B7} \(appState.profileRepo.claimMethod.displayName) \u{00B7} \(appState.profileRepo.distanceUnit.displayName)")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.mtTextSub)
                         }
                     }
 
@@ -152,7 +132,7 @@ struct SettingsView: View {
                                     Text(v.name.isEmpty ? v.registration : v.name)
                                         .font(.system(size: 15, weight: .medium))
                                         .foregroundStyle(Color.mtTextPrimary)
-                                    Text("\(v.registration) · \(v.fuelType.displayName)")
+                                    Text("\(v.registration) \u{00B7} \(v.fuelType.displayName)")
                                         .font(.system(size: 12))
                                         .foregroundStyle(Color.mtTextSub)
                                 }
@@ -193,121 +173,70 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("Reporting") {
+                Section("Reports & Data") {
                     NavigationLink {
-                        ReportExportView(startDate: Date().addingTimeInterval(-30 * 24 * 3600), endDate: Date())
+                        ReportingHubView()
                             .environment(appState)
                     } label: {
-                        Label("Mileage Report", systemImage: "doc.text.fill")
+                        Label("Reporting", systemImage: "doc.text.fill")
+                        Spacer()
+                        Text("\(appState.tripRepo.businessTrips.count) trips")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
                     NavigationLink {
-                        OdometerLogView()
+                        DataSummaryView()
                             .environment(appState)
                     } label: {
-                        Label("Odometer Log", systemImage: "speedometer")
-                    }
-
-                    NavigationLink {
-                        MethodInfoView()
-                            .environment(appState)
-                    } label: {
-                        Label("Which method to choose?", systemImage: "questionmark.circle")
+                        Label("Data", systemImage: "chart.bar.fill")
+                        Spacer()
+                        Text(dataSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
-                Section("Data") {
-                    LabeledContent("Total trips", value: "\(appState.tripRepo.allTrips.count)")
-                    LabeledContent("Business trips", value: "\(appState.tripRepo.businessTrips.count)")
-                    LabeledContent("Needs review", value: "\(appState.tripRepo.uncategorisedTrips.count)")
-                }
-
-                // Debug / Diagnostics
-                Section("Help") {
-                    NavigationLink {
-                        TipsView()
-                    } label: {
-                        Label("Tips for Best Results", systemImage: "lightbulb.fill")
-                    }
-                }
-
-                Section("Diagnostics") {
-                    NavigationLink {
-                        DebugLogView()
-                    } label: {
-                        Label("Debug Log", systemImage: "terminal")
-                    }
-
-                    NavigationLink {
-                        TripRecorderDebugView()
-                    } label: {
-                        Label("Trip Recorder State", systemImage: "waveform")
-                    }
-
-                    NavigationLink {
-                        DebugExtensionsView()
-                    } label: {
-                        Label("Potential Extensions", systemImage: "lightbulb")
-                    }
-
-                    Button {
-                        debugDataURL = DebugDataCollector.collectDebugData(appState: appState)
-                        isSharingDebugData = true
-                    } label: {
-                        Label("Share Debug Data", systemImage: "ladybug")
-                    }
-                }
-
-                // Danger zone
                 Section {
-                    Button("Reset Onboarding", role: .destructive) {
-                        appState.profileRepo.hasCompletedOnboarding = false
+                    NavigationLink {
+                        DiagnosticsHubView()
+                            .environment(appState)
+                    } label: {
+                        Label("Help & Diagnostics", systemImage: "wrench.fill")
                     }
                 }
             }
             .navigationTitle("Settings")
-            .sheet(isPresented: $isSharingDebugData) {
-                if let url = debugDataURL {
-                    ShareSheet(items: [url])
-                }
-            }
-            .sheet(isPresented: $showPaywall) {
-                PaywallView()
-                    .environment(appState)
-            }
         }
     }
 
-    // MARK: - Subscription Row
+    // MARK: - Subscription Label
 
-    @State private var showPaywall = false
-
-    private var subscriptionRow: some View {
+    private var subscriptionLabel: some View {
         let state = appState.subscriptionManager.subscriptionState
-        return Button {
-            showPaywall = true
-        } label: {
-            HStack {
-                Image(systemName: state.status.icon)
-                    .foregroundStyle(subscriptionIconColor(state.status))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Mileage Tracker Pro")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(Color.mtTextPrimary)
-                    Text(subscriptionStatusText(state))
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.mtTextSub)
-                }
-                Spacer()
-                if state.status != .active {
-                    Text("Upgrade")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.mtGreen)
-                } else {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.mtGreen)
-                }
+        return HStack {
+            Image(systemName: state.status.icon)
+                .foregroundStyle(subscriptionIconColor(state.status))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Mileage Tracker Pro")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Color.mtTextPrimary)
+                Text(subscriptionStatusText(state))
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.mtTextSub)
             }
+            Spacer()
+            if state.status != .active {
+                Text("Upgrade")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.mtGreen)
+            } else {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Color.mtGreen)
+            }
+            Image(systemName: "chevron.right")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.mtBorder)
         }
     }
 
@@ -324,18 +253,18 @@ struct SettingsView: View {
         switch state.status {
         case .trial:
             if let days = state.daysRemainingInTrial {
-                return "Free trial · \(days) day\(days == 1 ? "" : "s") remaining"
+                return "Free trial \u{00B7} \(days) day\(days == 1 ? "" : "s") remaining"
             }
             return "Free trial"
         case .active:
             return "Active"
         case .gracePeriod:
             if let days = state.daysRemainingInGrace {
-                return "Grace period · \(days) day\(days == 1 ? "" : "s") remaining"
+                return "Grace period \u{00B7} \(days) day\(days == 1 ? "" : "s") remaining"
             }
             return "Grace period"
         case .expired:
-            return "Expired · Subscribe to regain access"
+            return "Expired \u{00B7} Subscribe to regain access"
         }
     }
 }
