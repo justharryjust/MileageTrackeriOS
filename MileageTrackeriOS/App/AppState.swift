@@ -120,6 +120,21 @@ final class AppState {
         // in-flight trips via lock-screen / banner actions.
         notificationManager.registerRecoveryActions()
 
+        // Wire recovery notification actions to TripRecorder
+        notificationManager.onRecoveryAction = { [weak self] actionId, tripId in
+            guard let self else { return }
+            switch actionId {
+            case NotificationManager.recoveryActionResume:
+                self.tripRecorder.handleRecoveryResume(tripId: tripId)
+            case NotificationManager.recoveryActionSaveAsIs:
+                self.tripRecorder.handleRecoverySaveAsIs(tripId: tripId)
+            case NotificationManager.recoveryActionDiscard:
+                self.tripRecorder.handleRecoveryDiscard(tripId: tripId)
+            default:
+                TripLogger.shared.log("Unknown recovery action: \(actionId)", category: .error)
+            }
+        }
+
         TripLogger.shared.log("AppState initialised -- Realm ready", category: .system)
 
         // If onboarding is already complete, start tracking immediately

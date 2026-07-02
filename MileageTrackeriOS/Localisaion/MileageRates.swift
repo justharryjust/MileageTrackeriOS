@@ -49,9 +49,12 @@ struct TaxYear {
 extension Jurisdiction {
     var taxYear: TaxYear {
         switch self {
-        case .newZealand: return TaxYear(startMonth: 4, startDay: 1, endMonth: 3, endDay: 31)   // 1 Apr – 31 Mar
-        case .australia:  return TaxYear(startMonth: 7, startDay: 1, endMonth: 6, endDay: 30)   // 1 Jul – 30 Jun
-        case .other:      return TaxYear(startMonth: 4, startDay: 6, endMonth: 4, endDay: 5)    // UK: 6 Apr – 5 Apr
+        case .newZealand:  return TaxYear(startMonth: 4, startDay: 1, endMonth: 3, endDay: 31)   // 1 Apr – 31 Mar
+        case .australia:   return TaxYear(startMonth: 7, startDay: 1, endMonth: 6, endDay: 30)   // 1 Jul – 30 Jun
+        case .belgium:     return TaxYear(startMonth: 7, startDay: 1, endMonth: 6, endDay: 30)   // 1 Jul – 30 Jun
+        case .southAfrica: return TaxYear(startMonth: 3, startDay: 1, endMonth: 2, endDay: 28)   // 1 Mar – 28/29 Feb
+        case .other:       return TaxYear(startMonth: 4, startDay: 6, endMonth: 4, endDay: 5)    // UK: 6 Apr – 5 Apr
+        default:           return TaxYear(startMonth: 1, startDay: 1, endMonth: 12, endDay: 31)  // calendar year
         }
     }
 
@@ -60,75 +63,321 @@ extension Jurisdiction {
         switch self {
         case .newZealand: return 0        // NZ has no cap — rate reduces via tiers
         case .australia:  return 5_000    // ATO caps at 5,000 km per year
+        case .austria:    return 30_000   // BMF caps the flat Kilometergeld rate at 30,000 km per year
         case .other:      return 0        // UK has no cap — rate reduces via tiers
+        default:          return 0
         }
     }
 }
 
 // MARK: - Official Rates
+//
+// Each jurisdiction is its own top-level constant rather than one entry in a single
+// giant array literal — with 16 countries the combined nested-`.init` expression made
+// the type checker time out ("unable to type-check this expression in reasonable
+// time"). Keep new entries as separate `private let`s and just list them below.
+
+private let newZealandRate: OfficalMileageRate = .init(
+    countryCode: "NZ",
+    defaultDistanceUnit: .kilometres,
+    mileageRates: [
+        .init(
+            name: "Petrol",
+            fuelType: [.petrol],
+            thresholds: [
+                .init(centsPerKm: 120, lowerBound: 0, upperBound: 14_000),
+                .init(centsPerKm: 37,  lowerBound: 14_001, upperBound: Int.max),
+            ]
+        ),
+        .init(
+            name: "Diesel",
+            fuelType: [.diesel],
+            thresholds: [
+                .init(centsPerKm: 130, lowerBound: 0, upperBound: 14_000),
+                .init(centsPerKm: 38,  lowerBound: 14_001, upperBound: Int.max),
+            ]
+        ),
+        .init(
+            name: "Petrol Hybrid",
+            fuelType: [.hybrid, .pluginHybrid], // IRD doesn't publish PHEV separately; grouped with hybrid as this dataset's inference, not IRD-confirmed
+            thresholds: [
+                .init(centsPerKm: 90, lowerBound: 0, upperBound: 14_000),
+                .init(centsPerKm: 24, lowerBound: 14_001, upperBound: Int.max),
+            ]
+        ),
+        .init(
+            name: "Electric",
+            fuelType: [.electric],
+            thresholds: [
+                .init(centsPerKm: 122, lowerBound: 0, upperBound: 14_000),
+                .init(centsPerKm: 23,  lowerBound: 14_001, upperBound: Int.max),
+            ]
+        ),
+    ]
+)
+
+// ── Australia (ATO) — 2025–2026 ──────────────────────────────
+private let australiaRate: OfficalMileageRate = .init(
+    countryCode: "AU",
+    defaultDistanceUnit: .kilometres,
+    mileageRates: [
+        .init(
+            name: "All vehicles",
+            fuelType: [.petrol, .diesel, .hybrid, .pluginHybrid, .electric],
+            thresholds: [
+                .init(centsPerKm: 88, lowerBound: 0, upperBound: Int.max),
+            ]
+        ),
+    ]
+)
+
+// ── United Kingdom (HMRC) — 2026–2027 ─────────────────────────
+private let unitedKingdomRate: OfficalMileageRate = .init(
+    countryCode: "GB",
+    defaultDistanceUnit: .miles,
+    mileageRates: [
+        .init(
+            name: "Car / Van",
+            fuelType: [.petrol, .diesel, .hybrid, .pluginHybrid, .electric],
+            thresholds: [
+                .init(centsPerKm: 55, lowerBound: 0, upperBound: 10_000),   // 55p/mi first 10,000 mi (raised from 45p, 6 Apr 2026)
+                .init(centsPerKm: 25, lowerBound: 10_001, upperBound: Int.max), // 25p/mi above
+            ]
+        ),
+        .init(
+            name: "Motorcycle",
+            fuelType: [],   // matches any fuel type not covered above
+            thresholds: [
+                .init(centsPerKm: 24, lowerBound: 0, upperBound: Int.max),   // 24p/mi flat
+            ]
+        ),
+        .init(
+            name: "Bicycle",
+            fuelType: [],
+            thresholds: [
+                .init(centsPerKm: 20, lowerBound: 0, upperBound: Int.max),   // 20p/mi flat (HMRC AMAP)
+            ]
+        ),
+    ]
+)
+
+// ── United States (IRS) — 2026 ────────────────────────────
+private let unitedStatesRate: OfficalMileageRate = .init(
+    countryCode: "US",
+    defaultDistanceUnit: .miles,
+    mileageRates: [
+        .init(
+            name: "Business",
+            fuelType: [.petrol, .diesel, .hybrid, .pluginHybrid, .electric],
+            thresholds: [
+                .init(centsPerKm: 72.5, lowerBound: 0, upperBound: Int.max),
+            ]
+        ),
+    ]
+)
+
+// ── Canada (CRA) — 2026 ───────────────────────────────────
+// Note: territories (Yukon/NWT/Nunavut) get +4¢/km on both tiers (77¢/71¢) — not modeled, no region dimension.
+private let canadaRate: OfficalMileageRate = .init(
+    countryCode: "CA",
+    defaultDistanceUnit: .kilometres,
+    mileageRates: [
+        .init(
+            name: "Provinces",
+            fuelType: [.petrol, .diesel, .hybrid, .pluginHybrid, .electric],
+            thresholds: [
+                .init(centsPerKm: 73, lowerBound: 0, upperBound: 5_000),
+                .init(centsPerKm: 67, lowerBound: 5_001, upperBound: Int.max),
+            ]
+        ),
+    ]
+)
+
+// ── Germany (BMF / BRKG §5) — 2026 ────────────────────────
+// Note: Motorcycle row is currently unreachable by MileageCalculator.rateFor(fuelType:) — see known limitation.
+private let germanyRate: OfficalMileageRate = .init(
+    countryCode: "DE",
+    defaultDistanceUnit: .kilometres,
+    mileageRates: [
+        .init(
+            name: "Car",
+            fuelType: [.petrol, .diesel, .hybrid, .pluginHybrid, .electric],
+            thresholds: [.init(centsPerKm: 30, lowerBound: 0, upperBound: Int.max)]
+        ),
+        .init(
+            name: "Motorcycle",
+            fuelType: [],
+            thresholds: [.init(centsPerKm: 20, lowerBound: 0, upperBound: Int.max)]
+        ),
+    ]
+)
+
+// ── Belgium (SPF / BOSA) — Jul 2026 ───────────────────────
+// Note: revised quarterly/frequently — recheck more often than other entries.
+private let belgiumRate: OfficalMileageRate = .init(
+    countryCode: "BE",
+    defaultDistanceUnit: .kilometres,
+    mileageRates: [
+        .init(
+            name: "All vehicles",
+            fuelType: [.petrol, .diesel, .hybrid, .pluginHybrid, .electric],
+            thresholds: [.init(centsPerKm: 47.61, lowerBound: 0, upperBound: Int.max)]
+        ),
+    ]
+)
+
+// ── Netherlands (Belastingdienst) — 2026 ──────────────────
+private let netherlandsRate: OfficalMileageRate = .init(
+    countryCode: "NL",
+    defaultDistanceUnit: .kilometres,
+    mileageRates: [
+        .init(
+            name: "All vehicles",
+            fuelType: [.petrol, .diesel, .hybrid, .pluginHybrid, .electric],
+            thresholds: [.init(centsPerKm: 25, lowerBound: 0, upperBound: Int.max)]
+        ),
+    ]
+)
+
+// ── Switzerland (EFD / ESTV) — 2026 ───────────────────────
+private let switzerlandRate: OfficalMileageRate = .init(
+    countryCode: "CH",
+    defaultDistanceUnit: .kilometres,
+    mileageRates: [
+        .init(
+            name: "Car",
+            fuelType: [.petrol, .diesel, .hybrid, .pluginHybrid, .electric],
+            thresholds: [.init(centsPerKm: 75, lowerBound: 0, upperBound: Int.max)]
+        ),
+    ]
+)
+
+// ── Austria (BMF Kilometergeldverordnung) — 2026 ──────────
+// Note: 30,000km/yr cap handled via Jurisdiction.annualKilometreCap. Motorcycle row currently
+// unreachable (same known limitation). +€0.15/km passenger surcharge not modeled.
+private let austriaRate: OfficalMileageRate = .init(
+    countryCode: "AT",
+    defaultDistanceUnit: .kilometres,
+    mileageRates: [
+        .init(
+            name: "Car",
+            fuelType: [.petrol, .diesel, .hybrid, .pluginHybrid, .electric],
+            thresholds: [.init(centsPerKm: 50, lowerBound: 0, upperBound: Int.max)]
+        ),
+        .init(
+            name: "Motorcycle",
+            fuelType: [],
+            thresholds: [.init(centsPerKm: 25, lowerBound: 0, upperBound: Int.max)]
+        ),
+    ]
+)
+
+// ── Sweden (Skatteverket) — 2026 ──────────────────────────
+// 2.50 SEK/km = 250 öre/km. "Benefit car" rows (1.20/0.95 SEK/km) omitted — would need a
+// non-fuel dimension (ownership status), currently unreachable, same known limitation.
+private let swedenRate: OfficalMileageRate = .init(
+    countryCode: "SE",
+    defaultDistanceUnit: .kilometres,
+    mileageRates: [
+        .init(
+            name: "Own car",
+            fuelType: [.petrol, .diesel, .hybrid, .pluginHybrid, .electric],
+            thresholds: [.init(centsPerKm: 250, lowerBound: 0, upperBound: Int.max)]
+        ),
+    ]
+)
+
+// ── Norway (Skatteetaten) — 2026 ──────────────────────────
+// 3.50 NOK/km = 350 øre/km.
+private let norwayRate: OfficalMileageRate = .init(
+    countryCode: "NO",
+    defaultDistanceUnit: .kilometres,
+    mileageRates: [
+        .init(
+            name: "All vehicles",
+            fuelType: [.petrol, .diesel, .hybrid, .pluginHybrid, .electric],
+            thresholds: [.init(centsPerKm: 350, lowerBound: 0, upperBound: Int.max)]
+        ),
+    ]
+)
+
+// ── Denmark (Skattestyrelsen) — 2026 ──────────────────────
+// 3.94/2.28 DKK/km = 394/228 øre/km.
+private let denmarkRate: OfficalMileageRate = .init(
+    countryCode: "DK",
+    defaultDistanceUnit: .kilometres,
+    mileageRates: [
+        .init(
+            name: "All vehicles",
+            fuelType: [.petrol, .diesel, .hybrid, .pluginHybrid, .electric],
+            thresholds: [
+                .init(centsPerKm: 394, lowerBound: 0, upperBound: 20_000),
+                .init(centsPerKm: 228, lowerBound: 20_001, upperBound: Int.max),
+            ]
+        ),
+    ]
+)
+
+// ── Finland (Verohallinto) — 2026 ─────────────────────────
+private let finlandRate: OfficalMileageRate = .init(
+    countryCode: "FI",
+    defaultDistanceUnit: .kilometres,
+    mileageRates: [
+        .init(
+            name: "All vehicles",
+            fuelType: [.petrol, .diesel, .hybrid, .pluginHybrid, .electric],
+            thresholds: [.init(centsPerKm: 55, lowerBound: 0, upperBound: Int.max)]
+        ),
+    ]
+)
+
+// ── Spain (Agencia Tributaria) — 2026 ─────────────────────
+private let spainRate: OfficalMileageRate = .init(
+    countryCode: "ES",
+    defaultDistanceUnit: .kilometres,
+    mileageRates: [
+        .init(
+            name: "All vehicles",
+            fuelType: [.petrol, .diesel, .hybrid, .pluginHybrid, .electric],
+            thresholds: [.init(centsPerKm: 26, lowerBound: 0, upperBound: Int.max)]
+        ),
+    ]
+)
+
+// ── South Africa (SARS) — simplified method only — 2027 year of assessment ──
+// SARS's PRIMARY method is vehicle-value-banded (fixed+fuel+maintenance per band) —
+// needs a data-model extension, not represented here. This is only the SARS-sanctioned
+// simplified flat-rate alternative, valid only if the employee elects it and receives
+// no other travel allowance besides tolls/parking.
+private let southAfricaRate: OfficalMileageRate = .init(
+    countryCode: "ZA",
+    defaultDistanceUnit: .kilometres,
+    mileageRates: [
+        .init(
+            name: "Simplified method (opt-in, no other allowance)",
+            fuelType: [.petrol, .diesel, .hybrid, .pluginHybrid, .electric],
+            thresholds: [.init(centsPerKm: 495, lowerBound: 0, upperBound: Int.max)]
+        ),
+    ]
+)
 
 let officialRates: [OfficalMileageRate] = [
-    // ── New Zealand (IRD) — 2025–2026 ────────────────────────────
-    .init(
-        countryCode: "NZ",
-        defaultDistanceUnit: .kilometres,
-        mileageRates: [
-            .init(
-                name: "Petrol / Hybrid / EV",
-                fuelType: [.petrol, .hybrid, .pluginHybrid, .electric],
-                thresholds: [
-                    .init(centsPerKm: 104, lowerBound: 0, upperBound: 14_000),
-                    .init(centsPerKm: 34,  lowerBound: 14_001, upperBound: Int.max),
-                ]
-            ),
-            .init(
-                name: "Diesel",
-                fuelType: [.diesel],
-                thresholds: [
-                    .init(centsPerKm: 83, lowerBound: 0, upperBound: 14_000),
-                    .init(centsPerKm: 28, lowerBound: 14_001, upperBound: Int.max),
-                ]
-            ),
-        ]
-    ),
-
-    // ── Australia (ATO) — 2025–2026 ──────────────────────────────
-    .init(
-        countryCode: "AU",
-        defaultDistanceUnit: .kilometres,
-        mileageRates: [
-            .init(
-                name: "All vehicles",
-                fuelType: [.petrol, .diesel, .hybrid, .pluginHybrid, .electric],
-                thresholds: [
-                    .init(centsPerKm: 88, lowerBound: 0, upperBound: Int.max),
-                ]
-            ),
-        ]
-    ),
-
-    // ── United Kingdom (HMRC) — 2025–2026 ─────────────────────────
-    .init(
-        countryCode: "GB",
-        defaultDistanceUnit: .miles,
-        mileageRates: [
-            .init(
-                name: "Car / Van",
-                fuelType: [.petrol, .diesel, .hybrid, .pluginHybrid, .electric],
-                thresholds: [
-                    .init(centsPerKm: 45, lowerBound: 0, upperBound: 10_000),   // 45p/mi first 10,000 mi
-                    .init(centsPerKm: 25, lowerBound: 10_001, upperBound: Int.max), // 25p/mi above
-                ]
-            ),
-            .init(
-                name: "Motorcycle",
-                fuelType: [],   // matches any fuel type not covered above
-                thresholds: [
-                    .init(centsPerKm: 24, lowerBound: 0, upperBound: Int.max),   // 24p/mi flat
-                ]
-            ),
-        ]
-    ),
+    newZealandRate,
+    australiaRate,
+    unitedKingdomRate,
+    unitedStatesRate,
+    canadaRate,
+    germanyRate,
+    belgiumRate,
+    netherlandsRate,
+    switzerlandRate,
+    austriaRate,
+    swedenRate,
+    norwayRate,
+    denmarkRate,
+    finlandRate,
+    spainRate,
+    southAfricaRate,
 ]
 
 // MARK: - Rate Lookup Helpers

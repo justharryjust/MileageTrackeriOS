@@ -44,8 +44,8 @@ extension MKPolyline {
 
 private enum Heuristic {
     // Speed gates (km/h)
-    static let slcSpeedKmh          : Double = 15   // SLC wake → Suspected
-    static let promotionSpeedKmh    : Double = 15   // Suspected → Active promotion
+    static let slcSpeedKmh          : Double = 22   // SLC wake → Suspected (§4.1)
+    static let promotionSpeedKmh    : Double = 25   // Suspected → Active promotion (§4.1)
     static let pauseSpeedKmh        : Double = 5    // Active → Pausing threshold
     static let resumeSpeedKmh       : Double = 15   // Pausing → Active resume
     static let softSignalSpeedKmh   : Double = 15   // Minimum for soft engine signal
@@ -393,6 +393,77 @@ final class TripRecorder {
         }
         return total
     }
+
+    // MARK: - Notification Recovery Actions
+
+    /// Handle a Resume action from the trip recovery notification.
+    /// Re-loads the inflight trip from Realm and sets up TripRecorder as if
+    /// it were a short-gap auto-resume.
+    func handleRecoveryResume(tripId: String) {
+        guard let tripRepo, let inflight = tripRepo.trip(id: tripId), inflight.source == .inflight else {
+            logger.log("Recovery resume: trip \(tripId) not found or not inflight", category: .error)
+            return
+        }
+        let pts = tripRepo.tripPoints(for: inflight)
+        let locations = pts.map { pt in
+            CLLocation(coordinate: CLLocationCoordinate2D(latitude: pt.latitude, longitude: pt.longitude),
+                       altitude: pt.altitude, horizontalAccuracy: pt.horizontalAccuracy,
+                       verticalAccuracy: -1, course: -1, speed: pt.speedMs, timestamp: pt.recordedAt)
+        }
+        let dist = inflight.distanceMetres > 0 ? inflight.distanceMetres : recomputeDistance(from: locations)
+        collectedLocations = locations
+        tripStartedAt = inflight.startedAt
+        suspectedAt = inflight.startedAt
+        inflightTripId = inflight.id
+        activeCarKitName = inflight.carKitName
+        logger.log("Recovery: user resumed inflight trip \(tripId) - \(locations.count) pts, \(Int(dist))m", category: .trip)
+        transitionTo(.active(startedAt: inflight.startedAt, distanceMetres: dist))
+        locationManager?.startHighAccuracyUpdates()
+        motionManager?.startPedometerUpdates(from: inflight.startedAt)
+        motionManager?.startAltimeterUpdates()
+        startEvaluationTimer()
+        let vehicle = profileRepo?.defaultVehicle?.name ?? ""
+        liveActivityManager?.startTrip(vehicleName: vehicle, startedAt: inflight.startedAt)
+        liveActivityManager?.updateTrip(distanceMetres: dist, startedAt: inflight.startedAt)
+    }
+
+    /// Handle a Save-as-is action from the trip recovery notification.
+    /// Finalises the inflight trip with the data already in Realm and marks
+    /// it as pending for background re-processing.
+    func handleRecoverySaveAsIs(tripId: String) {
+        guard let tripRepo, let inflight = tripRepo.trip(id: tripId), inflight.source == .inflight else {
+            logger.log("Recovery save-as-is: trip \(tripId) not found or not inflight", category: .error)
+            return
+        }
+        let pts = tripRepo.tripPoints(for: inflight)
+        let locations = pts.map { pt in
+            CLLocation(coordinate: CLLocationCoordinate2D(latitude: pt.latitude, longitude: pt.longitude),
+                       altitude: pt.altitude, horizontalAccuracy: pt.horizontalAccuracy,
+                       verticalAccuracy: -1, course: -1, speed: pt.speedMs, timestamp: pt.recordedAt)
+        }
+        let lastFixAt = locations.last?.timestamp ?? Date()
+        let dist = inflight.distanceMetres > 0 ? inflight.distanceMetres : recomputeDistance(from: locations)
+        logger.log("Recovery: user saved-as-is trip \(tripId) - \(Int(dist))m, \(locations.count) pts", category: .trip)
+        collectedLocations = locations
+        tripStartedAt = inflight.startedAt
+        activeCarKitName = inflight.carKitName
+        inflightTripId = inflight.id
+        saveTrip(endedAt: lastFixAt, distance: dist, startedAt: inflight.startedAt)
+        reset()
+    }
+
+    /// Handle a Discard action from the trip recovery notification.
+    /// Deletes the inflight trip and its associated points from Realm.
+    func handleRecoveryDiscard(tripId: String) {
+        guard let tripRepo, let inflight = tripRepo.trip(id: tripId), inflight.source == .inflight else {
+            logger.log("Recovery discard: trip \(tripId) not found or not inflight", category: .error)
+            return
+        }
+        logger.log("Recovery: user discarded inflight trip \(tripId)", category: .trip)
+        tripRepo.discardInflightTrip(inflight)
+    }
+
+    // MARK: - Activity Handler
 
     // MARK: - Activity Handler
 
@@ -957,7 +1028,7 @@ final class TripRecorder {
             // Use the captured ID — never self.inflightTripId (already nil)
             if let inflight = capturedInflight.flatMap({ tripRepo.trip(id: $0) }) {
                 tripRepo.commitTrip(
-                    inflight, endedAt: endedAt, distanceMetres: distance,
+                    inflight, startedAt: startedAt, endedAt: endedAt, distanceMetres: distance,
                     locations: filled, startAddress: startAddress, endAddress: endAddress,
                     visitDepartureAt: capturedVisit, carKitName: capturedCarKit,
                     processingStatus: status
@@ -1020,6 +1091,24 @@ final class TripRecorder {
 
     // MARK: - Gap Filling (MKDirections road-snapping)
 
+    /// True when the direct (crow-fly) segment between `prev` and `curr` is
+    /// implausible enough that MKDirections road-snapping is warranted.
+    /// Triggers on realistic GPS dropouts (tunnel exits, cold-start delay).
+    /// Internal (`static` so callable from tests without an instance).
+    nonisolated static func shouldFillGap(from prev: CLLocation, to curr: CLLocation) -> Bool {
+        let timeDelta = curr.timestamp.timeIntervalSince(prev.timestamp)
+        let spatialGap = curr.distance(from: prev)
+        guard spatialGap > 300 && timeDelta > 20 else { return false }
+
+        // Implied speed > 54 km/h (15 m/s) — unlikely on surface streets
+        // for a multi-second gap; signals GPS dropout.
+        if spatialGap / max(timeDelta, 1) > 15 { return true }
+
+        // Large gaps (>500m) with moderate timing are implausibly straight
+        // and should be road-snapped even at lower implied speeds.
+        return spatialGap > 500
+    }
+
     /// Scans `locations` for implausible gaps and fills them with road-snapped
     /// intermediate points via MKDirections. §6.4: issues requests concurrently
     /// via TaskGroup, capped by `MKDirectionsRateLimiter` (§6.5). Falls back
@@ -1034,13 +1123,8 @@ final class TripRecorder {
         struct Gap { let index: Int; let from: CLLocation; let to: CLLocation }
         var gaps: [Gap] = []
         for i in 1..<locations.count {
-            let prev = locations[i - 1]
-            let curr = locations[i]
-            let timeDelta = curr.timestamp.timeIntervalSince(prev.timestamp)
-            let spatialGap = curr.distance(from: prev)
-            if spatialGap > 500 && timeDelta > 30 && (spatialGap / max(timeDelta, 1)) > 50 {
-                gaps.append(Gap(index: i, from: prev, to: curr))
-            }
+            guard Self.shouldFillGap(from: locations[i - 1], to: locations[i]) else { continue }
+            gaps.append(Gap(index: i, from: locations[i - 1], to: locations[i]))
         }
         guard !gaps.isEmpty else { return locations }
 
@@ -1795,7 +1879,7 @@ final class TripRecorder {
     // MARK: - Schedule gate notification helpers
 
     /// English day name for the given Calendar weekday (1=Sunday…7=Saturday).
-    static func dayName(for weekday: Int) -> String {
+    nonisolated static func dayName(for weekday: Int) -> String {
         switch weekday {
         case 1:  return "Sunday"
         case 2:  return "Monday"
@@ -1809,7 +1893,7 @@ final class TripRecorder {
     }
 
     /// Format an hour (0-23) as HH:MM.
-    static func formatHour(_ hour: Int) -> String {
+    nonisolated static func formatHour(_ hour: Int) -> String {
         String(format: "%02d:00", hour)
     }
 }
