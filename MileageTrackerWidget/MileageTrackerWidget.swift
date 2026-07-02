@@ -5,6 +5,7 @@ import ActivityKit
 @main
 struct MileageTrackerWidgetBundle: WidgetBundle {
     var body: some Widget {
+        WeeklyStatsWidget()
         MileageTrackerLiveActivity()
     }
 }

@@ -26,12 +26,6 @@ struct TripRepositoryDeleteTests {
 
     @Test("deleteTrip removes the trip from the repository")
     func deleteTripRemovesTrip() throws {
-        let config = Realm.Configuration(
-            inMemoryIdentifier: UUID().uuidString,
-            schemaVersion: RealmProvider.schemaVersion,
-            objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self, LogbookPeriod.self]
-        )
-        let realm = try Realm(configuration: config)
         let repo = TripRepository(realm: realm)
 
         let startDate = date(year: 2026, month: 6, day: 15, hour: 9)
@@ -152,3 +146,10 @@ struct TripRepositoryDeleteTests {
         #expect(remaining.count == 1, "Only one trip should remain")
         #expect(remaining.first?.id != firstTrip.id, "Remaining trip should not be the deleted one")
     }
+}
+
+// MARK: - ═══════════════════════════════════════════
+
+// MARK:   Suite 9 — Onboarding Navigation
+// MARK: ═══════════════════════════════════════════
+

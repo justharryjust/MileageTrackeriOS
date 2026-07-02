@@ -82,6 +82,27 @@ enum Jurisdiction: String, CaseIterable, PersistableEnum {
         default:          return 3
         }
     }
+
+    /// Whether the jurisdiction uses a fixed sample-period logbook (NZ/AU/CA)
+    /// or requires continuous every-trip records (all other countries).
+    /// See `.claude/research/tax-compliance-rules-by-jurisdiction.md` § cross-jurisdiction pattern #2.
+    var logbookRegime: LogbookRegime {
+        switch self {
+        case .newZealand, .australia, .canada: return .samplePeriod
+        default:                               return .continuous
+        }
+    }
+}
+
+// MARK: - Logbook Regime
+
+/// Distinguishes jurisdictions that use an expiring sample-period logbook
+/// from those that require ongoing, every-trip records.
+enum LogbookRegime {
+    /// Fixed-duration sample window (NZ: 90d/3y, AU: 84d/5y, CA: full-year or 3-month sample).
+    case samplePeriod
+    /// Continuous every-trip records required — no fixed sample window or redo interval.
+    case continuous
 }
 
 struct MileageRates {

@@ -17,6 +17,7 @@
 		DE6308C62FAB750B0051D2A5 /* MileageTrackerWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DE6308B22FAB750A0051D2A5 /* MileageTrackerWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DEA884C72F9788BF008FC71A /* RealmSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DEA884C62F9788BF008FC71A /* RealmSwift */; };
 		DEAB9B602F97B78F00B4A412 /* RealmSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DEA884C62F9788BF008FC71A /* RealmSwift */; };
+		DEAB9B612F97B78F00B4A412 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DE6308B42FAB750A0051D2A5 /* WidgetKit.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -144,6 +145,7 @@
 			files = (
 				DE6308B72FAB750A0051D2A5 /* SwiftUI.framework in Frameworks */,
 				DE6308B52FAB750A0051D2A5 /* WidgetKit.framework in Frameworks */,
+				DEAB9B602F97B78F00B4A412 /* RealmSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -152,6 +154,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				DEA884C72F9788BF008FC71A /* RealmSwift in Frameworks */,
+				DEAB9B612F97B78F00B4A412 /* WidgetKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -237,6 +240,9 @@
 				DE6308B82FAB750A0051D2A5 /* MileageTrackerWidget */,
 			);
 			name = MileageTrackerWidgetExtension;
+			packageProductDependencies = (
+				DEA884C62F9788BF008FC71A /* RealmSwift */,
+			);
 			productName = MileageTrackerWidgetExtension;
 			productReference = DE6308B22FAB750A0051D2A5 /* MileageTrackerWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -454,6 +460,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = MileageTrackerWidget/MileageTrackerWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8LNRSPGGPJ;
@@ -488,6 +495,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = MileageTrackerWidget/MileageTrackerWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8LNRSPGGPJ;
