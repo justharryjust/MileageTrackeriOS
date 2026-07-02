@@ -17,7 +17,7 @@ struct JurisdictionStep: View {
                         flag: j.flag,
                         name: j.displayName,
                         isSelected: j == .other
-                            ? Jurisdiction(rawValue: vm.regionCode) == nil
+                            ? vm.regionCode == "other" || Jurisdiction(rawValue: vm.regionCode) == nil
                             : vm.regionCode == j.rawValue,
                         onTap: { vm.regionCode = j.rawValue }
                     )
