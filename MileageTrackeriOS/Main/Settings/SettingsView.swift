@@ -268,6 +268,27 @@ struct SettingsView: View {
                         Label("Potential Extensions", systemImage: "lightbulb")
                     }
 
+#if DEBUG
+                    NavigationLink {
+                        SubscriptionOverrideView()
+                            .environment(appState)
+                    } label: {
+                        HStack {
+                            Label("Subscription Override", systemImage: "arrow.triangle.swap")
+                            Spacer()
+                            if appState.subscriptionManager.isOverrideActive {
+                                Text("DEBUG")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 2)
+                                    .background(Color.orange)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
+#endif
+
                     Button {
                         debugDataURL = DebugDataCollector.collectDebugData(appState: appState)
                         isSharingDebugData = true
@@ -302,6 +323,7 @@ struct SettingsView: View {
 
     private var subscriptionRow: some View {
         let state = appState.subscriptionManager.subscriptionState
+        let isOverride = appState.subscriptionManager.isOverrideActive
         return Button {
             showPaywall = true
         } label: {
@@ -309,12 +331,23 @@ struct SettingsView: View {
                 Image(systemName: state.status.icon)
                     .foregroundStyle(subscriptionIconColor(state.status))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Mileage Tracker Pro")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(Color.mtTextPrimary)
+                    HStack(spacing: 6) {
+                        Text("Mileage Tracker Pro")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(Color.mtTextPrimary)
+                        if isOverride {
+                            Text("DEBUG")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.orange)
+                                .clipShape(Capsule())
+                        }
+                    }
                     Text(subscriptionStatusText(state))
                         .font(.system(size: 12))
-                        .foregroundStyle(Color.mtTextSub)
+                        .foregroundStyle(isOverride ? Color.orange : Color.mtTextSub)
                 }
                 Spacer()
                 if state.status != .active {
