@@ -83,6 +83,36 @@ enum Jurisdiction: String, CaseIterable, PersistableEnum {
         }
     }
 
+    /// How many years the user must retain their mileage records to stay defensible.
+    /// Source: `.claude/research/tax-compliance-rules-by-jurisdiction.md` (Retention column).
+    var recordRetentionYears: Int {
+        switch self {
+        case .unitedStates: return 3
+        case .spain:        return 4
+        case .australia:    return 5
+        case .norway:       return 5
+        case .denmark:      return 5
+        case .southAfrica:  return 5
+        case .other:        return 5   // UK
+        case .canada:       return 6
+        case .finland:      return 6
+        case .newZealand:   return 7
+        case .austria:      return 7
+        case .sweden:       return 7
+        case .belgium:      return 7
+        case .netherlands:  return 7
+        case .germany:      return 10
+        case .switzerland:  return 10
+        }
+    }
+
+    /// The date after which the user may safely discard their mileage records
+    /// for the current tax year (assuming it was filed on time).
+    var retentionEndDate: Date {
+        let (_, taxYearEnd) = taxYear.containing(Date())
+        return Calendar.current.date(byAdding: .year, value: recordRetentionYears, to: taxYearEnd) ?? Date()
+    }
+
     /// Whether the jurisdiction uses a fixed sample-period logbook (NZ/AU/CA)
     /// or requires continuous every-trip records (all other countries).
     /// See `.claude/research/tax-compliance-rules-by-jurisdiction.md` § cross-jurisdiction pattern #2.

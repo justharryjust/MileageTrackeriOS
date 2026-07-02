@@ -24,6 +24,25 @@ final class RealmProvider {
             .containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupID)?
             .appendingPathComponent("default.realm")
 
+        // Migration: copy existing Realm from the old default location to the App Group
+        // container so existing users don't lose their data when the App Group URL is
+        // first used. Only copies when the source exists and the destination does not.
+        if let sharedURL {
+            let defaultConfig = Realm.Configuration()
+            if let oldURL = defaultConfig.fileURL,
+               oldURL != sharedURL,
+               FileManager.default.fileExists(atPath: oldURL.path),
+               !FileManager.default.fileExists(atPath: sharedURL.path)
+            {
+                do {
+                    try FileManager.default.copyItem(at: oldURL, to: sharedURL)
+                    TripLogger.shared.log("Migrated existing Realm to App Group container", category: .system)
+                } catch {
+                    TripLogger.shared.log("Could not copy Realm to App Group: \(error)", category: .error)
+                }
+            }
+        }
+
         var config = Realm.Configuration(
             fileURL: sharedURL,
             schemaVersion: Self.schemaVersion,

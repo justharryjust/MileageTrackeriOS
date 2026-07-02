@@ -134,8 +134,3 @@ struct Harness {
         fireLocation(speedMs: 30 / 3.6)
     }
 }
-
-// MARK: - ═══════════════════════════════
-// MARK:   Suite 1 — Confidence Gate
-// MARK: ═══════════════════════════════
-
