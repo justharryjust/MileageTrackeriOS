@@ -171,19 +171,3 @@ struct RateInfoView: View {
     }
 }
 
-// MARK: - Standalone Wrapper (for AC5: access from settings without edit mode)
-
-struct RatesListView: View {
-    @Environment(AppState.self) private var appState
-
-    var body: some View {
-        List {
-            Section {
-                RateInfoView(jurisdiction: appState.profileRepo.jurisdiction)
-                    .listRowInsets(EdgeInsets(top: MTSpacing.md, leading: MTSpacing.lg, bottom: MTSpacing.md, trailing: MTSpacing.lg))
-            }
-        }
-        .navigationTitle("Mileage Rates")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
