@@ -79,8 +79,8 @@ final class OnboardingViewModel {
             TripLogger.shared.log("Trial started at \(Date())", category: .system)
         }
 
-        // Save initial odometer reading if logbook method was chosen
-        if claimMethod == .logbook, let km = Double(initialOdometerKm), km > 0,
+        // Save initial odometer reading if one was entered
+        if let km = Double(initialOdometerKm), km > 0,
            let vehicleId = repo.defaultVehicle?.id {
             appState.odometerRepo.recordReading(
                 vehicleId: vehicleId,

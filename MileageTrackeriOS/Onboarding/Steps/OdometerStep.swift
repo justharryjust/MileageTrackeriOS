@@ -8,9 +8,7 @@ struct OdometerStep: View {
             icon: "speedometer",
             iconColor: .orange,
             title: "Initial Odometer Reading",
-            subtitle: vm.claimMethod == .logbook
-                ? "Enter your vehicle's current odometer reading. Required for logbook tracking."
-                : "Optionally enter your starting odometer reading. You can add one later."
+            subtitle: "Optionally enter your starting odometer reading. You can always add one later in Settings."
         ) {
             VStack(spacing: MTSpacing.md) {
                 // Odometer input
@@ -19,23 +17,13 @@ struct OdometerStep: View {
                         Label("Odometer Reading (\(vm.distanceUnit.shortName))", systemImage: "speedometer")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(Color.mtTextSub)
-                        if vm.claimMethod == .logbook {
-                            Text("Required")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(Color.mtGreen)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.mtGreen.opacity(0.12))
-                                .clipShape(Capsule())
-                        } else {
-                            Text("Optional")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(Color.mtTextSub)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.mtBorder.opacity(0.4))
-                                .clipShape(Capsule())
-                        }
+                        Text("Optional")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color.mtTextSub)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.mtBorder.opacity(0.4))
+                            .clipShape(Capsule())
                     }
 
                     TextField("e.g. 45200", text: $vm.initialOdometerKm)
@@ -57,8 +45,9 @@ struct OdometerStep: View {
 
             Button("Continue") { vm.advance() }
                 .buttonStyle(MTPrimaryButtonStyle())
-                .disabled(vm.claimMethod == .logbook && vm.initialOdometerKm.trimmingCharacters(in: .whitespaces).isEmpty)
-                .opacity(vm.claimMethod == .logbook && vm.initialOdometerKm.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
+
+            Button("Skip for now") { vm.advance() }
+                .buttonStyle(MTSecondaryButtonStyle())
         }
     }
 }
