@@ -9,9 +9,10 @@ enum OnboardingStep: Int, CaseIterable {
     case jurisdiction   = 1
     case vehicleAndUnit = 2
     case claimMethod    = 3
-    case permissions    = 4
-    case trackingHours  = 5
-    case welcome        = 6
+    case odometer       = 4
+    case permissions    = 5
+    case trackingHours  = 6
+    case welcome        = 7
 }
 
 // MARK: - Shared ViewModel
@@ -161,6 +162,7 @@ struct OnboardingView: View {
             case .jurisdiction:   JurisdictionStep(vm: vm)
             case .vehicleAndUnit: VehicleAndUnitStep(vm: vm)
             case .claimMethod:    ClaimMethodStep(vm: vm)
+            case .odometer:       OdometerStep(vm: vm)
             case .permissions:    PermissionsStep(vm: vm)
             case .trackingHours:  TrackingHoursStep(vm: vm)
             case .welcome:        WelcomeStep(vm: vm)
