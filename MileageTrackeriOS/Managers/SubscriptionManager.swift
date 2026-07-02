@@ -76,8 +76,25 @@ final class SubscriptionManager {
     }
 
     func refreshState() {
+#if DEBUG
+        if let override = debugOverrideStatus {
+            let activePeriods = fetchActivePeriods()
+            let state = MTSubscriptionState(
+                status: override,
+                trialEndsAt: nil,
+                graceEndsAt: nil,
+                activePeriods: activePeriods
+            )
+            updateProfileStatus(override)
+            subscriptionState = state
+            logger.log("SubscriptionManager: state refreshed with override -- \(override.rawValue)", category: .system)
+            return
+        }
+#endif
+
         guard let profile = profileRepo?.profile else { return }
         let activePeriods = fetchActivePeriods()
+
         let status = computeStatus(
             trialStartedAt: profile.trialStartedAt,
             activePeriods: activePeriods
@@ -164,6 +181,49 @@ final class SubscriptionManager {
     func accessibleTrips(_ trips: [Trip]) -> [Trip] {
         trips.filter { isTripAccessible($0) }
     }
+
+    // MARK: - Debug Override (compiled out of release builds)
+
+#if DEBUG
+    /// UserDefaults key for persisting the debug override across launches.
+    private static let debugOverrideKey = "DEBUG_subscriptionOverride"
+
+    /// Reads/writes the persisted override status. `nil` means "use real state".
+    private var debugOverrideStatus: MTSubscriptionStatus? {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: Self.debugOverrideKey) else { return nil }
+            return MTSubscriptionStatus(rawValue: raw)
+        }
+        set {
+            if let value = newValue {
+                UserDefaults.standard.set(value.rawValue, forKey: Self.debugOverrideKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.debugOverrideKey)
+            }
+        }
+    }
+
+    /// Whether a debug override is currently active.
+    var isOverrideActive: Bool { debugOverrideStatus != nil }
+
+    /// Override the subscription state to the given status. Persists across launches.
+    func setOverride(_ status: MTSubscriptionStatus) {
+        debugOverrideStatus = status
+        refreshState()
+        logger.log("SubscriptionManager: override set to \(status.rawValue)", category: .system)
+    }
+
+    /// Clear the override and revert to computing state from real StoreKit and Realm data.
+    func clearOverride() {
+        debugOverrideStatus = nil
+        refreshState()
+        logger.log("SubscriptionManager: override cleared", category: .system)
+    }
+#else
+    var isOverrideActive: Bool { false }
+    func setOverride(_ status: MTSubscriptionStatus) {}
+    func clearOverride() {}
+#endif
 
     // MARK: - Private
 

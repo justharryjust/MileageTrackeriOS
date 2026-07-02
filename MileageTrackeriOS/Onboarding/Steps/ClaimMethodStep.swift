@@ -25,27 +25,6 @@ struct ClaimMethodStep: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
-                // Logbook — capture initial odometer reading
-                if vm.claimMethod == .logbook {
-                    VStack(alignment: .leading, spacing: MTSpacing.sm) {
-                        Label("Initial Odometer Reading", systemImage: "speedometer")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(Color.mtTextSub)
-                        TextField("e.g. 45200", text: $vm.initialOdometerKm)
-                            .keyboardType(.decimalPad)
-                            .padding(MTSpacing.sm + 4)
-                            .background(Color.mtSurface)
-                            .clipShape(RoundedRectangle(cornerRadius: MTRadius.sm))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: MTRadius.sm)
-                                    .strokeBorder(Color.mtBorder, lineWidth: 1)
-                            )
-                        Text("Record your vehicle's current odometer reading. You'll update this periodically — the difference between readings gives your total kilometres for the logbook period.")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color.mtTextSub)
-                    }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                }
             }
             .animation(.easeInOut(duration: 0.2), value: vm.claimMethod)
 

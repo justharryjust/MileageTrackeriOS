@@ -33,6 +33,12 @@ struct ProfileEditView: View {
                 .onChange(of: jurisdiction) { _, _ in save() }
             }
 
+            // MARK: Rate Info
+            Section("Official Rates") {
+                RateInfoView(jurisdiction: jurisdiction)
+                    .listRowInsets(EdgeInsets(top: MTSpacing.sm, leading: MTSpacing.lg, bottom: MTSpacing.sm, trailing: MTSpacing.lg))
+            }
+
             // MARK: Distance Unit
             Section("Distance Unit") {
                 Picker("Unit", selection: $distanceUnit) {

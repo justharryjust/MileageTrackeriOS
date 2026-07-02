@@ -25,7 +25,7 @@ extension TripRecorderState {
 
 /// Creates an isolated TripRecorder + in-memory Realm for each test.
 @MainActor
-private struct Harness {
+struct Harness {
     let recorder: TripRecorder
     let locationManager: LocationManager
     let motionManager: MotionManager

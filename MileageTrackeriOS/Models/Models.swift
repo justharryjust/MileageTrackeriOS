@@ -269,6 +269,10 @@ final class Vehicle: Object, ObjectKeyIdentifiable {
     /// §4.3: per-vehicle default trip category. Work van → .business; family car → .personal.
     /// Used as a seed by the categorisation rules engine on auto-commit.
     @Persisted var defaultCategory: TripCategory  = .uncategorised
+    /// CloudKit sync tracking — set to false on local mutation, true after successful upload.
+    @Persisted var isSyncedToCloud: Bool          = false
+    /// Last modification timestamp for conflict resolution (last-write-wins).
+    @Persisted var updatedAt: Date                = Date()
 
     convenience init(name: String, registration: String,
                      type: VehicleType, fuelType: FuelType, isDefault: Bool = false,
@@ -431,6 +435,11 @@ final class OdometerReading: Object, ObjectKeyIdentifiable {
     @Persisted var tripId: String?
     @Persisted var notes: String?
     @Persisted var source: OdometerSource        = .manual
+    @Persisted var createdAt: Date                = Date()
+    /// CloudKit sync tracking — set to false on local mutation, true after successful upload.
+    @Persisted var isSyncedToCloud: Bool          = false
+    /// Last modification timestamp for conflict resolution (last-write-wins).
+    @Persisted var updatedAt: Date                = Date()
 }
 
 
@@ -501,7 +510,7 @@ final class DaySchedule: EmbeddedObject {
 // MARK: - Subscription Types (Realm-backed for period-gating)
 // MARK: - Subscription Types (Realm-backed for period-gating)
 
-enum MTSubscriptionStatus: String, PersistableEnum {
+enum MTSubscriptionStatus: String, CaseIterable, PersistableEnum {
     case trial = "trial"
     case active = "active"
     case gracePeriod = "gracePeriod"

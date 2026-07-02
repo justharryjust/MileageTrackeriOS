@@ -8,17 +8,18 @@ Two files: `OnboardingView.swift` (coordinator + shell) and the step views in `S
 
 ```swift
 enum OnboardingStep: Int, CaseIterable {
-    case jurisdiction      = 0
-    case vehicleAndUnit    = 1
-    case claimMethod       = 2
-    case locationPermission = 3
-    case motionPermission  = 4
-    case trackingHours     = 5
-    case welcome           = 6
+    case intro          = 0
+    case jurisdiction   = 1
+    case vehicleAndUnit = 2
+    case claimMethod    = 3
+    case odometer       = 4
+    case permissions    = 5
+    case trackingHours  = 6
+    case welcome        = 7
 }
 ```
 
-7 steps, integer raw value drives progress bar calculation.
+8 steps, integer raw value drives progress bar calculation.
 
 ---
 
@@ -36,25 +37,26 @@ enum OnboardingStep: Int, CaseIterable {
 | `customRateTiers: [CustomRateTier]` | — | `ClaimMethodStep` (if `.customRate`) |
 | `distanceUnit` | `DistanceUnit` | `VehicleAndUnitStep` |
 | `vehicleName`, `vehicleRegistration`, `fuelType` | — | `VehicleAndUnitStep` |
+| `initialOdometerKm` | `String` | `OdometerStep` (required for `.logbook`, optional otherwise) |
 | `trackingSchedule: [DayScheduleSnapshot]` | — | `TrackingHoursStep` |
 
 ### Navigation
 
-- `advance()` — increments `currentStep`, sets `goingForward = true`, animates with `.spring(response: 0.45, dampingFraction: 0.82)`.
-- `goBack()` — decrements `currentStep`, sets `goingForward = false`, same animation.
+- `advance()` — increments `currentStep`, animates with `.spring(response: 0.35, dampingFraction: 0.85)`.
+- `goBack()` — decrements `currentStep`, same animation.
 - `isVehicleValid` — `true` when `vehicleRegistration` is non-empty after trimming whitespace.
 
 ### Completion
 
-`complete(using appState:)` — commits all collected data to `profileRepo`, calls `profileRepo.applySchedule`, sets `hasCompletedOnboarding = true`, then calls `appState.startTracking()`. Sets `isCompleted = true` to dismiss the onboarding flow. Called from `WelcomeStep` (final step).
+`complete(using appState:)` — commits all collected data to `profileRepo`, calls `profileRepo.applySchedule`, sets `hasCompletedOnboarding = true`. If `.logbook` and `initialOdometerKm` is valid, records the initial odometer reading via `appState.odometerRepo.recordReading(source: .onboarding)`. Then calls `appState.startTracking()`. Sets `isCompleted = true` to dismiss the onboarding flow. Called from `WelcomeStep` (final step).
 
 ---
 
 ## OnboardingView
 
 `ZStack` layout:
-- **Top bar**: back chevron (hidden on `.jurisdiction`) + `ProgressBar`.
-- **Step content**: switches on `vm.currentStep` with `asymmetric` slide transition — inserts from trailing/leading and removes to leading/trailing based on `vm.goingForward`.
+- **Top bar**: back chevron (hidden on `.intro`) + progress dots.
+- **Step content**: switches on `vm.currentStep` with opacity + offset transition.
 - Each step view is `.id(vm.currentStep)` to force SwiftUI to replace rather than update.
 
 ---
@@ -67,11 +69,4 @@ Reusable container used by every step except `WelcomeStep`.
 OnboardingStepShell(icon:iconColor:title:subtitle:) { /* content */ }
 ```
 
-Renders icon circle, heading, subtitle, and the provided content in a `ScrollView` with consistent padding.
-
----
-
-## Permission steps
-
-- **LocationPermissionStep** — triggers two-step WhenInUse → Always flow via `locationManager.requestLocationPermission()`. Auto-advances 0.8 s after `authorizationStatus == .authorizedAlways`. Shows guidance for WhenInUse-only and denied states.
-- **MotionPermissionStep** — calls `motionManager.startActivityUpdates()` to trigger the system permission prompt. Auto-advances 0.8 s after `motionManager.isAuthorized`. Calls `vm.advance()` on both grant and Skip — **not** `vm.complete()`.
+Renders icon circle, heading, subtitle, and the provided content with consistent padding.

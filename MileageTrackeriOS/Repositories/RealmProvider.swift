@@ -16,7 +16,7 @@ final class RealmProvider {
     static let appGroupID = "group.com.harryjust.MileageTrackeriOS"
 
     /// Current schema version — bump this whenever the model changes and add a migration block.
-    static let schemaVersion: UInt64 = 9
+    static let schemaVersion: UInt64 = 11
 
     private init() {
         // Fall back to default path when running without App Group (e.g. unit tests on CI).
@@ -64,6 +64,13 @@ final class RealmProvider {
                 // v7 -> v8: new SavedAddress collection — no enumerate needed (empty default).
                 // Drives the commute (home↔work) auto-categorisation rule.
                 // v8 -> v9: new LogbookPeriod model + MTSubscriptionPeriod table — no enumerate needed (empty defaults).
+                // v9 -> v10: added Vehicle.isSyncedToCloud (Bool, default false),
+                //            Vehicle.updatedAt (Date, default Date()),
+                //            OdometerReading.isSyncedToCloud (Bool, default false),
+                //            OdometerReading.updatedAt (Date, default Date())
+                //            All new fields with defaults — no migration action needed.
+                // v10 -> v11: added OdometerReading.createdAt (Date, default Date())
+                //            New field with default — no migration action needed.
             },
             objectTypes: [
                 UserProfile.self,
