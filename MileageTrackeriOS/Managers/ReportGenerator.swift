@@ -60,7 +60,8 @@ final class ReportGenerator {
         csv += "Generated: \(format(Date()))\n\n"
 
         // Column headers
-        csv += "Date,Start Address,End Address,Distance (\(unit)),Rate (c/\(unit)),Value ($),Category,Business Use %,Notes\n"
+        let currencyCode = calculator.currencyCode(for: profile)
+        csv += "Date,Start Address,End Address,Distance (\(unit)),Rate (c/\(unit)),Value (\(currencyCode)),Category,Business Use %,Notes\n"
 
         var cumulativeKm = baseCumulativeKm
         var totalValue = 0.0
@@ -89,7 +90,7 @@ final class ReportGenerator {
         csv += "Summary\n"
         csv += "Total Trips,\(sorted.count)\n"
         csv += "Total Distance (\(unit)),\(String(format: "%.1f", totals.totalDistance))\n"
-        csv += "Total Value,$\(String(format: "%.2f", totals.totalValue))\n"
+        csv += "Total Value,\(calculator.formatCurrency(totals.totalValue, for: profile))\n"
 
         // Write to temp file
         let dir = FileManager.default.temporaryDirectory
@@ -97,7 +98,7 @@ final class ReportGenerator {
         let url = dir.appendingPathComponent(filename)
         try? csv.write(to: url, atomically: true, encoding: .utf8)
 
-        TripLogger.shared.log("CSV report generated: \(filename) — \(sorted.count) trips, $\(String(format: "%.2f", totals.totalValue))", category: .trip)
+        TripLogger.shared.log("CSV report generated: \(filename) — \(sorted.count) trips, \(calculator.formatCurrency(totals.totalValue, for: profile))", category: .trip)
         return url
     }
 
@@ -243,7 +244,7 @@ final class ReportGenerator {
                 let reg = vehicle?.registration ?? "—"
                 let route = "\(trip.startAddress) → \(trip.endAddress)"
                 let dateStr = formatter.string(from: trip.startedAt)
-                let valueStr = String(format: "$%.2f", value)
+                let valueStr = calculator.formatCurrency(value, for: profile)
                 let distStr = String(format: "%.1f", displayDistance)
                 let rateStr = String(format: "%.0f", cRate)
 
@@ -283,7 +284,7 @@ final class ReportGenerator {
                 let summaryLines = [
                     "Total Trips:         \(sorted.count)",
                     "Total Distance (\(unit)):  \(String(format: "%.1f", totals.totalDistance))",
-                    "Total Value:         $\(String(format: "%.2f", totals.totalValue))"
+                    "Total Value:         \(calculator.formatCurrency(totals.totalValue, for: profile))"
                 ]
                 for line in summaryLines {
                     (line as NSString).draw(at: CGPoint(x: margin, y: currentY), withAttributes: [
@@ -354,7 +355,7 @@ final class ReportGenerator {
             y = drawSummary(at: y)
         }
 
-        TripLogger.shared.log("PDF report generated: \(filename) — \(sorted.count) trips, $\(String(format: "%.2f", totals.totalValue))", category: .trip)
+        TripLogger.shared.log("PDF report generated: \(filename) — \(sorted.count) trips, \(calculator.formatCurrency(totals.totalValue, for: profile))", category: .trip)
         return url
     }
 

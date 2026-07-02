@@ -114,7 +114,7 @@ struct ReportExportView: View {
                 HStack {
                     Text("Estimated Value")
                     Spacer()
-                    Text(String(format: "$%.2f", totalValue))
+                    Text(appState.mileageCalculator.formatCurrency(totalValue, for: profile))
                         .foregroundStyle(Color.mtGreen)
                         .fontWeight(.semibold)
                 }

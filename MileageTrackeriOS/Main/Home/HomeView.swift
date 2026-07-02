@@ -57,7 +57,10 @@ private struct QuickStatsRow: View {
     private var monthKm : String { String(format: "%.1f", appState.tripRepo.monthlyDistanceKm) }
     private var totalVal: String {
         let v = appState.tripRepo.totalDollarValue
-        return v > 0 ? "$\(String(format: "%.0f", v))" : "$—"
+        if v > 0 {
+            return appState.mileageCalculator.formatCurrency(v, for: appState.profileRepo.profile)
+        }
+        return "\(appState.mileageCalculator.currencySymbol(for: appState.profileRepo.profile))—"
     }
 
     var body: some View {
@@ -250,7 +253,7 @@ private struct RecentTripsSection: View {
                             }
                             Spacer()
                             if let val = trip.dollarValue {
-                                Text("$\(String(format:"%.2f", val))")
+                                Text(appState.mileageCalculator.formatCurrency(val, for: appState.profileRepo.profile))
                                     .font(.system(size: 13, weight: .semibold))
                                     .foregroundStyle(Color.mtGreen)
                             }

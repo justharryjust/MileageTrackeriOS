@@ -79,6 +79,36 @@ final class MileageCalculator {
         }
         return tiers.last?.centsPerUnit ?? 0
     }
+
+    // MARK: - Currency Formatting
+
+    /// The ISO 4217 currency code for the user's jurisdiction, sourced from `OfficalMileageRate`.
+    func currencyCode(for profile: UserProfile) -> String {
+        if let rate = officialRates.first(where: { $0.countryCode == profile.jurisdiction.rawValue })
+            ?? officialRates.first(where: { $0.countryCode == profile.jurisdiction.countryCodeOverride }) {
+            return rate.currencyCode
+        }
+        return profile.jurisdiction.currencyCode
+    }
+
+    /// Locale-aware currency formatter configured for the user's jurisdiction.
+    private func currencyFormatter(for profile: UserProfile) -> NumberFormatter {
+        let fmt = NumberFormatter()
+        fmt.numberStyle = .currency
+        fmt.currencyCode = currencyCode(for: profile)
+        return fmt
+    }
+
+    /// Formats a monetary value using the jurisdiction-specific currency and the user's locale.
+    func formatCurrency(_ value: Double, for profile: UserProfile) -> String {
+        currencyFormatter(for: profile).string(from: NSNumber(value: value))
+            ?? "\(currencyCode(for: profile))\(String(format: "%.2f", value))"
+    }
+
+    /// The currency symbol for the user's jurisdiction (e.g. "$", "£", "€").
+    func currencySymbol(for profile: UserProfile) -> String {
+        currencyFormatter(for: profile).currencySymbol
+    }
 }
 
 // MARK: - Jurisdiction Helpers

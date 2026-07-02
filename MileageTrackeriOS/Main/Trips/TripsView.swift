@@ -247,6 +247,7 @@ private struct TripRow: View {
 // MARK: - TripRowContent
 
 private struct TripRowContent: View {
+    @Environment(AppState.self) private var appState
     let trip: Trip
 
     var body: some View {
@@ -302,7 +303,7 @@ private struct TripRowContent: View {
 
             VStack(alignment: .trailing, spacing: 4) {
                 if let val = trip.dollarValue {
-                    Text("$\(String(format: "%.2f", val))")
+                    Text(appState.mileageCalculator.formatCurrency(val, for: appState.profileRepo.profile))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Color.mtGreen)
                 }

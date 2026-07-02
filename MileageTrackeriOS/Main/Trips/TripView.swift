@@ -247,6 +247,7 @@ struct TripDetailView: View {
 // MARK: - Trip Info Card
 
 private struct TripInfoCard: View {
+    @Environment(AppState.self) private var appState
     let snapshot: TripSnapshot
 
     var body: some View {
@@ -278,7 +279,7 @@ private struct TripInfoCard: View {
                 // Value + category badge
                 VStack(alignment: .trailing, spacing: 4) {
                     if let val = snapshot.dollarValue {
-                        Text("$\(String(format: "%.2f", val))")
+                        Text(appState.mileageCalculator.formatCurrency(val, for: appState.profileRepo.profile))
                             .font(.system(size: 18, weight: .bold))
                             .foregroundStyle(Color.mtGreen)
                     }

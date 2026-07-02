@@ -12,6 +12,8 @@ import Foundation
 
 struct OfficalMileageRate {
     let countryCode: String
+    /// ISO 4217 currency code used for monetary display in this jurisdiction.
+    let currencyCode: String
     let defaultDistanceUnit: DistanceUnit
     let mileageRates: [MileageRates]
 }
@@ -79,6 +81,7 @@ extension Jurisdiction {
 
 private let newZealandRate: OfficalMileageRate = .init(
     countryCode: "NZ",
+    currencyCode: "NZD",
     defaultDistanceUnit: .kilometres,
     mileageRates: [
         .init(
@@ -119,6 +122,7 @@ private let newZealandRate: OfficalMileageRate = .init(
 // ── Australia (ATO) — 2025–2026 ──────────────────────────────
 private let australiaRate: OfficalMileageRate = .init(
     countryCode: "AU",
+    currencyCode: "AUD",
     defaultDistanceUnit: .kilometres,
     mileageRates: [
         .init(
@@ -134,6 +138,7 @@ private let australiaRate: OfficalMileageRate = .init(
 // ── United Kingdom (HMRC) — 2026–2027 ─────────────────────────
 private let unitedKingdomRate: OfficalMileageRate = .init(
     countryCode: "GB",
+    currencyCode: "GBP",
     defaultDistanceUnit: .miles,
     mileageRates: [
         .init(
@@ -164,6 +169,7 @@ private let unitedKingdomRate: OfficalMileageRate = .init(
 // ── United States (IRS) — 2026 ────────────────────────────
 private let unitedStatesRate: OfficalMileageRate = .init(
     countryCode: "US",
+    currencyCode: "USD",
     defaultDistanceUnit: .miles,
     mileageRates: [
         .init(
@@ -180,6 +186,7 @@ private let unitedStatesRate: OfficalMileageRate = .init(
 // Note: territories (Yukon/NWT/Nunavut) get +4¢/km on both tiers (77¢/71¢) — not modeled, no region dimension.
 private let canadaRate: OfficalMileageRate = .init(
     countryCode: "CA",
+    currencyCode: "CAD",
     defaultDistanceUnit: .kilometres,
     mileageRates: [
         .init(
@@ -197,6 +204,7 @@ private let canadaRate: OfficalMileageRate = .init(
 // Note: Motorcycle row is currently unreachable by MileageCalculator.rateFor(fuelType:) — see known limitation.
 private let germanyRate: OfficalMileageRate = .init(
     countryCode: "DE",
+    currencyCode: "EUR",
     defaultDistanceUnit: .kilometres,
     mileageRates: [
         .init(
@@ -216,6 +224,7 @@ private let germanyRate: OfficalMileageRate = .init(
 // Note: revised quarterly/frequently — recheck more often than other entries.
 private let belgiumRate: OfficalMileageRate = .init(
     countryCode: "BE",
+    currencyCode: "EUR",
     defaultDistanceUnit: .kilometres,
     mileageRates: [
         .init(
@@ -229,6 +238,7 @@ private let belgiumRate: OfficalMileageRate = .init(
 // ── Netherlands (Belastingdienst) — 2026 ──────────────────
 private let netherlandsRate: OfficalMileageRate = .init(
     countryCode: "NL",
+    currencyCode: "EUR",
     defaultDistanceUnit: .kilometres,
     mileageRates: [
         .init(
@@ -242,6 +252,7 @@ private let netherlandsRate: OfficalMileageRate = .init(
 // ── Switzerland (EFD / ESTV) — 2026 ───────────────────────
 private let switzerlandRate: OfficalMileageRate = .init(
     countryCode: "CH",
+    currencyCode: "CHF",
     defaultDistanceUnit: .kilometres,
     mileageRates: [
         .init(
@@ -257,6 +268,7 @@ private let switzerlandRate: OfficalMileageRate = .init(
 // unreachable (same known limitation). +€0.15/km passenger surcharge not modeled.
 private let austriaRate: OfficalMileageRate = .init(
     countryCode: "AT",
+    currencyCode: "EUR",
     defaultDistanceUnit: .kilometres,
     mileageRates: [
         .init(
@@ -277,6 +289,7 @@ private let austriaRate: OfficalMileageRate = .init(
 // non-fuel dimension (ownership status), currently unreachable, same known limitation.
 private let swedenRate: OfficalMileageRate = .init(
     countryCode: "SE",
+    currencyCode: "SEK",
     defaultDistanceUnit: .kilometres,
     mileageRates: [
         .init(
@@ -291,6 +304,7 @@ private let swedenRate: OfficalMileageRate = .init(
 // 3.50 NOK/km = 350 øre/km.
 private let norwayRate: OfficalMileageRate = .init(
     countryCode: "NO",
+    currencyCode: "NOK",
     defaultDistanceUnit: .kilometres,
     mileageRates: [
         .init(
@@ -305,6 +319,7 @@ private let norwayRate: OfficalMileageRate = .init(
 // 3.94/2.28 DKK/km = 394/228 øre/km.
 private let denmarkRate: OfficalMileageRate = .init(
     countryCode: "DK",
+    currencyCode: "DKK",
     defaultDistanceUnit: .kilometres,
     mileageRates: [
         .init(
@@ -321,6 +336,7 @@ private let denmarkRate: OfficalMileageRate = .init(
 // ── Finland (Verohallinto) — 2026 ─────────────────────────
 private let finlandRate: OfficalMileageRate = .init(
     countryCode: "FI",
+    currencyCode: "EUR",
     defaultDistanceUnit: .kilometres,
     mileageRates: [
         .init(
@@ -334,6 +350,7 @@ private let finlandRate: OfficalMileageRate = .init(
 // ── Spain (Agencia Tributaria) — 2026 ─────────────────────
 private let spainRate: OfficalMileageRate = .init(
     countryCode: "ES",
+    currencyCode: "EUR",
     defaultDistanceUnit: .kilometres,
     mileageRates: [
         .init(
@@ -351,6 +368,7 @@ private let spainRate: OfficalMileageRate = .init(
 // no other travel allowance besides tolls/parking.
 private let southAfricaRate: OfficalMileageRate = .init(
     countryCode: "ZA",
+    currencyCode: "ZAR",
     defaultDistanceUnit: .kilometres,
     mileageRates: [
         .init(
