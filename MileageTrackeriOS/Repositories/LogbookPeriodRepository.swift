@@ -23,7 +23,9 @@ final class LogbookPeriodRepository {
     func createPeriod(vehicleId: String, jurisdiction: Jurisdiction) -> LogbookPeriod {
         let period = LogbookPeriod()
         period.vehicleId = vehicleId; period.startedAt = Date()
-        period.endedAt = Calendar.current.date(byAdding: .day, value: jurisdiction.logbookPeriodDays, to: period.startedAt)
+        if jurisdiction.logbookRegime == .samplePeriod {
+            period.endedAt = Calendar.current.date(byAdding: .day, value: jurisdiction.logbookPeriodDays, to: period.startedAt)
+        }
         period.status = .active
         if let reading = realm.objects(OdometerReading.self).where({ q in q.vehicleId == vehicleId }).sorted(byKeyPath: "recordedAt", ascending: false).first {
             period.odometerStartKm = reading.readingKm
@@ -35,7 +37,7 @@ final class LogbookPeriodRepository {
         }
         return period
     }
-    
+
     func completePeriod(_ period: LogbookPeriod, jurisdiction: Jurisdiction, businessTrips: [Trip], calculator: MileageCalculator) {
         guard period.status == .active else { return }
         let completedAt = Date()
@@ -52,13 +54,19 @@ final class LogbookPeriodRepository {
             let total = all.reduce(0) { $0 + ($1.distanceMetres / 1000) }
             percent = total > 0 ? min(businessKm / total, 1.0) : 0
         }
-        let validUntil = Calendar.current.date(byAdding: .year, value: jurisdiction.logbookValidityYears, to: completedAt)
+        let validUntil: Date?
+        if jurisdiction.logbookRegime == .samplePeriod {
+            validUntil = Calendar.current.date(byAdding: .year, value: jurisdiction.logbookValidityYears, to: completedAt)
+        } else {
+            validUntil = nil
+        }
         write { period.completedAt = completedAt; period.status = .complete; period.businessUsePercent = percent; period.validUntil = validUntil }
         notificationManager?.cancelLogbookNotifications()
         if let v = validUntil { notificationManager?.scheduleLogbookValidityExpiry(validUntil: v) }
     }
-    
+
     func autoCompleteExpiredPeriods(jurisdiction: Jurisdiction, calculator: MileageCalculator) {
+        guard jurisdiction.logbookRegime == .samplePeriod else { return }
         let now = Date()
         for period in periods where period.status == .active && (period.endedAt ?? now) <= now {
             let end = period.endedAt ?? now

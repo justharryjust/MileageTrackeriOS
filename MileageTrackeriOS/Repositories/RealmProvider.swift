@@ -16,13 +16,32 @@ final class RealmProvider {
     static let appGroupID = "group.com.harryjust.MileageTrackeriOS"
 
     /// Current schema version — bump this whenever the model changes and add a migration block.
-    static let schemaVersion: UInt64 = 9
+    static let schemaVersion: UInt64 = 11
 
     private init() {
         // Fall back to default path when running without App Group (e.g. unit tests on CI).
         let sharedURL = FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupID)?
             .appendingPathComponent("default.realm")
+
+        // Migration: copy existing Realm from the old default location to the App Group
+        // container so existing users don't lose their data when the App Group URL is
+        // first used. Only copies when the source exists and the destination does not.
+        if let sharedURL {
+            let defaultConfig = Realm.Configuration()
+            if let oldURL = defaultConfig.fileURL,
+               oldURL != sharedURL,
+               FileManager.default.fileExists(atPath: oldURL.path),
+               !FileManager.default.fileExists(atPath: sharedURL.path)
+            {
+                do {
+                    try FileManager.default.copyItem(at: oldURL, to: sharedURL)
+                    TripLogger.shared.log("Migrated existing Realm to App Group container", category: .system)
+                } catch {
+                    TripLogger.shared.log("Could not copy Realm to App Group: \(error)", category: .error)
+                }
+            }
+        }
 
         var config = Realm.Configuration(
             fileURL: sharedURL,
@@ -64,6 +83,13 @@ final class RealmProvider {
                 // v7 -> v8: new SavedAddress collection — no enumerate needed (empty default).
                 // Drives the commute (home↔work) auto-categorisation rule.
                 // v8 -> v9: new LogbookPeriod model + MTSubscriptionPeriod table — no enumerate needed (empty defaults).
+                // v9 -> v10: added Vehicle.isSyncedToCloud (Bool, default false),
+                //            Vehicle.updatedAt (Date, default Date()),
+                //            OdometerReading.isSyncedToCloud (Bool, default false),
+                //            OdometerReading.updatedAt (Date, default Date())
+                //            All new fields with defaults — no migration action needed.
+                // v10 -> v11: added OdometerReading.createdAt (Date, default Date())
+                //            New field with default — no migration action needed.
             },
             objectTypes: [
                 UserProfile.self,

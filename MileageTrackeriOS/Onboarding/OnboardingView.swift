@@ -9,9 +9,10 @@ enum OnboardingStep: Int, CaseIterable {
     case jurisdiction   = 1
     case vehicleAndUnit = 2
     case claimMethod    = 3
-    case permissions    = 4
-    case trackingHours  = 5
-    case welcome        = 6
+    case odometer       = 4
+    case permissions    = 5
+    case trackingHours  = 6
+    case welcome        = 7
 }
 
 // MARK: - Shared ViewModel
@@ -23,11 +24,7 @@ final class OnboardingViewModel {
     }()
 
     var jurisdiction: Jurisdiction {
-        switch regionCode {
-        case "NZ": return .newZealand
-        case "AU": return .australia
-        default:   return .other
-        }
+        Jurisdiction(rawValue: regionCode) ?? .other
     }
     var claimMethod: ClaimMethod       = .standardRate
     var customRateTiers: [CustomRateTier] = [.initial]
@@ -46,6 +43,10 @@ final class OnboardingViewModel {
 
     var isVehicleValid: Bool {
         !vehicleRegistration.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    var isRegionValid: Bool {
+        !regionCode.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     func advance() {
@@ -78,8 +79,8 @@ final class OnboardingViewModel {
             TripLogger.shared.log("Trial started at \(Date())", category: .system)
         }
 
-        // Save initial odometer reading if logbook method was chosen
-        if claimMethod == .logbook, let km = Double(initialOdometerKm), km > 0,
+        // Save initial odometer reading if one was entered
+        if let km = Double(initialOdometerKm), km > 0,
            let vehicleId = repo.defaultVehicle?.id {
             appState.odometerRepo.recordReading(
                 vehicleId: vehicleId,
@@ -161,6 +162,7 @@ struct OnboardingView: View {
             case .jurisdiction:   JurisdictionStep(vm: vm)
             case .vehicleAndUnit: VehicleAndUnitStep(vm: vm)
             case .claimMethod:    ClaimMethodStep(vm: vm)
+            case .odometer:       OdometerStep(vm: vm)
             case .permissions:    PermissionsStep(vm: vm)
             case .trackingHours:  TrackingHoursStep(vm: vm)
             case .welcome:        WelcomeStep(vm: vm)

@@ -23,6 +23,9 @@ final class TripRepository {
     private(set) var totalDollarValue: Double   = 0
 
     private let realm: Realm
+    /// Debounce timer for WidgetCenter.reloadAllTimelines — avoids redundant calls
+    /// when multiple trips change in quick succession.
+    private var widgetReloadWorkItem: DispatchWorkItem?
     /// Exposed as internal so tests can query Realm directly to bypass notification timing.
     var testRealm: Realm { realm }
     private var allTripsToken: NotificationToken?
@@ -75,7 +78,11 @@ final class TripRepository {
             weeklyTripCount: weekCount
         ))
         #if canImport(WidgetKit)
-        WidgetCenter.shared.reloadAllTimelines()
+        // Debounce: cancel any pending reload and schedule a new one after 500ms
+        widgetReloadWorkItem?.cancel()
+        let workItem = DispatchWorkItem { WidgetCenter.shared.reloadAllTimelines() }
+        widgetReloadWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
         #endif
     }
 

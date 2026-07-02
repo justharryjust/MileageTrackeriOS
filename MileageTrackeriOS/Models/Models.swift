@@ -112,6 +112,49 @@ enum Jurisdiction: String, CaseIterable, PersistableEnum {
         let (_, taxYearEnd) = taxYear.containing(Date())
         return Calendar.current.date(byAdding: .year, value: recordRetentionYears, to: taxYearEnd) ?? Date()
     }
+
+    /// Whether the jurisdiction uses a fixed sample-period logbook (NZ/AU/CA)
+    /// or requires continuous every-trip records (all other countries).
+    /// See `.claude/research/tax-compliance-rules-by-jurisdiction.md` § cross-jurisdiction pattern #2.
+    var logbookRegime: LogbookRegime {
+        switch self {
+        case .newZealand, .australia, .canada: return .samplePeriod
+        default:                               return .continuous
+        }
+    }
+
+    /// Per-jurisdiction caveat about claim-method validity, surfaced in MethodInfoView.
+    /// Sourced from `.claude/research/tax-compliance-rules-by-jurisdiction.md` "Notes & caveats".
+    /// Returns nil for jurisdictions where all three methods are straightforwardly available.
+    var claimMethodCaveat: String? {
+        switch self {
+        case .canada:
+            return "The per-km amount is an employer reimbursement, not a self-employed deduction."
+        case .spain:
+            return "No per-km option for autónomos; requires ~100% exclusive business use."
+        case .netherlands:
+            return "Actual-cost is not permitted for a privately-owned car; only the flat rate applies."
+        case .southAfrica:
+            return "A logbook is effectively mandatory to claim, and resets annually."
+        case .unitedStates:
+            return "Standard rate must be elected in year 1; disallowed if operating 5+ cars."
+        case .other:
+            return "Method is locked per-vehicle once chosen."
+        default:
+            return nil
+        }
+    }
+}
+
+// MARK: - Logbook Regime
+
+/// Distinguishes jurisdictions that use an expiring sample-period logbook
+/// from those that require ongoing, every-trip records.
+enum LogbookRegime {
+    /// Fixed-duration sample window (NZ: 90d/3y, AU: 84d/5y, CA: full-year or 3-month sample).
+    case samplePeriod
+    /// Continuous every-trip records required — no fixed sample window or redo interval.
+    case continuous
 }
 
 struct MileageRates {
@@ -278,6 +321,10 @@ final class Vehicle: Object, ObjectKeyIdentifiable {
     /// §4.3: per-vehicle default trip category. Work van → .business; family car → .personal.
     /// Used as a seed by the categorisation rules engine on auto-commit.
     @Persisted var defaultCategory: TripCategory  = .uncategorised
+    /// CloudKit sync tracking — set to false on local mutation, true after successful upload.
+    @Persisted var isSyncedToCloud: Bool          = false
+    /// Last modification timestamp for conflict resolution (last-write-wins).
+    @Persisted var updatedAt: Date                = Date()
 
     convenience init(name: String, registration: String,
                      type: VehicleType, fuelType: FuelType, isDefault: Bool = false,
@@ -440,6 +487,11 @@ final class OdometerReading: Object, ObjectKeyIdentifiable {
     @Persisted var tripId: String?
     @Persisted var notes: String?
     @Persisted var source: OdometerSource        = .manual
+    @Persisted var createdAt: Date                = Date()
+    /// CloudKit sync tracking — set to false on local mutation, true after successful upload.
+    @Persisted var isSyncedToCloud: Bool          = false
+    /// Last modification timestamp for conflict resolution (last-write-wins).
+    @Persisted var updatedAt: Date                = Date()
 }
 
 
@@ -510,7 +562,7 @@ final class DaySchedule: EmbeddedObject {
 // MARK: - Subscription Types (Realm-backed for period-gating)
 // MARK: - Subscription Types (Realm-backed for period-gating)
 
-enum MTSubscriptionStatus: String, PersistableEnum {
+enum MTSubscriptionStatus: String, CaseIterable, PersistableEnum {
     case trial = "trial"
     case active = "active"
     case gracePeriod = "gracePeriod"
