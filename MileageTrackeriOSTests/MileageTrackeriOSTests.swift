@@ -1467,6 +1467,77 @@ struct OnboardingNavigationTests {
 }
 
 // MARK: - ═══════════════════════════════════════════════
+// MARK:   Suite 14 — Onboarding Odometer Step
+// MARK: ═══════════════════════════════════════════════
+
+@Suite("Onboarding Odometer Step")
+@MainActor
+struct OnboardingOdometerTests {
+
+    @Test("initialOdometerKm starts empty")
+    func startsEmpty() {
+        let vm = OnboardingViewModel()
+        #expect(vm.initialOdometerKm.isEmpty)
+    }
+
+    @Test("odometer step comes after claimMethod in navigation flow")
+    func odometerStepAfterClaimMethod() {
+        let vm = OnboardingViewModel()
+        vm.advance()
+        vm.advance()
+        vm.advance()
+        #expect(vm.currentStep == .claimMethod)
+        vm.advance()
+        #expect(vm.currentStep == .odometer)
+    }
+
+    @Test("advancing past odometer reaches permissions")
+    func odometerAdvancesToPermissions() {
+        let vm = OnboardingViewModel()
+        for _ in 0..<OnboardingStep.odometer.rawValue + 1 {
+            vm.advance()
+        }
+        #expect(vm.currentStep == .odometer)
+        vm.advance()
+        #expect(vm.currentStep == .permissions)
+    }
+
+    @Test("going back from odometer returns to claimMethod")
+    func backFromOdometerToClaimMethod() {
+        let vm = OnboardingViewModel()
+        for _ in 0..<OnboardingStep.odometer.rawValue + 1 {
+            vm.advance()
+        }
+        #expect(vm.currentStep == .odometer)
+        vm.goBack()
+        #expect(vm.currentStep == .claimMethod)
+    }
+
+    @Test("initialOdometerKm can store a numeric value")
+    func canStoreOdometerValue() {
+        let vm = OnboardingViewModel()
+        vm.initialOdometerKm = "45200"
+        #expect(vm.initialOdometerKm == "45200")
+        #expect(Double(vm.initialOdometerKm) == 45200)
+    }
+
+    @Test("initialOdometerKm rejects non-numeric input gracefully")
+    func nonNumericInput() {
+        let vm = OnboardingViewModel()
+        vm.initialOdometerKm = "abc"
+        #expect(Double(vm.initialOdometerKm) == nil)
+    }
+
+    @Test("complete sets isCompleted to true")
+    func completeSetsIsCompleted() {
+        let vm = OnboardingViewModel()
+        vm.vehicleRegistration = "TST001"
+        vm.complete(using: AppState.shared)
+        #expect(vm.isCompleted)
+    }
+}
+
+// MARK: - ═══════════════════════════════════════════════
 // MARK:   Suite 15 — Report Export
 // MARK: ═══════════════════════════════════════════════
 
