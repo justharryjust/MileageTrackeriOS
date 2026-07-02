@@ -92,6 +92,24 @@ struct SettingsView: View {
                         }
                     }
 
+                    NavigationLink {
+                        RatesListView()
+                            .environment(appState)
+                    } label: {
+                        HStack {
+                            Image(systemName: "chart.bar.fill")
+                                .foregroundStyle(Color.mtGreen)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("View Rates")
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundStyle(Color.mtTextPrimary)
+                                Text("\(appState.profileRepo.jurisdiction.displayName) official rates")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Color.mtTextSub)
+                            }
+                        }
+                    }
+
                     if appState.profileRepo.claimMethod == .logbook {
                         NavigationLink {
                             LogbookPeriodView()
