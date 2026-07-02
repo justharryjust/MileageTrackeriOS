@@ -2,6 +2,7 @@ import Testing
 import CoreLocation
 import CoreMotion
 import RealmSwift
+import UserNotifications
 @testable import MileageTrackeriOS
 
 @Suite("Notification Helpers")
@@ -113,8 +114,3 @@ struct NotificationHelperTests {
         NotificationManager.odometerReminderEnabled = false
     }
 }
-
-// MARK: - ═══════════════════════════════════════════════
-// MARK:   Suite 9 — Schedule Gate Notifications
-// MARK: ═══════════════════════════════════════════════
-

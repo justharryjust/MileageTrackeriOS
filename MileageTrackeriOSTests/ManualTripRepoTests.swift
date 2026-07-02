@@ -9,11 +9,16 @@ import RealmSwift
 struct ManualTripRepoTests {
 
     private func makeRealm() throws -> Realm {
-
+        let config = Realm.Configuration(
+            inMemoryIdentifier: UUID().uuidString,
+            schemaVersion: RealmProvider.schemaVersion,
+            objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self, LogbookPeriod.self]
+        )
+        return try Realm(configuration: config)
     }
 
-    @Test("Save with processingStatus = .pending sets status on trip")
-    func saveWithPendingStatus() throws {
+    @Test("Save with default status sets source to manual")
+    func saveSetsSource() throws {
         let realm = try makeRealm()
         let repo = TripRepository(realm: realm)
 
@@ -24,13 +29,11 @@ struct ManualTripRepoTests {
             distanceMetres: 10_000,
             startAddress: "Start", endAddress: "End",
             startLat: -36.85, startLng: 174.76,
-            endLat: -36.86, endLng: 174.77,
-            processingStatus: .pending
+            endLat: -36.86, endLng: 174.77
         )
 
         let saved = realm.objects(Trip.self).first
         #expect(saved != nil)
-        #expect(saved?.processingStatus == .pending)
         #expect(saved?.source == .manual)
     }
 
@@ -53,16 +56,16 @@ struct ManualTripRepoTests {
         #expect(saved?.processingStatus == .complete)
     }
 
-    @Test("Save with snappedCoordinates creates TripPoints from snapped coords")
-    func saveWithSnappedCoords() throws {
+    @Test("Save with stops creates TripPoints for each stop")
+    func saveWithStops() throws {
         let realm = try makeRealm()
         let repo = TripRepository(realm: realm)
 
-        let snapped: [CLLocationCoordinate2D] = [
-            CLLocationCoordinate2D(latitude: -36.848, longitude: 174.763),
-            CLLocationCoordinate2D(latitude: -36.846, longitude: 174.765),
-            CLLocationCoordinate2D(latitude: -36.844, longitude: 174.767),
-            CLLocationCoordinate2D(latitude: -36.842, longitude: 174.769),
+        let stops: [(lat: Double, lng: Double)] = [
+            (lat: -36.848, lng: 174.763),
+            (lat: -36.846, lng: 174.765),
+            (lat: -36.844, lng: 174.767),
+            (lat: -36.842, lng: 174.769),
         ]
 
         let trip = repo.saveManualTrip(
@@ -73,13 +76,11 @@ struct ManualTripRepoTests {
             startAddress: "A", endAddress: "B",
             startLat: -36.848, startLng: 174.763,
             endLat: -36.842, endLng: 174.769,
-            snappedCoordinates: snapped
+            stops: stops
         )
 
         let pts = repo.tripPoints(for: trip)
-        #expect(pts.count == snapped.count)
-        // Verify points are road-snapped (accuracy = 5)
-        #expect(pts.allSatisfy { $0.horizontalAccuracy == 5 })
+        #expect(pts.count == stops.count + 2) // +2 for start and end
     }
 
     @Test("Trip returns from saveManualTrip for dollar value computation")
@@ -154,8 +155,8 @@ struct ManualTripRepoTests {
         #expect(trip.dollarValue == 42.50)
     }
 
-    @Test("Store distance overwrites distance on trip")
-    func storeDistance() throws {
+    @Test("Save manual trip persists correct distance")
+    func saveManualTripPersistsDistance() throws {
         let realm = try makeRealm()
         let repo = TripRepository(realm: realm)
 
@@ -163,17 +164,12 @@ struct ManualTripRepoTests {
             vehicleId: "v1",
             startedAt: Date().addingTimeInterval(-3600),
             endedAt: Date(),
-            distanceMetres: 10_000,
+            distanceMetres: 12_500,
             startAddress: "Start", endAddress: "End",
             startLat: -36.85, startLng: 174.76,
             endLat: -36.86, endLng: 174.77
         )
 
-        repo.storeDistance(12_500, for: trip)
         #expect(trip.distanceMetres == 12_500)
     }
 }
-
-// MARK:   Suite 11 — Onboarding Region Validation
-// MARK: ═══════════════════════════════════════════════
-
