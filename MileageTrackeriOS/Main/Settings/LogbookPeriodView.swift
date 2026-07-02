@@ -18,6 +18,15 @@ struct LogbookPeriodView: View {
     }
     @ViewBuilder
     private func activePeriodSection(_ period: LogbookPeriod) -> some View {
+        if jurisdiction.logbookRegime == .continuous {
+            continuousActivePeriodSection(period)
+        } else {
+            sampleActivePeriodSection(period)
+        }
+    }
+
+    @ViewBuilder
+    private func sampleActivePeriodSection(_ period: LogbookPeriod) -> some View {
         Section("Active Period") {
             VStack(alignment: .leading, spacing: 12) {
                 let total = period.totalDays; let remaining = period.daysRemaining; let elapsed = max(0, total - remaining)
@@ -36,16 +45,45 @@ struct LogbookPeriodView: View {
                     }.padding(10).background(.orange.opacity(0.1)).clipShape(RoundedRectangle(cornerRadius: 8))
                 }
             }
-            Button("Complete Period Early", role: .destructive) { completePeriod(period) }.font(.system(size: 15, weight: .medium))
+            Button("Complete Period", role: .destructive) { completePeriod(period) }.font(.system(size: 15, weight: .medium))
         }
     }
+
+    @ViewBuilder
+    private func continuousActivePeriodSection(_ period: LogbookPeriod) -> some View {
+        Section("Active Logbook Record") {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: "book.closed.fill").foregroundStyle(Color.mtGreen)
+                    Text("Ongoing every-trip record").font(.system(size: 15, weight: .medium)).foregroundStyle(Color.mtGreen)
+                    Spacer()
+                }
+                detailRow("Started", period.startedAt.formatted(date: .abbreviated, time: .omitted))
+                if let v = appState.profileRepo.vehicles.first(where: { $0.id == period.vehicleId }) { detailRow("Vehicle", v.name.isEmpty ? v.registration : v.name) }
+                if let odo = period.odometerStartKm { detailRow("Start Odometer", String(format: "%.0f km", odo)) }
+                else {
+                    detailRow("Start Odometer", "Not recorded")
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                        Text("Record an odometer reading in Odometer Log for accurate business-use calculation.").font(.system(size: 12)).foregroundStyle(.orange)
+                    }.padding(10).background(.orange.opacity(0.1)).clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            }
+            Button("Complete Period", role: .destructive) { completePeriod(period) }.font(.system(size: 15, weight: .medium))
+        }
+    }
+
     @ViewBuilder
     private func noActivePeriodSection() -> some View {
         Section {
             VStack(spacing: 16) {
                 Image(systemName: "book.closed").font(.system(size: 40)).foregroundStyle(Color.mtTextSub)
                 Text("No Active Logbook Period").font(.system(size: 17, weight: .semibold))
-                Text("Start a \(jurisdiction.logbookPeriodDays)-day logbook period.").font(.system(size: 14)).foregroundStyle(Color.mtTextSub).multilineTextAlignment(.center)
+                if jurisdiction.logbookRegime == .continuous {
+                    Text("Record every business trip to calculate your business-use percentage. Keep ongoing records for compliance.").font(.system(size: 14)).foregroundStyle(Color.mtTextSub).multilineTextAlignment(.center)
+                } else {
+                    Text("Start a \(jurisdiction.logbookPeriodDays)-day logbook period.").font(.system(size: 14)).foregroundStyle(Color.mtTextSub).multilineTextAlignment(.center)
+                }
                 Button { startNewPeriod() } label: { Label("Start New Period", systemImage: "plus.circle.fill") }.buttonStyle(.borderedProminent).tint(Color.mtGreen)
             }.frame(maxWidth: .infinity).padding(.vertical, 24)
         }

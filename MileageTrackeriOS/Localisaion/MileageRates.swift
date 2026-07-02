@@ -380,6 +380,16 @@ let officialRates: [OfficalMileageRate] = [
     southAfricaRate,
 ]
 
+// MARK: - Jurisdiction Rate Lookup
+
+extension Jurisdiction {
+    /// The country code used to look up this jurisdiction's entry in `officialRates`.
+    /// Maps `.other` → "GB" (United Kingdom / HMRC) so the rates table is reachable.
+    var rateCountryCode: String {
+        self == .other ? "GB" : rawValue
+    }
+}
+
 // MARK: - Rate Lookup Helpers
 
 extension OfficalMileageRate {

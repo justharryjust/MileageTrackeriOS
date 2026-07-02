@@ -35,6 +35,9 @@ struct MethodInfoView: View {
                 .background(Color.blue.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: MTRadius.sm))
 
+                // Record Retention
+                recordRetentionCard
+
                 // Standard Rate
                 methodCard(
                     icon: "chart.bar.fill",
@@ -84,6 +87,11 @@ struct MethodInfoView: View {
                     linkURL: nil
                 )
 
+                // Per-jurisdiction caveat
+                if let caveat = jurisdiction.claimMethodCaveat {
+                    jurisdictionCaveatView(caveat)
+                }
+
                 Spacer(minLength: MTSpacing.xxl)
             }
             .padding(MTSpacing.lg)
@@ -91,6 +99,41 @@ struct MethodInfoView: View {
         .navigationTitle("Claim Methods")
         .navigationBarTitleDisplayMode(.inline)
         .background(Color.mtBackground)
+    }
+
+    // MARK: - Record Retention Card
+
+    private var recordRetentionCard: some View {
+        VStack(alignment: .leading, spacing: MTSpacing.sm) {
+            HStack(spacing: MTSpacing.sm) {
+                Image(systemName: "calendar.badge.clock")
+                    .foregroundStyle(Color.mtTextSub)
+                    .font(.system(size: 14))
+                Text("Record Retention")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.mtTextPrimary)
+            }
+
+            Text("\(agencyName) requires you to keep your mileage records for **\(jurisdiction.recordRetentionYears) years** after the end of the tax year.")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.mtTextPrimary)
+
+            Text("Keep these records until **\(retentionCutoffDate, format: dateFormatter)**.")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.mtTextPrimary)
+        }
+        .padding(MTSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.mtSurface)
+        .clipShape(RoundedRectangle(cornerRadius: MTRadius.sm))
+    }
+
+    private var retentionCutoffDate: Date {
+        jurisdiction.retentionEndDate
+    }
+
+    private var dateFormatter: Date.FormatStyle {
+        .dateTime.year().month(.wide)
     }
 
     // MARK: - Method Card
@@ -146,6 +189,26 @@ struct MethodInfoView: View {
         .padding(MTSpacing.lg)
         .background(Color.mtSurface)
         .clipShape(RoundedRectangle(cornerRadius: MTRadius.md))
+    }
+
+    // MARK: - Jurisdiction Caveat
+
+    /// A highlighted banner showing a per-jurisdiction caveat about claim-method validity.
+    /// Only shown for jurisdictions with notable restrictions (CA, ES, NL, ZA, US, GB).
+    private func jurisdictionCaveatView(_ caveat: String) -> some View {
+        VStack(alignment: .leading, spacing: MTSpacing.sm) {
+            Label("Important: " + jurisdiction.displayName, systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.orange)
+
+            Text(caveat)
+                .font(.system(size: 13))
+                .foregroundStyle(Color.mtTextPrimary)
+        }
+        .padding(MTSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: MTRadius.sm))
     }
 
     // MARK: - Jurisdiction-specific

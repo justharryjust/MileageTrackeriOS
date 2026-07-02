@@ -105,20 +105,20 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: - Odometer Reminder (logbook users)
 
-    /// Schedule a weekly reminder to record odometer readings. Sunday at 6pm.
+    /// Schedule a monthly reminder to record odometer readings. 1st of each month at 10am.
     func scheduleOdometerReminder(vehicleName: String) {
         guard Self.odometerReminderEnabled else { return }
         center.removePendingNotificationRequests(withIdentifiers: ["odometer-reminder"])
 
         let content = UNMutableNotificationContent()
         content.title = "Record Odometer"
-        content.body = "Time for your weekly odometer reading for \(vehicleName.isEmpty ? "your vehicle" : vehicleName)."
+        content.body = "Time for your monthly odometer reading for \(vehicleName.isEmpty ? "your vehicle" : vehicleName)."
         content.sound = .default
         content.interruptionLevel = .timeSensitive
 
         var date = DateComponents()
-        date.weekday = 1  // Sunday
-        date.hour = 18
+        date.day = 1   // 1st of each month
+        date.hour = 10
         date.minute = 0
 
         let trigger = UNCalendarNotificationTrigger(dateMatching: date, repeats: true)

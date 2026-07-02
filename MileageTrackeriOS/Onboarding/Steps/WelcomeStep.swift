@@ -4,6 +4,12 @@ struct WelcomeStep: View {
     @Environment(AppState.self) private var appState
     let vm: OnboardingViewModel
 
+    private var odometerSummary: String? {
+        let val = vm.initialOdometerKm.trimmingCharacters(in: .whitespaces)
+        guard !val.isEmpty, let km = Double(val), km > 0 else { return nil }
+        return "Initial odometer: \(String(format: "%.0f", km)) \(vm.distanceUnit.shortName)"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
@@ -36,6 +42,9 @@ struct WelcomeStep: View {
                     SummaryRow(icon: "figure.walk",     color: .blue,     text: "Motion detection ready")
                     SummaryRow(icon: "car.fill",        color: .orange,   text: "Vehicle added")
                     SummaryRow(icon: "clock.fill",      color: .purple,   text: "Tracking schedule configured")
+                    if let odometerText = odometerSummary {
+                        SummaryRow(icon: "speedometer",    color: .orange,   text: odometerText)
+                    }
                 }
                 .padding(MTSpacing.md)
                 .mtCard()
