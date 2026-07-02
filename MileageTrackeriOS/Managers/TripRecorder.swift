@@ -394,6 +394,77 @@ final class TripRecorder {
         return total
     }
 
+    // MARK: - Notification Recovery Actions
+
+    /// Handle a Resume action from the trip recovery notification.
+    /// Re-loads the inflight trip from Realm and sets up TripRecorder as if
+    /// it were a short-gap auto-resume.
+    func handleRecoveryResume(tripId: String) {
+        guard let tripRepo, let inflight = tripRepo.trip(id: tripId), inflight.source == .inflight else {
+            logger.log("Recovery resume: trip \(tripId) not found or not inflight", category: .error)
+            return
+        }
+        let pts = tripRepo.tripPoints(for: inflight)
+        let locations = pts.map { pt in
+            CLLocation(coordinate: CLLocationCoordinate2D(latitude: pt.latitude, longitude: pt.longitude),
+                       altitude: pt.altitude, horizontalAccuracy: pt.horizontalAccuracy,
+                       verticalAccuracy: -1, course: -1, speed: pt.speedMs, timestamp: pt.recordedAt)
+        }
+        let dist = inflight.distanceMetres > 0 ? inflight.distanceMetres : recomputeDistance(from: locations)
+        collectedLocations = locations
+        tripStartedAt = inflight.startedAt
+        suspectedAt = inflight.startedAt
+        inflightTripId = inflight.id
+        activeCarKitName = inflight.carKitName
+        logger.log("Recovery: user resumed inflight trip \(tripId) - \(locations.count) pts, \(Int(dist))m", category: .trip)
+        transitionTo(.active(startedAt: inflight.startedAt, distanceMetres: dist))
+        locationManager?.startHighAccuracyUpdates()
+        motionManager?.startPedometerUpdates(from: inflight.startedAt)
+        motionManager?.startAltimeterUpdates()
+        startEvaluationTimer()
+        let vehicle = profileRepo?.defaultVehicle?.name ?? ""
+        liveActivityManager?.startTrip(vehicleName: vehicle, startedAt: inflight.startedAt)
+        liveActivityManager?.updateTrip(distanceMetres: dist, startedAt: inflight.startedAt)
+    }
+
+    /// Handle a Save-as-is action from the trip recovery notification.
+    /// Finalises the inflight trip with the data already in Realm and marks
+    /// it as pending for background re-processing.
+    func handleRecoverySaveAsIs(tripId: String) {
+        guard let tripRepo, let inflight = tripRepo.trip(id: tripId), inflight.source == .inflight else {
+            logger.log("Recovery save-as-is: trip \(tripId) not found or not inflight", category: .error)
+            return
+        }
+        let pts = tripRepo.tripPoints(for: inflight)
+        let locations = pts.map { pt in
+            CLLocation(coordinate: CLLocationCoordinate2D(latitude: pt.latitude, longitude: pt.longitude),
+                       altitude: pt.altitude, horizontalAccuracy: pt.horizontalAccuracy,
+                       verticalAccuracy: -1, course: -1, speed: pt.speedMs, timestamp: pt.recordedAt)
+        }
+        let lastFixAt = locations.last?.timestamp ?? Date()
+        let dist = inflight.distanceMetres > 0 ? inflight.distanceMetres : recomputeDistance(from: locations)
+        logger.log("Recovery: user saved-as-is trip \(tripId) - \(Int(dist))m, \(locations.count) pts", category: .trip)
+        collectedLocations = locations
+        tripStartedAt = inflight.startedAt
+        activeCarKitName = inflight.carKitName
+        inflightTripId = inflight.id
+        saveTrip(endedAt: lastFixAt, distance: dist, startedAt: inflight.startedAt)
+        reset()
+    }
+
+    /// Handle a Discard action from the trip recovery notification.
+    /// Deletes the inflight trip and its associated points from Realm.
+    func handleRecoveryDiscard(tripId: String) {
+        guard let tripRepo, let inflight = tripRepo.trip(id: tripId), inflight.source == .inflight else {
+            logger.log("Recovery discard: trip \(tripId) not found or not inflight", category: .error)
+            return
+        }
+        logger.log("Recovery: user discarded inflight trip \(tripId)", category: .trip)
+        tripRepo.discardInflightTrip(inflight)
+    }
+
+    // MARK: - Activity Handler
+
     // MARK: - Activity Handler
 
     private func handleActivityUpdate(_ activity: DetectedActivity) {

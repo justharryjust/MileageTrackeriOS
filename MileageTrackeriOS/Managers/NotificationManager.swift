@@ -247,6 +247,11 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     static let recoveryActionDiscard  = "TR_DISCARD"
     static let recoveryUserInfoTripId = "tripId"
 
+    /// Closure invoked when the user taps a recovery notification action.
+    /// Parameters are the action identifier and the in-flight trip id.
+    /// Set by AppState to wire the action to TripRecorder.
+    var onRecoveryAction: ((_ actionId: String, _ tripId: String) -> Void)?
+
     /// Register the recovery action category. Call once on launch.
     func registerRecoveryActions() {
         let resume = UNNotificationAction(identifier: Self.recoveryActionResume,
@@ -393,5 +398,20 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
                                   withCompletionHandler handler: @escaping (UNNotificationPresentationOptions) -> Void) {
         // Show notifications even when app is in foreground
         handler([.banner, .sound])
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                  didReceive response: UNNotificationResponse,
+                                  withCompletionHandler handler: @escaping () -> Void) {
+        let userInfo = response.notification.request.content.userInfo
+
+        // Handle trip recovery actions
+        if response.notification.request.content.categoryIdentifier == Self.recoveryCategoryId,
+           let tripId = userInfo[Self.recoveryUserInfoTripId] as? String {
+            TripLogger.shared.log("Recovery action: \(response.actionIdentifier) for trip \(tripId)", category: .system)
+            onRecoveryAction?(response.actionIdentifier, tripId)
+        }
+
+        handler()
     }
 }

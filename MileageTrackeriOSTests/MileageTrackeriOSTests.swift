@@ -33,6 +33,7 @@ private struct Harness {
     let profileRepo: UserProfileRepository
     let notificationManager: NotificationManager
     let scheduleManager: TrackingScheduleManager
+    let realm: Realm
 
     init() throws {
         let config = Realm.Configuration(
@@ -40,7 +41,7 @@ private struct Harness {
             schemaVersion: RealmProvider.schemaVersion,
             objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self, LogbookPeriod.self]
         )
-        let realm    = try Realm(configuration: config)
+        self.realm    = try Realm(configuration: config)
         tripRepo     = TripRepository(realm: realm)
         profileRepo  = UserProfileRepository(realm: realm)
         let odometerRepo = OdometerReadingRepository(realm: realm)
@@ -1826,6 +1827,219 @@ struct ReportExportTests {
     }
 }
 
+// MARK: - Notification Recovery Action Tests
+
+@Suite("Notification Recovery Actions")
+struct NotificationRecoveryTests {
+
+    @Test("didReceive dispatches Resume action to onRecoveryAction closure")
+    func dispatchResumeAction() {
+        let notificationManager = NotificationManager()
+        var capturedActionId: String?
+        var capturedTripId: String?
+        notificationManager.onRecoveryAction = { actionId, tripId in
+            capturedActionId = actionId
+            capturedTripId = tripId
+        }
+
+        let content = UNMutableNotificationContent()
+        content.categoryIdentifier = NotificationManager.recoveryCategoryId
+        content.userInfo = [NotificationManager.recoveryUserInfoTripId: "trip-123"]
+
+        let request = UNNotificationRequest(
+            identifier: "test-recovery",
+            content: content,
+            trigger: nil
+        )
+
+        let response = UNNotificationResponse(
+            notification: UNNotification(request: request, date: Date()),
+            actionIdentifier: NotificationManager.recoveryActionResume
+        )
+
+        notificationManager.userNotificationCenter(
+            UNUserNotificationCenter.current(),
+            didReceive: response
+        ) { /* completion handler */ }
+
+        #expect(capturedActionId == NotificationManager.recoveryActionResume)
+        #expect(capturedTripId == "trip-123")
+    }
+
+    @Test("didReceive dispatches Save action to onRecoveryAction closure")
+    func dispatchSaveAction() {
+        let notificationManager = NotificationManager()
+        var capturedActionId: String?
+        notificationManager.onRecoveryAction = { actionId, _ in
+            capturedActionId = actionId
+        }
+
+        let content = UNMutableNotificationContent()
+        content.categoryIdentifier = NotificationManager.recoveryCategoryId
+        content.userInfo = [NotificationManager.recoveryUserInfoTripId: "trip-456"]
+
+        let request = UNNotificationRequest(
+            identifier: "test-recovery",
+            content: content,
+            trigger: nil
+        )
+
+        let response = UNNotificationResponse(
+            notification: UNNotification(request: request, date: Date()),
+            actionIdentifier: NotificationManager.recoveryActionSaveAsIs
+        )
+
+        notificationManager.userNotificationCenter(
+            UNUserNotificationCenter.current(),
+            didReceive: response
+        ) { /* completion handler */ }
+
+        #expect(capturedActionId == NotificationManager.recoveryActionSaveAsIs)
+    }
+
+    @Test("didReceive dispatches Discard action to onRecoveryAction closure")
+    func dispatchDiscardAction() {
+        let notificationManager = NotificationManager()
+        var capturedActionId: String?
+        notificationManager.onRecoveryAction = { actionId, _ in
+            capturedActionId = actionId
+        }
+
+        let content = UNMutableNotificationContent()
+        content.categoryIdentifier = NotificationManager.recoveryCategoryId
+        content.userInfo = [NotificationManager.recoveryUserInfoTripId: "trip-789"]
+
+        let request = UNNotificationRequest(
+            identifier: "test-recovery",
+            content: content,
+            trigger: nil
+        )
+
+        let response = UNNotificationResponse(
+            notification: UNNotification(request: request, date: Date()),
+            actionIdentifier: NotificationManager.recoveryActionDiscard
+        )
+
+        notificationManager.userNotificationCenter(
+            UNUserNotificationCenter.current(),
+            didReceive: response
+        ) { /* completion handler */ }
+
+        #expect(capturedActionId == NotificationManager.recoveryActionDiscard)
+    }
+
+    @Test("didReceive does not dispatch for non-recovery categories")
+    func ignoreNonRecoveryNotifications() {
+        let notificationManager = NotificationManager()
+        var wasCalled = false
+        notificationManager.onRecoveryAction = { _, _ in
+            wasCalled = true
+        }
+
+        let content = UNMutableNotificationContent()
+        content.categoryIdentifier = "some-other-category"
+
+        let request = UNNotificationRequest(
+            identifier: "test-other",
+            content: content,
+            trigger: nil
+        )
+
+        let response = UNNotificationResponse(
+            notification: UNNotification(request: request, date: Date()),
+            actionIdentifier: "some-action"
+        )
+
+        notificationManager.userNotificationCenter(
+            UNUserNotificationCenter.current(),
+            didReceive: response
+        ) { /* completion handler */ }
+
+        #expect(!wasCalled)
+    }
+}
+
+@Suite("TripRecorder Recovery Handlers")
+struct TripRecorderRecoveryTests {
+
+    @MainActor
+    @Test("handleRecoveryResume sets up active trip state")
+    func resumeSetsUpActiveState() throws {
+        let h = try Harness()
+        let tripId = try h.setupInflightTrip()
+
+        h.recorder.handleRecoveryResume(tripId: tripId)
+
+        #expect(h.recorder.state.isActive)
+    }
+
+    @MainActor
+    @Test("handleRecoveryResume is no-op for unknown trip ID")
+    func resumeUnknownTripIsNoOp() throws {
+        let h = try Harness()
+
+        h.recorder.handleRecoveryResume(tripId: "non-existent")
+
+        #expect(h.recorder.state.isIdle)
+    }
+
+    @MainActor
+    @Test("handleRecoverySaveAsIs saves the inflight trip")
+    func saveAsIsFinalisesTrip() throws {
+        let h = try Harness()
+        let tripId = try h.setupInflightTrip()
+        #expect(h.tripRepo.trip(id: tripId) != nil)
+
+        h.recorder.handleRecoverySaveAsIs(tripId: tripId)
+
+        // After save-as-is, the trip should still exist but no longer be inflight
+        let trip = h.tripRepo.trip(id: tripId)
+        #expect(trip != nil)
+        #expect(trip?.source != .inflight)
+
+        // State should reset to idle after saving
+        #expect(h.recorder.state.isIdle)
+    }
+
+    @MainActor
+    @Test("handleRecoveryDiscard deletes the inflight trip")
+    func discardRemovesTrip() throws {
+        let h = try Harness()
+        let tripId = try h.setupInflightTrip()
+        #expect(h.tripRepo.trip(id: tripId) != nil)
+
+        h.recorder.handleRecoveryDiscard(tripId: tripId)
+
+        // Trip should be deleted
+        #expect(h.tripRepo.trip(id: tripId) == nil)
+        #expect(h.recorder.state.isIdle)
+    }
+
+    @MainActor
+    @Test("handleRecoveryDiscard is no-op for unknown trip ID")
+    func discardUnknownTripIsNoOp() throws {
+        let h = try Harness()
+
+        // Should not crash
+        h.recorder.handleRecoveryDiscard(tripId: "non-existent")
+        #expect(h.recorder.state.isIdle)
+    }
+}
+
+// MARK: - Harness Helpers
+
+private extension Harness {
+    /// Set up an inflight trip in Realm and return its ID.
+    @MainActor
+    func setupInflightTrip() throws -> String {
+        let trip = Trip()
+        trip.startedAt = Date().addingTimeInterval(-3600)
+        trip.distanceMetres = 10_000
+        trip.source = .inflight
+        try realm.write {
+            realm.add(trip)
+        }
+        return trip.id
 // MARK: - ═══════════════════════════════════════════════════════
 // MARK:   Suite 16 — Gap-Fill Detection
 // MARK: ═══════════════════════════════════════════════════════
