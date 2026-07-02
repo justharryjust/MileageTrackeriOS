@@ -73,7 +73,7 @@ struct TripRecorderRecoveryTests {
 
 // MARK: - Harness Helpers
 
-private extension Harness {
+extension Harness {
     /// Set up an inflight trip in Realm and return its ID.
     @MainActor
     func setupInflightTrip() throws -> String {
@@ -87,8 +87,3 @@ private extension Harness {
         return trip.id
     }
 }
-
-// MARK: - ═══════════════════════════════════════════════════════
-// MARK:   Suite 16 — Gap-Fill Detection
-// MARK: ═══════════════════════════════════════════════════════
-

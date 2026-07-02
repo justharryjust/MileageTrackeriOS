@@ -56,8 +56,3 @@ struct WalkingTrimStartedAtTests {
         #expect(abs(trip.startedAt.timeIntervalSince(startTime)) < 5)
     }
 }
-
-// MARK: - ═══════════════════════════════════════════════════════
-// MARK:   Suite 18 — Auto-Merge Integration (commitTrip path)
-// MARK: ═══════════════════════════════════════════════════════
-

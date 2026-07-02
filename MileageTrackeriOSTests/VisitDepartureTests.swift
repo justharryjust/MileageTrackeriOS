@@ -27,8 +27,3 @@ struct VisitDepartureTests {
         #expect(h.recorder.state.isSuspected)
     }
 }
-
-// MARK: - ════════════════════════════
-// MARK:   Suite 6 — Engine Signals
-// MARK: ════════════════════════════
-

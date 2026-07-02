@@ -400,17 +400,29 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         handler([.banner, .sound])
     }
 
+    /// Testable entry point for recovery notification actions.
+    /// Extracted from the delegate callback so tests don't need to construct
+    /// UNNotificationResponse objects (whose public init was removed in a recent SDK).
+    func handleRecoveryAction(categoryIdentifier: String,
+                              actionIdentifier: String,
+                              userInfo: [AnyHashable: Any]) {
+        if categoryIdentifier == Self.recoveryCategoryId,
+           let tripId = userInfo[Self.recoveryUserInfoTripId] as? String {
+            TripLogger.shared.log("Recovery action: \(actionIdentifier) for trip \(tripId)", category: .system)
+            onRecoveryAction?(actionIdentifier, tripId)
+        }
+    }
+
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                   didReceive response: UNNotificationResponse,
                                   withCompletionHandler handler: @escaping () -> Void) {
         let userInfo = response.notification.request.content.userInfo
 
-        // Handle trip recovery actions
-        if response.notification.request.content.categoryIdentifier == Self.recoveryCategoryId,
-           let tripId = userInfo[Self.recoveryUserInfoTripId] as? String {
-            TripLogger.shared.log("Recovery action: \(response.actionIdentifier) for trip \(tripId)", category: .system)
-            onRecoveryAction?(response.actionIdentifier, tripId)
-        }
+        handleRecoveryAction(
+            categoryIdentifier: response.notification.request.content.categoryIdentifier,
+            actionIdentifier: response.actionIdentifier,
+            userInfo: userInfo
+        )
 
         handler()
     }

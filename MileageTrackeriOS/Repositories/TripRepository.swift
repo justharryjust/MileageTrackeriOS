@@ -78,6 +78,7 @@ final class TripRepository {
             weeklyTripCount: weekCount
         ))
         #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
         // Debounce: cancel any pending reload and schedule a new one after 500ms
         widgetReloadWorkItem?.cancel()
         let workItem = DispatchWorkItem { WidgetCenter.shared.reloadAllTimelines() }

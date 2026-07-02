@@ -16,8 +16,3 @@ struct ScheduleGateNotificationTests {
         #expect(h.recorder.state.isIdle)
     }
 }
-
-// MARK: - ═══════════════════════════════════════════════
-// MARK:   Suite 10 — Notification Reschedule
-// MARK: ═══════════════════════════════════════════════
-

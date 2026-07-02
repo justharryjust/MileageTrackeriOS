@@ -2,12 +2,13 @@ import Testing
 import CoreLocation
 import CoreMotion
 import RealmSwift
+import UserNotifications
 @testable import MileageTrackeriOS
 
 @Suite("Notification Recovery Actions")
 struct NotificationRecoveryTests {
 
-    @Test("didReceive dispatches Resume action to onRecoveryAction closure")
+    @Test("handleRecoveryAction dispatches Resume action")
     func dispatchResumeAction() {
         let notificationManager = NotificationManager()
         var capturedActionId: String?
@@ -17,31 +18,17 @@ struct NotificationRecoveryTests {
             capturedTripId = tripId
         }
 
-        let content = UNMutableNotificationContent()
-        content.categoryIdentifier = NotificationManager.recoveryCategoryId
-        content.userInfo = [NotificationManager.recoveryUserInfoTripId: "trip-123"]
-
-        let request = UNNotificationRequest(
-            identifier: "test-recovery",
-            content: content,
-            trigger: nil
+        notificationManager.handleRecoveryAction(
+            categoryIdentifier: NotificationManager.recoveryCategoryId,
+            actionIdentifier: NotificationManager.recoveryActionResume,
+            userInfo: [NotificationManager.recoveryUserInfoTripId: "trip-123"]
         )
-
-        let response = UNNotificationResponse(
-            notification: UNNotification(request: request, date: Date()),
-            actionIdentifier: NotificationManager.recoveryActionResume
-        )
-
-        notificationManager.userNotificationCenter(
-            UNUserNotificationCenter.current(),
-            didReceive: response
-        ) { /* completion handler */ }
 
         #expect(capturedActionId == NotificationManager.recoveryActionResume)
         #expect(capturedTripId == "trip-123")
     }
 
-    @Test("didReceive dispatches Save action to onRecoveryAction closure")
+    @Test("handleRecoveryAction dispatches Save action")
     func dispatchSaveAction() {
         let notificationManager = NotificationManager()
         var capturedActionId: String?
@@ -49,30 +36,16 @@ struct NotificationRecoveryTests {
             capturedActionId = actionId
         }
 
-        let content = UNMutableNotificationContent()
-        content.categoryIdentifier = NotificationManager.recoveryCategoryId
-        content.userInfo = [NotificationManager.recoveryUserInfoTripId: "trip-456"]
-
-        let request = UNNotificationRequest(
-            identifier: "test-recovery",
-            content: content,
-            trigger: nil
+        notificationManager.handleRecoveryAction(
+            categoryIdentifier: NotificationManager.recoveryCategoryId,
+            actionIdentifier: NotificationManager.recoveryActionSaveAsIs,
+            userInfo: [NotificationManager.recoveryUserInfoTripId: "trip-456"]
         )
-
-        let response = UNNotificationResponse(
-            notification: UNNotification(request: request, date: Date()),
-            actionIdentifier: NotificationManager.recoveryActionSaveAsIs
-        )
-
-        notificationManager.userNotificationCenter(
-            UNUserNotificationCenter.current(),
-            didReceive: response
-        ) { /* completion handler */ }
 
         #expect(capturedActionId == NotificationManager.recoveryActionSaveAsIs)
     }
 
-    @Test("didReceive dispatches Discard action to onRecoveryAction closure")
+    @Test("handleRecoveryAction dispatches Discard action")
     func dispatchDiscardAction() {
         let notificationManager = NotificationManager()
         var capturedActionId: String?
@@ -80,30 +53,16 @@ struct NotificationRecoveryTests {
             capturedActionId = actionId
         }
 
-        let content = UNMutableNotificationContent()
-        content.categoryIdentifier = NotificationManager.recoveryCategoryId
-        content.userInfo = [NotificationManager.recoveryUserInfoTripId: "trip-789"]
-
-        let request = UNNotificationRequest(
-            identifier: "test-recovery",
-            content: content,
-            trigger: nil
+        notificationManager.handleRecoveryAction(
+            categoryIdentifier: NotificationManager.recoveryCategoryId,
+            actionIdentifier: NotificationManager.recoveryActionDiscard,
+            userInfo: [NotificationManager.recoveryUserInfoTripId: "trip-789"]
         )
-
-        let response = UNNotificationResponse(
-            notification: UNNotification(request: request, date: Date()),
-            actionIdentifier: NotificationManager.recoveryActionDiscard
-        )
-
-        notificationManager.userNotificationCenter(
-            UNUserNotificationCenter.current(),
-            didReceive: response
-        ) { /* completion handler */ }
 
         #expect(capturedActionId == NotificationManager.recoveryActionDiscard)
     }
 
-    @Test("didReceive does not dispatch for non-recovery categories")
+    @Test("handleRecoveryAction ignores non-recovery categories")
     func ignoreNonRecoveryNotifications() {
         let notificationManager = NotificationManager()
         var wasCalled = false
@@ -111,26 +70,12 @@ struct NotificationRecoveryTests {
             wasCalled = true
         }
 
-        let content = UNMutableNotificationContent()
-        content.categoryIdentifier = "some-other-category"
-
-        let request = UNNotificationRequest(
-            identifier: "test-other",
-            content: content,
-            trigger: nil
+        notificationManager.handleRecoveryAction(
+            categoryIdentifier: "some-other-category",
+            actionIdentifier: "some-action",
+            userInfo: [:]
         )
-
-        let response = UNNotificationResponse(
-            notification: UNNotification(request: request, date: Date()),
-            actionIdentifier: "some-action"
-        )
-
-        notificationManager.userNotificationCenter(
-            UNUserNotificationCenter.current(),
-            didReceive: response
-        ) { /* completion handler */ }
 
         #expect(!wasCalled)
     }
 }
-
