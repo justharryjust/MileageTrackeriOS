@@ -8,7 +8,8 @@ Three files managing all Realm persistence. Views and managers never touch `Real
 
 `final class RealmProvider` — singleton (`RealmProvider.shared`).
 
-- Opens `Realm` with `schemaVersion = 4` and an explicit `objectTypes` list.
+- Opens `Realm` with `schemaVersion = 9` and an explicit `objectTypes` list.
+- On open failure, corrupt files are backed up to `RealmBackups/` and a fresh database is created.
 - Migration block is the changelog for schema changes — add an entry for every bump.
 - **When you add or rename a `@Persisted` property:** bump `schemaVersion`, add a migration comment, and register the type in `objectTypes` if new.
 
@@ -18,6 +19,11 @@ v0 → v1  initial schema
 v1 → v2  Trip.carKitName (optional String — no action needed)
 v2 → v3  UserProfile.trackingSchedule (List<DaySchedule>) — populated lazily in UserProfileRepository.init
 v3 → v4  UserProfile.customRateThresholds (List<RateThreshold>) — empty list default, no action needed
+v4 → v5  Trip.businessUsePercent (optional Double), OdometerReading.source (default .manual) — no action needed
+v5 → v6  Trip.processingStatus (default .complete), Trip.processingRetries (default 0) — migration
+v6 → v7  Vehicle.defaultCategory (default .uncategorised), Trip.purpose (optional), Trip.commitHash (optional), Trip.committedAt (optional Date), Trip.gpsDistanceMetres (default=current distanceMetres), Trip.odometerDistanceMetres (optional) — migration seeds gpsDistanceMetres
+v7 → v8  SavedAddress collection — no action needed (empty default)
+v8 → v9  LogbookPeriod + MTSubscriptionPeriod tables — no action needed (empty defaults)
 ```
 
 ---

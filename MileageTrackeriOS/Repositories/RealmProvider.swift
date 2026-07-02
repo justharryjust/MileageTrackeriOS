@@ -2,6 +2,7 @@
 // All schema classes registered here. Migration block handles future schema changes.
 // The Realm file is stored in the App Group shared container so both the main app
 // and the widget extension can read it.
+// On open failure, attempts graceful recovery by backing up corrupt files.
 
 import Foundation
 import RealmSwift
@@ -84,7 +85,82 @@ final class RealmProvider {
             TripLogger.shared.log("Realm opened at: \(realm.configuration.fileURL?.path ?? "unknown")", category: .system)
         } catch {
             TripLogger.shared.log("FATAL: Could not open Realm -- \(error)", category: .error)
-            fatalError("Could not open Realm: \(error)")
+            realm = Self.recoverFromFailure(originalError: error, config: config)
+        }
+    }
+
+    // MARK: - Recovery
+
+    /// Attempts to recover from a Realm open failure by backing up corrupt files
+    /// and creating a fresh database. Last resort uses `deleteRealmIfMigrationNeeded`.
+    private static func recoverFromFailure(originalError: Error, config: Realm.Configuration) -> Realm {
+        guard let fileURL = config.fileURL else {
+            fatalError("Could not open Realm: \(originalError) (no fileURL to recover)")
+        }
+
+        // Step 1: Back up corrupt Realm files so data is preserved for debugging.
+        do {
+            try backupCorruptRealmFiles(fileURL: fileURL)
+        } catch {
+            TripLogger.shared.log("Recovery: file backup failed (non-fatal) -- \(error)", category: .error)
+        }
+
+        // Step 2: Try opening fresh Realm (old files are now in the backup directory).
+        do {
+            let realm = try Realm(configuration: config)
+            TripLogger.shared.log("Realm recovered: corrupt file backed up, fresh database created", category: .system)
+            return realm
+        } catch let retryError {
+            TripLogger.shared.log("CRITICAL: Recovery open failed -- \(retryError)", category: .error)
+
+            // Step 3: Last resort — deleteRealmIfMigrationNeeded handles migration mismatches.
+            var fallbackConfig = config
+            fallbackConfig.deleteRealmIfMigrationNeeded = true
+            do {
+                let realm = try Realm(configuration: fallbackConfig)
+                TripLogger.shared.log("Realm recovered via deleteRealmIfMigrationNeeded", category: .system)
+                return realm
+            } catch let finalError {
+                TripLogger.shared.log("CRITICAL: All recovery paths exhausted -- \(finalError)", category: .error)
+                fatalError("""
+                    Could not open Realm after recovery attempts. \
+                    Original: \(originalError). Recovery: \(finalError)
+                    """)
+            }
+        }
+    }
+
+    /// Moves corrupt Realm files (main file + companion files) to a timestamped backup directory
+    /// under `RealmBackups/` so they can be inspected if needed.
+    static func backupCorruptRealmFiles(fileURL: URL) throws {
+        let fm = FileManager.default
+        let baseDir = fileURL.deletingLastPathComponent()
+        let backupDir = baseDir.appendingPathComponent("RealmBackups", isDirectory: true)
+        try fm.createDirectory(at: backupDir, withIntermediateDirectories: true)
+
+        let realmName = fileURL.deletingPathExtension().lastPathComponent
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let backupPrefix = "\(realmName)_\(timestamp).realm"
+
+        // Main realm file
+        let backupMain = backupDir.appendingPathComponent(backupPrefix)
+        try fm.moveItem(at: fileURL, to: backupMain)
+        TripLogger.shared.log("Recovery: backed up \(fileURL.lastPathComponent) to \(backupMain.lastPathComponent)", category: .system)
+
+        // Companion files (lock, note) — optional; skip if they don't exist.
+        for ext in ["lock", "note"] {
+            let companionURL = fileURL.appendingPathExtension(ext)
+            if fm.fileExists(atPath: companionURL.path) {
+                let dest = backupDir.appendingPathComponent("\(backupPrefix).\(ext)")
+                try fm.moveItem(at: companionURL, to: dest)
+            }
+        }
+
+        // Management directory — optional.
+        let mgmtDir = baseDir.appendingPathComponent("\(realmName).realm.management", isDirectory: true)
+        if fm.fileExists(atPath: mgmtDir.path) {
+            let dest = backupDir.appendingPathComponent("\(backupPrefix).management", isDirectory: true)
+            try fm.moveItem(at: mgmtDir, to: dest)
         }
     }
 }
