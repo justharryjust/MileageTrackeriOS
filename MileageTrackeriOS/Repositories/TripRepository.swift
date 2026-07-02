@@ -6,6 +6,9 @@ import Realm
 import RealmSwift
 import CoreLocation
 import CommonCrypto
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 @Observable
 final class TripRepository {
@@ -56,9 +59,24 @@ final class TripRepository {
         let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: now))!
 
         let business = businessTrips
-        weeklyDistanceKm  = business.filter { $0.startedAt >= weekStart }.reduce(0) { $0 + $1.distanceKm }
-        monthlyDistanceKm = business.filter { $0.startedAt >= monthStart }.reduce(0) { $0 + $1.distanceKm }
-        totalDollarValue  = business.compactMap(\.dollarValue).reduce(0, +)
+        let weekKm   = business.filter { $0.startedAt >= weekStart }.reduce(0) { $0 + $1.distanceKm }
+        let monthKm  = business.filter { $0.startedAt >= monthStart }.reduce(0) { $0 + $1.distanceKm }
+        let totalVal = business.compactMap(\.dollarValue).reduce(0, +)
+
+        weeklyDistanceKm  = weekKm
+        monthlyDistanceKm = monthKm
+        totalDollarValue  = totalVal
+
+        // Push a snapshot to the widget via App Group UserDefaults.
+        let weekCount = business.filter { $0.startedAt >= weekStart }.count
+        WidgetStatStore.shared.write(WidgetStats(
+            weeklyDistanceKm: weekKm,
+            weeklyDollarValue: totalVal,
+            weeklyTripCount: weekCount
+        ))
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
     }
 
     // MARK: - In-flight Trip Management (called by TripRecorder during active recording)

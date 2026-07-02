@@ -1,5 +1,7 @@
 // RealmProvider — Opens and vends the shared Realm instance.
 // All schema classes registered here. Migration block handles future schema changes.
+// The Realm file is stored in the App Group shared container so both the main app
+// and the widget extension can read it.
 
 import Foundation
 import RealmSwift
@@ -9,11 +11,20 @@ final class RealmProvider {
 
     private(set) var realm: Realm
 
+    /// App Group identifier shared between the main app and widget extension.
+    static let appGroupID = "group.com.harryjust.MileageTrackeriOS"
+
     /// Current schema version — bump this whenever the model changes and add a migration block.
     static let schemaVersion: UInt64 = 9
 
     private init() {
-        let config = Realm.Configuration(
+        // Fall back to default path when running without App Group (e.g. unit tests on CI).
+        let sharedURL = FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupID)?
+            .appendingPathComponent("default.realm")
+
+        var config = Realm.Configuration(
+            fileURL: sharedURL,
             schemaVersion: Self.schemaVersion,
             migrationBlock: { migration, oldVersion in
                 // v0 -> v1: initial schema

@@ -2321,3 +2321,96 @@ struct ThresholdDriftTests {
         #expect(TripRecorder.shouldFillGap(from: a, to: b) == false)
     }
 }
+
+// MARK: - ═══════════════════════════════════════════════
+// MARK:   Suite 20 — WidgetStatStore
+// MARK: ═══════════════════════════════════════════════
+
+@Suite("WidgetStatStore")
+struct WidgetStatStoreTests {
+
+    @Test("WidgetStats isEmpty is true when all values are zero")
+    func isEmptyWhenZero() {
+        let stats = WidgetStats()
+        #expect(stats.isEmpty == true)
+    }
+
+    @Test("WidgetStats isEmpty is false when distance > 0")
+    func notEmptyWhenDistance() {
+        let stats = WidgetStats(weeklyDistanceKm: 10, weeklyDollarValue: 0, weeklyTripCount: 0)
+        #expect(stats.isEmpty == false)
+    }
+
+    @Test("WidgetStats isEmpty is false when count > 0")
+    func notEmptyWhenCount() {
+        let stats = WidgetStats(weeklyDistanceKm: 0, weeklyDollarValue: 0, weeklyTripCount: 1)
+        #expect(stats.isEmpty == false)
+    }
+
+    @Test("WidgetStats Equatable conformance works")
+    func widgetStatsEquatable() {
+        let a = WidgetStats(weeklyDistanceKm: 10, weeklyDollarValue: 5, weeklyTripCount: 2)
+        let b = WidgetStats(weeklyDistanceKm: 10, weeklyDollarValue: 5, weeklyTripCount: 2)
+        let c = WidgetStats(weeklyDistanceKm: 20, weeklyDollarValue: 5, weeklyTripCount: 2)
+        #expect(a == b)
+        #expect(a != c)
+    }
+
+    @Test("Write-then-read cycle returns identical stats")
+    func writeReadCycle() throws {
+        let defaults = UserDefaults(suiteName: "test.mileagetracker.widget")
+        try #require(defaults != nil)
+        defaults!.removeObject(forKey: "widget.weeklyStats")
+
+        let store = WidgetStatStore(defaults: defaults!)
+        let original = WidgetStats(weeklyDistanceKm: 42.5, weeklyDollarValue: 88.0, weeklyTripCount: 3)
+        store.write(original)
+
+        let readBack = store.read()
+        #expect(readBack == original)
+        #expect(readBack.weeklyDistanceKm == 42.5)
+        #expect(readBack.weeklyDollarValue == 88.0)
+        #expect(readBack.weeklyTripCount == 3)
+
+        defaults!.removeObject(forKey: "widget.weeklyStats")
+    }
+
+    @Test("Read returns empty WidgetStats when no data written")
+    func readReturnsEmptyWhenNoData() throws {
+        let defaults = UserDefaults(suiteName: "test.mileagetracker.widget.empty")
+        try #require(defaults != nil)
+        defaults!.removeObject(forKey: "widget.weeklyStats")
+
+        let store = WidgetStatStore(defaults: defaults!)
+        let result = store.read()
+        #expect(result.isEmpty == true)
+        #expect(result.weeklyDistanceKm == 0)
+        #expect(result.weeklyTripCount == 0)
+    }
+
+    @Test("Overwrite replaces previous values")
+    func overwriteReplacesOld() throws {
+        let defaults = UserDefaults(suiteName: "test.mileagetracker.widget.overwrite")
+        try #require(defaults != nil)
+        defaults!.removeObject(forKey: "widget.weeklyStats")
+
+        let store = WidgetStatStore(defaults: defaults!)
+        store.write(WidgetStats(weeklyDistanceKm: 10, weeklyDollarValue: 5, weeklyTripCount: 1))
+        store.write(WidgetStats(weeklyDistanceKm: 20, weeklyDollarValue: 10, weeklyTripCount: 2))
+
+        let result = store.read()
+        #expect(result.weeklyDistanceKm == 20)
+        #expect(result.weeklyDollarValue == 10)
+        #expect(result.weeklyTripCount == 2)
+
+        defaults!.removeObject(forKey: "widget.weeklyStats")
+    }
+
+    @Test("WidgetStats Codable round-trip preserves all fields")
+    func codableRoundTrip() throws {
+        let original = WidgetStats(weeklyDistanceKm: 100.5, weeklyDollarValue: 45.0, weeklyTripCount: 7)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(WidgetStats.self, from: data)
+        #expect(decoded == original)
+    }
+}
