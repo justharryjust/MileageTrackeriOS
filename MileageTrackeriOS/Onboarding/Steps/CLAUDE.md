@@ -1,6 +1,6 @@
 # Onboarding/Steps/
 
-Seven step views. All take `vm: OnboardingViewModel` as a parameter. All except `WelcomeStep` use `OnboardingStepShell`.
+Eight step views. All take `vm: OnboardingViewModel` as a parameter. All except `WelcomeStep` use `OnboardingStepShell`.
 
 ---
 
@@ -8,14 +8,17 @@ Seven step views. All take `vm: OnboardingViewModel` as a parameter. All except 
 
 | File | View | Data collected | Notes |
 |------|------|---------------|-------|
+| `IntroStep.swift` | `IntroStep` | — | Splash screen with app name and value props. "Get Started" advances to jurisdiction. |
 | `JurisdictionStep.swift` | `JurisdictionStep` | `vm.regionCode` | Searchable list of all ISO-3166-1 countries (`Locale.Region.isoRegions` filtered to 2-char codes); pre-selected from `Locale.current.region`; flag emoji derived from Unicode regional indicators |
 | `AddVehicleStep.swift` | `VehicleAndUnitStep` | `vm.vehicleRegistration` (required), `vm.vehicleName`, `vm.fuelType`, `vm.distanceUnit` | Merges former AddVehicle + DistanceUnit steps; "Continue" disabled until `vm.isVehicleValid`; fuel type grid uses `TypeChip`; distance unit uses `DistanceUnitRow` |
 | `ClaimMethodStep.swift` | `ClaimMethodStep` | `vm.claimMethod`, `vm.customRateTiers` | `.customRate` reveals `CustomRateEditor` (tiered rate builder with `+` / `−` stepper and slider per tier) |
-| `LocationPermissionStep.swift` | `LocationPermissionStep` | — | Two-step WhenInUse → Always; denied/restricted shows Settings deep-link; auto-advances 0.8 s on `.authorizedAlways` |
-| `MotionPermissionStep.swift` | `MotionPermissionStep` | — | Calls `motionManager.startActivityUpdates()` for system prompt. Both "Allow" (on grant) and "Skip" call `vm.advance()` — not `vm.complete()` |
+| `OdometerStep.swift` | `OdometerStep` | `vm.initialOdometerKm` | `Continue` disabled when field is empty and `.logbook` is selected; `LogbookOdometerTip` info card shown for logbook users |
+| `PermissionsStep.swift` | `PermissionsStep` | — | Combined permissions step — location, motion, and notifications on one screen with Skip button |
 | `TrackingHoursStep.swift` | `TrackingHoursStep` | `vm.trackingSchedule` | `DayScheduleRow` per weekday with toggle + `HourPicker` wheel pickers |
-| `WelcomeStep.swift` | `WelcomeStep` | — | **Final step.** "You're all set!" completion screen. Needs `@Environment(AppState.self)`. "Start Tracking" calls `vm.complete(using: appState)` |
+| `WelcomeStep.swift` | `WelcomeStep` | — | **Final step.** "You're all set!" completion screen. Needs `@Environment(AppState.self)`. "Start Tracking" calls `vm.complete(using: appState)`. Shows odometer summary row if a reading was entered. |
 | `DistanceUnitStep.swift` | *(empty)* | — | Merged into `VehicleAndUnitStep`; file kept to avoid Xcode project changes |
+| `LocationPermissionStep.swift` | *(orphaned)* | — | Replaced by `PermissionsStep`; file kept to avoid Xcode project changes |
+| `MotionPermissionStep.swift` | *(orphaned)* | — | Replaced by `PermissionsStep`; file kept to avoid Xcode project changes |
 
 ---
 
