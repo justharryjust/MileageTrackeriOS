@@ -2323,3 +2323,234 @@ private extension Harness {
     }
 }
 >>>>>>> 4e875ee (iCloud/CloudKit sync layer for core Realm models)
+
+
+// MARK: - ══════════════════════════════════════════
+// MARK:   Suite 20 — CloudKit Sync
+// MARK: ══════════════════════════════════════════
+
+@Suite("CloudKit Sync")
+struct CloudSyncTests {
+
+    private func makeRealm() throws -> Realm {
+        let config = Realm.Configuration(
+            inMemoryIdentifier: UUID().uuidString,
+            schemaVersion: RealmProvider.schemaVersion,
+            objectTypes: [UserProfile.self, Vehicle.self, Trip.self, TripPoint.self, OdometerReading.self, SavedAddress.self, LogbookPeriod.self, MTSubscriptionPeriod.self, DaySchedule.self, RateThreshold.self]
+        )
+        return try Realm(configuration: config)
+    }
+
+    // MARK: - Sync Marking
+
+    @Test("markSynced sets isSyncedToCloud on matching objects")
+    func markSyncedSetsFlag() throws {
+        let realm = try makeRealm()
+        let manager = CloudSyncManager(realm: realm)
+
+        let trip = Trip()
+        trip.id = "test-trip-1"
+        trip.isSyncedToCloud = false
+        let vehicle = Vehicle()
+        vehicle.id = "test-vehicle-1"
+        vehicle.isSyncedToCloud = false
+        let reading = OdometerReading()
+        reading.id = "test-odo-1"
+        reading.isSyncedToCloud = false
+
+        try realm.write {
+            realm.add(trip)
+            realm.add(vehicle)
+            realm.add(reading)
+        }
+
+        #expect(trip.isSyncedToCloud == false)
+
+        manager.test_markSynced(recordNames: ["test-trip-1", "test-vehicle-1", "test-odo-1"])
+
+        let savedTrip = realm.object(ofType: Trip.self, forPrimaryKey: "test-trip-1")
+        #expect(savedTrip?.isSyncedToCloud == true)
+
+        let savedVehicle = realm.object(ofType: Vehicle.self, forPrimaryKey: "test-vehicle-1")
+        #expect(savedVehicle?.isSyncedToCloud == true)
+
+        let savedReading = realm.object(ofType: OdometerReading.self, forPrimaryKey: "test-odo-1")
+        #expect(savedReading?.isSyncedToCloud == true)
+    }
+
+    @Test("markSynced only affects listed record names")
+    func markSyncedOnlyListed() throws {
+        let realm = try makeRealm()
+        let manager = CloudSyncManager(realm: realm)
+
+        let trip1 = Trip()
+        trip1.id = "trip-synced"
+        trip1.isSyncedToCloud = false
+        let trip2 = Trip()
+        trip2.id = "trip-unsynced"
+        trip2.isSyncedToCloud = false
+
+        try realm.write {
+            realm.add(trip1)
+            realm.add(trip2)
+        }
+
+        manager.test_markSynced(recordNames: ["trip-synced"])
+
+        #expect(realm.object(ofType: Trip.self, forPrimaryKey: "trip-synced")?.isSyncedToCloud == true)
+        #expect(realm.object(ofType: Trip.self, forPrimaryKey: "trip-unsynced")?.isSyncedToCloud == false)
+    }
+
+    // MARK: - Record Building
+
+    @Test("buildRecordsToPush returns unsynced trips as CKRecords")
+    func buildRecordsForUnsyncedTrips() throws {
+        let realm = try makeRealm()
+        let manager = CloudSyncManager(realm: realm)
+
+        let trip = Trip()
+        trip.id = "push-trip-1"
+        trip.vehicleId = "v1"
+        trip.startedAt = Date().addingTimeInterval(-3600)
+        trip.distanceMetres = 10_000
+        trip.category = .business
+        trip.isSyncedToCloud = false
+
+        try realm.write { realm.add(trip) }
+
+        let records = manager.test_buildRecordsToPush()
+        let tripRecords = records.filter { $0.recordType == "CD_Trip" }
+
+        #expect(tripRecords.count == 1)
+        #expect(tripRecords.first?.recordID.recordName == "push-trip-1")
+        #expect(tripRecords.first?["vehicleId"] as? String == "v1")
+        #expect(tripRecords.first?["distanceMetres"] as? Double == 10_000)
+        #expect(tripRecords.first?["category"] as? String == "business")
+    }
+
+    @Test("buildRecordsToPush returns unsynced vehicles")
+    func buildRecordsForUnsyncedVehicles() throws {
+        let realm = try makeRealm()
+        let manager = CloudSyncManager(realm: realm)
+
+        let vehicle = Vehicle()
+        vehicle.id = "push-vehicle-1"
+        vehicle.name = "Test Car"
+        vehicle.registration = "TST001"
+        vehicle.isSyncedToCloud = false
+
+        try realm.write { realm.add(vehicle) }
+
+        let records = manager.test_buildRecordsToPush()
+        let vehicleRecords = records.filter { $0.recordType == "CD_Vehicle" }
+
+        #expect(vehicleRecords.count == 1)
+        #expect(vehicleRecords.first?["name"] as? String == "Test Car")
+        #expect(vehicleRecords.first?["registration"] as? String == "TST001")
+    }
+
+    @Test("buildRecordsToPush only includes unsynced objects")
+    func buildRecordsOnlyUnsynced() throws {
+        let realm = try makeRealm()
+        let manager = CloudSyncManager(realm: realm)
+
+        let syncedTrip = Trip()
+        syncedTrip.id = "synced"
+        syncedTrip.isSyncedToCloud = true
+        let unsyncedTrip = Trip()
+        unsyncedTrip.id = "unsynced"
+        unsyncedTrip.isSyncedToCloud = false
+
+        try realm.write {
+            realm.add(syncedTrip)
+            realm.add(unsyncedTrip)
+        }
+
+        let records = manager.test_buildRecordsToPush()
+        let tripRecords = records.filter { $0.recordType == "CD_Trip" }
+        let recordNames = tripRecords.map { $0.recordID.recordName }
+
+        #expect(recordNames.contains("unsynced"))
+        #expect(!recordNames.contains("synced"))
+    }
+
+    @Test("buildRecordsToPush includes user profile when unsynced")
+    func buildRecordsIncludesProfile() throws {
+        let realm = try makeRealm()
+        let manager = CloudSyncManager(realm: realm)
+
+        guard let profile = realm.object(ofType: UserProfile.self, forPrimaryKey: "singleton") else {
+            Issue.record("No singleton profile"); return
+        }
+        profile.isSyncedToCloud = false
+
+        let records = manager.test_buildRecordsToPush()
+        let profileRecords = records.filter { $0.recordType == "CD_UserProfile" }
+
+        #expect(profileRecords.count == 1)
+        #expect(profileRecords.first?["jurisdiction"] as? String == "NZ")
+    }
+
+    @Test("buildRecordsToPush skips profile when already synced")
+    func buildRecordsSkipsSyncedProfile() throws {
+        let realm = try makeRealm()
+        let manager = CloudSyncManager(realm: realm)
+
+        guard let profile = realm.object(ofType: UserProfile.self, forPrimaryKey: "singleton") else {
+            Issue.record("No singleton profile"); return
+        }
+        try realm.write { profile.isSyncedToCloud = true }
+
+        let records = manager.test_buildRecordsToPush()
+        let profileRecords = records.filter { $0.recordType == "CD_UserProfile" }
+
+        #expect(profileRecords.isEmpty)
+    }
+
+    // MARK: - Edge Cases
+
+    @Test("buildRecordsToPush returns empty when nothing is unsynced")
+    func buildRecordsEmptyWhenAllSynced() throws {
+        let realm = try makeRealm()
+        let manager = CloudSyncManager(realm: realm)
+
+        try realm.write {
+            for trip in realm.objects(Trip.self) { trip.isSyncedToCloud = true }
+            for vehicle in realm.objects(Vehicle.self) { vehicle.isSyncedToCloud = true }
+            if let profile = realm.object(ofType: UserProfile.self, forPrimaryKey: "singleton") {
+                profile.isSyncedToCloud = true
+            }
+        }
+
+        let records = manager.test_buildRecordsToPush()
+        #expect(records.isEmpty)
+    }
+
+    @Test("SavedAddress and OdometerReading sync fields work correctly")
+    func savedAddressAndOdometerSyncMarking() throws {
+        let realm = try makeRealm()
+        let manager = CloudSyncManager(realm: realm)
+
+        let address = SavedAddress()
+        address.id = "test-addr-1"
+        address.label = "Home"
+        address.isSyncedToCloud = false
+
+        let reading = OdometerReading()
+        reading.id = "test-reading-1"
+        reading.vehicleId = "v1"
+        reading.readingKm = 50000
+        reading.isSyncedToCloud = false
+
+        try realm.write {
+            realm.add(address)
+            realm.add(reading)
+        }
+
+        manager.test_markSynced(recordNames: ["test-addr-1", "test-reading-1"])
+
+        #expect(realm.object(ofType: SavedAddress.self, forPrimaryKey: "test-addr-1")?.isSyncedToCloud == true)
+        #expect(realm.object(ofType: OdometerReading.self, forPrimaryKey: "test-reading-1")?.isSyncedToCloud == true)
+    }
+}
+>>>>>>> 8a37601 (Update documentation for schema version v10 and CloudSyncManager)
