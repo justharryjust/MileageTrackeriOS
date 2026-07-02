@@ -1,6 +1,6 @@
 # Main/Settings/
 
-Eight files: `SettingsView.swift`, `ProfileEditView.swift`, `VehicleManagementView.swift`, `TrackingHoursView.swift`, `DebugLogView.swift`, `DebugExtensionsView.swift`, `TripRecorderDebugView.swift`, `TipsView.swift`, `ReportExportView.swift`.
+Files: `SettingsView.swift`, `ProfileEditView.swift`, `RateInfoView.swift`, `VehicleManagementView.swift`, `TrackingHoursView.swift`, `DebugLogView.swift`, `DebugExtensionsView.swift`, `TripRecorderDebugView.swift`, `TipsView.swift`, `ReportExportView.swift`.
 
 ---
 
@@ -85,3 +85,26 @@ Default fallback coordinates for location injection: Auckland CBD (`-36.8485, 17
 ## DebugExtensionsView
 
 Renders `DebugPotentialExtensions.md` from the app bundle as attributed markdown. Shows `ContentUnavailableView` if the file is missing.
+
+---
+
+## RateInfoView
+
+Displays official mileage rates for the given `Jurisdiction`. Used inline in `ProfileEditView` and as a standalone view via `RatesListView`.
+
+- Reads from `officialRates` (in `Localisaion/MileageRates.swift`) using `Jurisdiction.rateCountryCode`
+- Shows agency name, rate category names, per-tier thresholds, annual cap (if any), and a link to the tax authority
+- Unit labelling adapts to the jurisdiction's default distance unit (¢/km vs p/mi)
+- Purely read-only — no editable fields, no save impact
+
+## RatesListView
+
+Standalone wrapper view for `RateInfoView` used in `SettingsView` (AC5). Reads `appState.profileRepo.jurisdiction` and renders `RateInfoView` inside a `List` with a navigation title.
+
+## SettingsView updates
+
+- Profile section now includes a "View Rates" `NavigationLink` → `RatesListView` that shows the current jurisdiction's rates without entering edit mode
+
+## ProfileEditView updates
+
+- New "Official Rates" section below the jurisdiction picker shows `RateInfoView` inline, updating reactively when jurisdiction changes

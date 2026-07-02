@@ -34,6 +34,15 @@ struct DiagnosticsHubView: View {
                     Label("Potential Extensions", systemImage: "lightbulb")
                 }
 
+#if DEBUG
+                NavigationLink {
+                    SubscriptionOverrideView()
+                        .environment(appState)
+                } label: {
+                    Label("Subscription Override", systemImage: "arrow.triangle.swap")
+                }
+#endif
+
                 Button {
                     debugDataURL = DebugDataCollector.collectDebugData(appState: appState)
                     isSharingDebugData = true

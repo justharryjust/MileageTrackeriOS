@@ -110,6 +110,24 @@ struct SettingsView: View {
                         }
                     }
 
+                    NavigationLink {
+                        RatesListView()
+                            .environment(appState)
+                    } label: {
+                        HStack {
+                            Image(systemName: "chart.bar.fill")
+                                .foregroundStyle(Color.mtGreen)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("View Rates")
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundStyle(Color.mtTextPrimary)
+                                Text("\(appState.profileRepo.jurisdiction.displayName) official rates")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Color.mtTextSub)
+                            }
+                        }
+                    }
+
                     if appState.profileRepo.claimMethod == .logbook {
                         NavigationLink {
                             LogbookPeriodView()
@@ -232,16 +250,28 @@ struct SettingsView: View {
 
     private var subscriptionLabel: some View {
         let state = appState.subscriptionManager.subscriptionState
+        let isOverride = appState.subscriptionManager.isOverrideActive
         return HStack {
             Image(systemName: state.status.icon)
                 .foregroundStyle(subscriptionIconColor(state.status))
             VStack(alignment: .leading, spacing: 2) {
-                Text("Mileage Tracker Pro")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(Color.mtTextPrimary)
+                HStack(spacing: 6) {
+                    Text("Mileage Tracker Pro")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(Color.mtTextPrimary)
+                    if isOverride {
+                        Text("DEBUG")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.orange)
+                            .clipShape(Capsule())
+                    }
+                }
                 Text(subscriptionStatusText(state))
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.mtTextSub)
+                    .foregroundStyle(isOverride ? Color.orange : Color.mtTextSub)
             }
             Spacer()
             if state.status != .active {

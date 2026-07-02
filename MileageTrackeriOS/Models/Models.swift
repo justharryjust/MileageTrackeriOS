@@ -489,7 +489,7 @@ final class DaySchedule: EmbeddedObject {
 // MARK: - Subscription Types (Realm-backed for period-gating)
 // MARK: - Subscription Types (Realm-backed for period-gating)
 
-enum MTSubscriptionStatus: String, PersistableEnum {
+enum MTSubscriptionStatus: String, CaseIterable, PersistableEnum {
     case trial = "trial"
     case active = "active"
     case gracePeriod = "gracePeriod"
