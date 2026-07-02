@@ -133,3 +133,4 @@ struct Harness {
         fireLocation(speedMs: 30 / 3.6)
         fireLocation(speedMs: 30 / 3.6)
     }
+}
