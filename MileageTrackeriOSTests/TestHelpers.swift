@@ -133,3 +133,16 @@ struct Harness {
         fireLocation(speedMs: 30 / 3.6)
         fireLocation(speedMs: 30 / 3.6)
     }
+
+    /// Set up an inflight trip in Realm and return its ID.
+    func setupInflightTrip() throws -> String {
+        let trip = Trip()
+        trip.startedAt = Date().addingTimeInterval(-3600)
+        trip.distanceMetres = 10_000
+        trip.source = .inflight
+        try realm.write {
+            realm.add(trip)
+        }
+        return trip.id
+    }
+}
