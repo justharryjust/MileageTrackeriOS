@@ -84,6 +84,11 @@ struct MethodInfoView: View {
                     linkURL: nil
                 )
 
+                // Per-jurisdiction caveat
+                if let caveat = jurisdiction.claimMethodCaveat {
+                    jurisdictionCaveatView(caveat)
+                }
+
                 Spacer(minLength: MTSpacing.xxl)
             }
             .padding(MTSpacing.lg)
@@ -146,6 +151,26 @@ struct MethodInfoView: View {
         .padding(MTSpacing.lg)
         .background(Color.mtSurface)
         .clipShape(RoundedRectangle(cornerRadius: MTRadius.md))
+    }
+
+    // MARK: - Jurisdiction Caveat
+
+    /// A highlighted banner showing a per-jurisdiction caveat about claim-method validity.
+    /// Only shown for jurisdictions with notable restrictions (CA, ES, NL, ZA, US, GB).
+    private func jurisdictionCaveatView(_ caveat: String) -> some View {
+        VStack(alignment: .leading, spacing: MTSpacing.sm) {
+            Label("Important: " + jurisdiction.displayName, systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.orange)
+
+            Text(caveat)
+                .font(.system(size: 13))
+                .foregroundStyle(Color.mtTextPrimary)
+        }
+        .padding(MTSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: MTRadius.sm))
     }
 
     // MARK: - Jurisdiction-specific

@@ -92,6 +92,28 @@ enum Jurisdiction: String, CaseIterable, PersistableEnum {
         default:                               return .continuous
         }
     }
+
+    /// Per-jurisdiction caveat about claim-method validity, surfaced in MethodInfoView.
+    /// Sourced from `.claude/research/tax-compliance-rules-by-jurisdiction.md` "Notes & caveats".
+    /// Returns nil for jurisdictions where all three methods are straightforwardly available.
+    var claimMethodCaveat: String? {
+        switch self {
+        case .canada:
+            return "The per-km amount is an employer reimbursement, not a self-employed deduction."
+        case .spain:
+            return "No per-km option for autónomos; requires ~100% exclusive business use."
+        case .netherlands:
+            return "Actual-cost is not permitted for a privately-owned car; only the flat rate applies."
+        case .southAfrica:
+            return "A logbook is effectively mandatory to claim, and resets annually."
+        case .unitedStates:
+            return "Standard rate must be elected in year 1; disallowed if operating 5+ cars."
+        case .other:
+            return "Method is locked per-vehicle once chosen."
+        default:
+            return nil
+        }
+    }
 }
 
 // MARK: - Logbook Regime
